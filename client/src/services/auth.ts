@@ -19,9 +19,8 @@ export async function loginWithPassword(_input: PasswordLoginInput): Promise<voi
   throw new Error('Email/phone login is not wired up to a backend yet.');
 }
 
-export async function signUpWithPassword(_input: SignUpInput): Promise<void> {
-  throw new Error('Sign up is not wired up to a backend yet.');
-}
+// Resolves for now so the post-sign-up onboarding flow is reachable.
+export async function signUpWithPassword(_input: SignUpInput): Promise<void> {}
 
 export async function continueWithApple(): Promise<void> {
   throw new Error('Sign in with Apple is not wired up to a backend yet.');

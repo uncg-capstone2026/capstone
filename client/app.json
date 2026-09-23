@@ -26,6 +26,14 @@
     "plugins": [
       "expo-router",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "StyleMe uses your photos so you can choose a full-body photo to preview outfits on.",
+          "cameraPermission": "StyleMe uses the camera so you can take a full-body photo to preview outfits on.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",

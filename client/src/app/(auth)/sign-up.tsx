@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -38,6 +38,7 @@ export default function SignUpScreen() {
     setIsSubmitting(true);
     try {
       await signUpWithPassword({ name, email, phone: phone || undefined, password });
+      router.replace('/body-photo');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
