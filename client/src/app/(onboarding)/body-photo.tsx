@@ -12,6 +12,10 @@ export default function BodyPhotoScreen() {
   const [photo, setPhoto] = useState<PickedPhoto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [photoArea, setPhotoArea] = useState<{ width: number; height: number } | null>(null);
+
+  // Largest 3:4 box that fits the space left over, so the screen doesn't need to scroll.
+  const photoHeight = photoArea ? Math.min(photoArea.height, (photoArea.width * 4) / 3) : 0;
 
   async function handleAddPhoto() {
     setError(null);
@@ -41,8 +45,8 @@ export default function BodyPhotoScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-cream-100">
-      <ScrollView contentContainerClassName="flex-grow items-center justify-center px-6 py-10">
-        <View className="w-full max-w-sm gap-8">
+      <ScrollView contentContainerClassName="flex-grow items-center px-6 py-6">
+        <View className="w-full max-w-sm flex-1 gap-6">
           <View className="items-center gap-2">
             <Text className="font-heading text-lg tracking-wide text-sage-600">StyleMe</Text>
             <Text className="text-center font-heading text-3xl text-sage-700">Add a full-body photo</Text>
@@ -52,29 +56,36 @@ export default function BodyPhotoScreen() {
             </Text>
           </View>
 
-          <Pressable
-            onPress={handleAddPhoto}
-            disabled={isSubmitting}
-            accessibilityRole="button"
-            accessibilityLabel={photo ? 'Change photo' : 'Add photo'}
-            className="aspect-[3/4] w-full items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-sage-300 bg-cream-50">
-            {photo ? (
-              <>
-                <Image source={{ uri: photo.uri }} contentFit="cover" style={{ width: '100%', height: '100%' }} />
-                <View className="absolute bottom-3 right-3 flex-row items-center gap-1 rounded-full bg-sage-700/80 px-3 py-1.5">
-                  <Ionicons name="camera-outline" size={14} color="#fffdf9" />
-                  <Text className="font-label text-xs text-cream-50">Change</Text>
-                </View>
-              </>
-            ) : (
-              <View className="items-center gap-3">
-                <View className="h-14 w-14 items-center justify-center rounded-full bg-sage-500">
-                  <Ionicons name="add" size={30} color="#fffdf9" />
-                </View>
-                <Text className="font-label text-base text-sage-700">Add Photo</Text>
-              </View>
-            )}
-          </Pressable>
+          <View
+            onLayout={(e) => setPhotoArea(e.nativeEvent.layout)}
+            className="min-h-[240px] flex-1 items-center justify-center">
+            {photoArea ? (
+              <Pressable
+                onPress={handleAddPhoto}
+                disabled={isSubmitting}
+                accessibilityRole="button"
+                accessibilityLabel={photo ? 'Change photo' : 'Add photo'}
+                style={{ height: photoHeight, width: (photoHeight * 3) / 4 }}
+                className="items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-sage-300 bg-cream-50">
+                {photo ? (
+                  <>
+                    <Image source={{ uri: photo.uri }} contentFit="cover" style={{ width: '100%', height: '100%' }} />
+                    <View className="absolute bottom-3 right-3 flex-row items-center gap-1 rounded-full bg-sage-700/80 px-3 py-1.5">
+                      <Ionicons name="camera-outline" size={14} color="#fffdf9" />
+                      <Text className="font-label text-xs text-cream-50">Change</Text>
+                    </View>
+                  </>
+                ) : (
+                  <View className="items-center gap-3">
+                    <View className="h-14 w-14 items-center justify-center rounded-full bg-sage-500">
+                      <Ionicons name="add" size={30} color="#fffdf9" />
+                    </View>
+                    <Text className="font-label text-base text-sage-700">Add Photo</Text>
+                  </View>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
 
           <View className="gap-3">
             {error ? <Text className="font-body text-sm text-red-600">{error}</Text> : null}
@@ -88,6 +99,14 @@ export default function BodyPhotoScreen() {
               ) : (
                 <Text className="font-label text-base text-cream-50">Submit</Text>
               )}
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.replace('/home')}
+              disabled={isSubmitting}
+              accessibilityRole="button"
+              className="items-center py-2 disabled:opacity-60">
+              <Text className="font-label text-base text-sage-600 underline">Skip for now</Text>
             </Pressable>
           </View>
 

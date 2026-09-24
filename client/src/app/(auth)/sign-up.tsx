@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
+import { AuthCheckbox, AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
 import { continueWithApple, continueWithGoogle, signUpWithPassword } from '@/services/auth';
 
 export default function SignUpScreen() {
@@ -20,6 +20,7 @@ export default function SignUpScreen() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,7 +38,13 @@ export default function SignUpScreen() {
 
     setIsSubmitting(true);
     try {
-      await signUpWithPassword({ name, email, phone: phone || undefined, password });
+      await signUpWithPassword({
+        name,
+        email,
+        phone: phone || undefined,
+        password,
+        marketingOptIn,
+      });
       router.replace('/body-photo');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -98,6 +105,11 @@ export default function SignUpScreen() {
                 onChangeText={setConfirmPassword}
                 placeholder="Confirm password"
                 secureTextEntry
+              />
+              <AuthCheckbox
+                checked={marketingOptIn}
+                onChange={setMarketingOptIn}
+                label="Send me styling picks and event alerts by email or text. You can turn these off any time."
               />
 
               {error ? <Text className="font-body text-sm text-red-600">{error}</Text> : null}
