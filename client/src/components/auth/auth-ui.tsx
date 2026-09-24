@@ -11,6 +11,30 @@ export function AuthTextInput(props: TextInputProps) {
   );
 }
 
+type AuthCheckboxProps = {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label: string;
+};
+
+export function AuthCheckbox({ checked, onChange, label }: AuthCheckboxProps) {
+  return (
+    <Pressable
+      onPress={() => onChange(!checked)}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked }}
+      className="flex-row items-start gap-3 py-1">
+      <View
+        className={`mt-0.5 h-5 w-5 items-center justify-center rounded-md border ${
+          checked ? 'border-sage-500 bg-sage-500' : 'border-sage-300 bg-cream-50'
+        }`}>
+        {checked ? <Ionicons name="checkmark" size={14} color="#fffdf9" /> : null}
+      </View>
+      <Text className="flex-1 font-body text-sm text-sage-700">{label}</Text>
+    </Pressable>
+  );
+}
+
 export function AuthDivider() {
   return (
     <View className="flex-row items-center gap-3">

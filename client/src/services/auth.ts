@@ -11,6 +11,7 @@ export type SignUpInput = {
   email: string;
   phone?: string;
   password: string;
+  marketingOptIn: boolean;
 };
 
 // TODO: point these at the Next.js auth API once it exists. No persistence yet.
