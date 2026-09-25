@@ -27,7 +27,7 @@ The Expo app (`client/`) and the NestJS server (`server/`) can't talk to each ot
 - [ ] Store the token with `expo-secure-store` (`npx expo install expo-secure-store`).
 - [ ] Make `isSignedIn()` read the stored token. Reading it is async, so `src/app/index.tsx` needs a short loading state before redirecting.
 - [ ] Send `Authorization: Bearer <token>` on every API request (`src/services/photos.ts`, `src/services/items.ts`).
-- [ ] After a successful login, navigate: `router.replace('/closet')` in `src/app/(auth)/login.tsx`. Right now it does nothing on success.
+- [x] After a successful login, navigate: `router.replace('/closet')` in `src/app/(auth)/login.tsx`. Right now it does nothing on success.
 - [ ] Add sign-out (clear the token), e.g. from the Settings tab.
 
 ## 3. Body photo upload
@@ -57,7 +57,7 @@ The client and server currently disagree on almost every detail:
 
 ## 5. Client cleanups
 
-- [ ] Comments in `src/services/auth.ts` and `.env.example` say the backend is **Next.js**. It's **NestJS**.
+- [x] Comments in `src/services/auth.ts` and `.env.example` say the backend is **Next.js**. It's **NestJS**.
 
 ## Suggested order
 
@@ -72,9 +72,9 @@ The client and server currently disagree on almost every detail:
 What the client needs, split by whether it can be done now.
 
 ### Can do now
-- [ ] Fix the "Next.js" comments in `src/services/auth.ts` and `.env.example` to say NestJS.
-- [ ] Add `router.replace('/closet')` after a successful login in `src/app/(auth)/login.tsx`.
-- [ ] Install `expo-secure-store` and add a small session module (save, read and clear the token).
+- [x] Fix the "Next.js" comments in `src/services/auth.ts` and `.env.example` to say NestJS.
+- [x] Add `router.replace('/closet')` after a successful login in `src/app/(auth)/login.tsx`.
+- [x] Install `expo-secure-store` and add a small session module (save, read and clear the token).
 - [ ] Move `apiPost` out of `src/services/photos.ts` into a shared `src/services/api.ts` (with `apiGet`) that adds the `Authorization` header automatically. Use it in `photos.ts`, `items.ts` and `auth.ts`.
 - [ ] Make `isSignedIn()` async and add a loading state in `src/app/index.tsx`.
 - [ ] Add a sign-out button to the Settings tab.
