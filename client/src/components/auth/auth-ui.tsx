@@ -1,13 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, Text, TextInput, View, type TextInputProps } from 'react-native';
 
-export function AuthTextInput(props: TextInputProps) {
+type AuthTextInputProps = TextInputProps & {
+  error?: string | null;
+};
+
+// Always wrapped in the same View so showing an error doesn't remount the input
+// (which would drop focus and close the keyboard mid-typing).
+export function AuthTextInput({ error, ...props }: AuthTextInputProps) {
   return (
-    <TextInput
-      placeholderTextColor="#7a9264"
-      className="rounded-xl border border-sage-200 bg-cream-50 px-4 py-3 font-body text-sage-800"
-      {...props}
-    />
+    <View className="gap-1">
+      <TextInput
+        placeholderTextColor="#7a9264"
+        className={`rounded-xl border bg-cream-50 px-4 py-3 font-body text-sage-800 ${
+          error ? 'border-red-500' : 'border-sage-200'
+        }`}
+        {...props}
+      />
+      {error ? <Text className="px-1 font-body text-xs text-red-600">{error}</Text> : null}
+    </View>
   );
 }
 

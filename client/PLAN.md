@@ -20,6 +20,11 @@ The Expo app (`client/`) and the NestJS server (`server/`) can't talk to each ot
   - `displayName` is required, but sign-up only collects `name`. Make it optional or copy `name` into it.
   - `phone` needs `@unique` so a phone-number login finds exactly one user.
   - Add `marketingOptIn Boolean @default(false)` for the sign-up checkbox.
+- [ ] Enforce the same rules as the sign-up screen, since client checks can be bypassed (see `src/utils/validation.ts`):
+  - Trim and lowercase emails before saving or looking them up.
+  - Phone arrives as E.164 (`+13365550123`, US only for now). Store it that way. Login by phone should normalize the typed number the same way.
+  - Password: at least 8 characters, with an uppercase letter, a lowercase letter and a number.
+  - Return a clear error for "email already taken" (e.g. 409 with a message), so the app can show it under the email field.
 - [ ] Later: Apple and Google sign-in, which each need server-side token verification.
 
 ### Client
@@ -60,6 +65,28 @@ Clothing photos live in AWS S3. The client uploads the original photo, and the s
 - [ ] Adding items from a link (the client calls `importItemFromLink`, currently a "coming soon" stub): a route that fetches the product page, saves the product image to S3 and returns details for the user to confirm.
 - [ ] Client: a "confirm details" screen after adding, where the user checks what Sage filled in.
 
+### Cutout and tagging (server side)
+
+The background is removed on the **server**, not the phone. That gives the same result on iOS, Android and web, works in Expo Go, and can be changed without an app update. The server already has to look at the photo to fill in category, color and fit, and that AI key must stay server-side anyway.
+
+What happens in step 3 above (`POST /api/items/photo { key }`):
+1. Check the key belongs to the signed-in user (`users/<sub>/clothing/...`) and that the object exists in S3.
+2. Download the original from S3. Resize it (e.g. longest side 1024px) to keep processing fast and cheap.
+3. **Cut it out.** Pick one:
+   - **Amazon Bedrock, Nova Canvas (recommended to start).** It has a background-removal mode. Call it from NestJS with `@aws-sdk/client-bedrock-runtime`, alongside the existing S3 SDK, so there's no model to host. It costs a few cents per image. Check it's available in your AWS region and that model access is enabled on the account.
+   - **Self-hosted rembg.** A free, open-source Python library. It needs a small Python service next to the Node server and a machine with enough memory for the model. If you use a Node background-removal library instead, check its licence (some are AGPL).
+4. Save the result as a transparent PNG to S3 (e.g. `users/<sub>/clothing/<uuid>-cutout.png`) and set `Item.cutoutKey`. Note that `S3Service.buildKey` currently always uses `.jpg`.
+5. **Tag it.** Send the cutout to an AI vision model to fill in `category`, `type`, `colorHex` (1–3 values), `pattern`, `material`, `fit` and a short `name`. Ask for JSON and validate it against the Prisma enums before saving.
+6. Optionally, create the `embedding` for outfit suggestions at the same point.
+7. Create the `Item` and return `{ itemId }`.
+
+How it runs:
+- [ ] **Start synchronous.** Do all of the above inside the request and reply when it's finished. That takes a few seconds, which the app's "Sage is cutting it out…" overlay already covers.
+- [ ] **Later, if it's slow:** reply straight away with the item saved using only `imageKey`, and do steps 3–6 in the background, e.g. with an S3-triggered Lambda or a job queue. The `imageUrl` fallback (cutout if ready, otherwise the original) already handles the gap.
+- [ ] If the cutout fails, still save the item with the original photo, rather than making the user retake it.
+
+Possible later extra: on-device cutout on iOS 17+ (Apple's Vision framework) for an instant preview while the server makes the final version. It needs a custom native module and doesn't work in Expo Go.
+
 ## 5. Client cleanups
 
 - [x] Comments in `src/services/auth.ts` and `.env.example` say the backend is **Next.js**. It's **NestJS**.
@@ -70,7 +97,8 @@ Clothing photos live in AWS S3. The client uploads the original photo, and the s
 2. Auth, plus navigating after login (section 2)
 3. Body photo routes: the smallest real end-to-end test (section 3)
 4. Items list (section 4)
-5. Add-item flow (section 4)
+5. Add-item flow (section 4): upload first, saving the item with just the original photo
+6. Cutout and tagging (section 4): add background removal, then AI tagging
 
 ## Client-only checklist
 
