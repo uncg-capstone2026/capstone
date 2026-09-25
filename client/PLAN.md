@@ -118,3 +118,4 @@ What the client needs, split by whether it can be done now.
 - [ ] Body photo route names and the `uploadUrl`/`url` field name.
 - [ ] Category naming for items.
 - [ ] The item-photo and link-import routes (section 4), so `uploadItemPhoto` and `importItemFromLink` can go live.
+
