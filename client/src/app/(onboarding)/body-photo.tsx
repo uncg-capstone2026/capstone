@@ -35,7 +35,7 @@ export default function BodyPhotoScreen() {
     setIsSubmitting(true);
     try {
       await uploadBodyPhoto(photo);
-      router.replace('/home');
+      router.replace('/closet');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
@@ -102,7 +102,7 @@ export default function BodyPhotoScreen() {
             </Pressable>
 
             <Pressable
-              onPress={() => router.replace('/home')}
+              onPress={() => router.replace('/closet')}
               disabled={isSubmitting}
               accessibilityRole="button"
               className="items-center py-2 disabled:opacity-60">
