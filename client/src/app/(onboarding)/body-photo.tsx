@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { MascotMessage } from '@/components/mascot-message';
 import { choosePhotoSource, pickPhoto } from '@/components/onboarding/photo-picker';
 import { uploadBodyPhoto, type PickedPhoto } from '@/services/photos';
 
@@ -45,20 +46,21 @@ export default function BodyPhotoScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-cream-100">
-      <ScrollView contentContainerClassName="flex-grow items-center px-6 py-6">
-        <View className="w-full max-w-sm flex-1 gap-6">
-          <View className="items-center gap-2">
+      <ScrollView contentContainerClassName="flex-grow items-center px-6 py-4">
+        <View className="w-full max-w-sm flex-1 gap-4">
+          <View className="items-center gap-1">
             <Text className="font-heading text-lg tracking-wide text-sage-600">StyleMe</Text>
-            <Text className="text-center font-heading text-3xl text-sage-700">Add a full-body photo</Text>
-            <Text className="text-center font-body text-base text-sage-500">
-              Stand back, face the camera, and keep your whole body in frame. Outfits get previewed on
-              this photo.
-            </Text>
+            <Text className="text-center font-heading text-2xl text-sage-700">Add a full-body photo</Text>
           </View>
+
+          <MascotMessage>
+            Stand back, face the camera, and keep your whole body in frame. Outfits get previewed on this
+            photo.
+          </MascotMessage>
 
           <View
             onLayout={(e) => setPhotoArea(e.nativeEvent.layout)}
-            className="min-h-[240px] flex-1 items-center justify-center">
+            className="min-h-[200px] flex-1 items-center justify-center">
             {photoArea ? (
               <Pressable
                 onPress={handleAddPhoto}
@@ -87,7 +89,7 @@ export default function BodyPhotoScreen() {
             ) : null}
           </View>
 
-          <View className="gap-3">
+          <View className="gap-1">
             {error ? <Text className="font-body text-sm text-red-600">{error}</Text> : null}
 
             <Pressable
@@ -105,7 +107,7 @@ export default function BodyPhotoScreen() {
               onPress={() => router.replace('/closet')}
               disabled={isSubmitting}
               accessibilityRole="button"
-              className="items-center py-2 disabled:opacity-60">
+              className="items-center py-1.5 disabled:opacity-60">
               <Text className="font-label text-base text-sage-600 underline">Skip for now</Text>
             </Pressable>
           </View>
