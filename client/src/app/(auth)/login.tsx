@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
 import { continueWithApple, continueWithGoogle, loginWithPassword, type LoginMode } from '@/services/auth';
+import { formatPhone, toE164 } from '@/utils/validation';
 
 const CLOTHESLINE_SIDE_PADDING = 16; // 8px each side, matches the row's px-2
 const CLOTHESLINE_GAP = 8;
@@ -67,7 +68,7 @@ export default function LoginScreen() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await loginWithPassword({ mode, identifier: mode === 'email' ? email : phone, password });
+      await loginWithPassword({ mode, identifier: mode === 'email' ? email : (toE164(phone) ?? phone), password });
       router.replace('/closet');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -156,9 +157,11 @@ export default function LoginScreen() {
               ) : (
                 <AuthTextInput
                   value={phone}
-                  onChangeText={setPhone}
+                  onChangeText={(text) => setPhone(formatPhone(text))}
                   placeholder="Phone number"
                   keyboardType="phone-pad"
+                  autoComplete="tel"
+                  textContentType="telephoneNumber"
                 />
               )}
               <AuthTextInput

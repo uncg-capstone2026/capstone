@@ -12,7 +12,17 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthCheckbox, AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
+import { PasswordStrength } from '@/components/auth/password-strength';
 import { continueWithApple, continueWithGoogle, signUpWithPassword } from '@/services/auth';
+import {
+  formatPhone,
+  isValidEmail,
+  isValidPhone,
+  meetsPasswordRules,
+  toE164,
+} from '@/utils/validation';
+
+type Field = 'name' | 'email' | 'phone' | 'password' | 'confirmPassword';
 
 export default function SignUpScreen() {
   const [name, setName] = useState('');
@@ -23,25 +33,39 @@ export default function SignUpScreen() {
   const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A field's error shows once the user has left it, or after they try to submit.
+  const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
+  const [submitted, setSubmitted] = useState(false);
+
+  const fieldErrors: Record<Field, string | null> = {
+    name: name.trim() ? null : 'Enter your name.',
+    email: isValidEmail(email) ? null : 'Enter a valid email address.',
+    phone: isValidPhone(phone) ? null : 'Enter a 10-digit US phone number.',
+    password: meetsPasswordRules(password) ? null : "Password doesn't meet the requirements.",
+    confirmPassword: confirmPassword && confirmPassword === password ? null : "Passwords don't match.",
+  };
+
+  function visibleError(field: Field) {
+    // Confirm password is checked live once it has text, since a mismatch is obvious mid-typing.
+    const shown = submitted || touched[field] || (field === 'confirmPassword' && confirmPassword);
+    return shown ? fieldErrors[field] : null;
+  }
+
+  function markTouched(field: Field) {
+    setTouched((current) => ({ ...current, [field]: true }));
+  }
 
   async function handleSubmit() {
     setError(null);
-
-    if (!name || !email || !password || !confirmPassword) {
-      setError('Please fill in all required fields.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
-    }
+    setSubmitted(true);
+    if (Object.values(fieldErrors).some(Boolean)) return;
 
     setIsSubmitting(true);
     try {
       await signUpWithPassword({
-        name,
-        email,
-        phone: phone || undefined,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: toE164(phone),
         password,
         marketingOptIn,
       });
@@ -78,33 +102,56 @@ export default function SignUpScreen() {
               <AuthTextInput
                 value={name}
                 onChangeText={setName}
+                onBlur={() => markTouched('name')}
+                error={visibleError('name')}
                 placeholder="Full name"
                 autoCapitalize="words"
+                autoComplete="name"
+                textContentType="name"
               />
               <AuthTextInput
                 value={email}
                 onChangeText={setEmail}
+                onBlur={() => markTouched('email')}
+                error={visibleError('email')}
                 placeholder="Email"
                 autoCapitalize="none"
+                autoCorrect={false}
                 keyboardType="email-address"
+                autoComplete="email"
+                textContentType="emailAddress"
               />
               <AuthTextInput
                 value={phone}
-                onChangeText={setPhone}
+                onChangeText={(text) => setPhone(formatPhone(text))}
+                onBlur={() => markTouched('phone')}
+                error={visibleError('phone')}
                 placeholder="Phone number (optional)"
                 keyboardType="phone-pad"
+                autoComplete="tel"
+                textContentType="telephoneNumber"
               />
               <AuthTextInput
                 value={password}
                 onChangeText={setPassword}
+                onBlur={() => markTouched('password')}
+                error={visibleError('password')}
                 placeholder="Password"
                 secureTextEntry
+                autoComplete="new-password"
+                textContentType="newPassword"
+                passwordRules="minlength: 8; required: lower; required: upper; required: digit;"
               />
+              <PasswordStrength password={password} name={name} email={email} />
               <AuthTextInput
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
+                onBlur={() => markTouched('confirmPassword')}
+                error={visibleError('confirmPassword')}
                 placeholder="Confirm password"
                 secureTextEntry
+                autoComplete="new-password"
+                textContentType="newPassword"
               />
               <AuthCheckbox
                 checked={marketingOptIn}
