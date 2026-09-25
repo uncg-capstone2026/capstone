@@ -35,11 +35,11 @@ export function AuthCheckbox({ checked, onChange, label }: AuthCheckboxProps) {
   );
 }
 
-export function AuthDivider() {
+export function AuthDivider({ label = 'or continue with' }: { label?: string }) {
   return (
     <View className="flex-row items-center gap-3">
       <View className="h-px flex-1 bg-sage-200" />
-      <Text className="font-body text-xs uppercase text-sage-400">or continue with</Text>
+      <Text className="font-body text-xs uppercase text-sage-400">{label}</Text>
       <View className="h-px flex-1 bg-sage-200" />
     </View>
   );

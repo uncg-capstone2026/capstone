@@ -1,6 +1,6 @@
 import { BricolageGrotesque_400Regular, BricolageGrotesque_600SemiBold } from '@expo-google-fonts/bricolage-grotesque';
 import { LibreBaskerville_700Bold } from '@expo-google-fonts/libre-baskerville';
-import { Slot } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
@@ -26,5 +26,5 @@ export default function RootLayout() {
     return null;
   }
 
-  return <Slot />;
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

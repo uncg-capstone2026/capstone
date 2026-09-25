@@ -1,4 +1,4 @@
-import { Link } from 'expo-router';
+import { Link, router } from 'expo-router';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -68,6 +68,7 @@ export default function LoginScreen() {
     setIsSubmitting(true);
     try {
       await loginWithPassword({ mode, identifier: mode === 'email' ? email : phone, password });
+      router.replace('/closet');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
@@ -79,6 +80,7 @@ export default function LoginScreen() {
     setError(null);
     try {
       await (provider === 'apple' ? continueWithApple() : continueWithGoogle());
+      router.replace('/closet');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     }

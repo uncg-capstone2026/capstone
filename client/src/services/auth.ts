@@ -14,7 +14,13 @@ export type SignUpInput = {
   marketingOptIn: boolean;
 };
 
-// TODO: point these at the Next.js auth API once it exists. No persistence yet.
+// TODO: point these at the NestJS auth API once it exists. No persistence yet.
+
+// TODO: read the stored session once the backend issues tokens. Until then every
+// launch starts at login.
+export function isSignedIn(): boolean {
+  return false;
+}
 
 export async function loginWithPassword(_input: PasswordLoginInput): Promise<void> {
   throw new Error('Email/phone login is not wired up to a backend yet.');

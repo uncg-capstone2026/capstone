@@ -5,42 +5,34 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "StyleMe",
+    "scheme": "styleme",
     "userInterfaceStyle": "automatic",
-    "ios": {
-      "icon": "./assets/expo.icon"
-    },
     "android": {
-      "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
-      },
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-image-picker",
         {
-          "photosPermission": "StyleMe uses your photos so you can choose a full-body photo to preview outfits on.",
-          "cameraPermission": "StyleMe uses the camera so you can take a full-body photo to preview outfits on.",
+          "photosPermission": "StyleMe uses your photos so you can add clothing to your closet and choose a full-body photo to preview outfits on.",
+          "cameraPermission": "StyleMe uses the camera so you can photograph clothing for your closet and take a full-body photo to preview outfits on.",
           "microphonePermission": false
         }
       ],
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#fdf8ee",
+          "image": "./assets/images/icon.png",
+          "imageWidth": 120
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
