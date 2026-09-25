@@ -56,7 +56,7 @@ export async function confirmBodyPhotoUpload(key: string): Promise<string> {
   return result.key;
 }
 
-async function apiPost<T>(path: string, body: unknown): Promise<T> {
+export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     method: 'POST',
     // TODO: add the session's Authorization header once auth is wired up.

@@ -47,13 +47,18 @@ The client and server currently disagree on almost every detail:
 
 ## 4. Closet items
 
-- [ ] Server: build `GET /api/items`, returning the signed-in user's items as `{ id, name, category, imageUrl, aspectRatio, isFavorite }` (the client's `ClosetItem` type in `src/services/items.ts`).
-- [ ] Server: `Item` stores `imageKey`, not a URL, so the route must create a signed download URL (`S3Service.getDownloadUrl` exists). Its 5-minute expiry will break the app's cached images. Use a longer expiry or a CloudFront URL.
+Clothing photos live in AWS S3. The client uploads the original photo, and the server cuts the piece out and stores the cutout in S3 as well (`Item.imageKey` for the original, `Item.cutoutKey` for the cutout).
+
+- [ ] Server: build `GET /api/items`, returning the signed-in user's items as `{ id, name, category, imageUrl, isFavorite }` (the client's `ClosetItem` type in `src/services/items.ts`).
+- [ ] Server: `imageUrl` should be a signed download URL for `cutoutKey`, falling back to `imageKey` until the cutout is ready (`S3Service.getDownloadUrl` exists). Its 5-minute expiry will break the app's cached images. Use a longer expiry or a CloudFront URL.
 - [ ] Category names don't match. The server uses `Top`, `Bottoms`, `Accessory`, `OnePiece`, while the client uses `tops`, `accessories`, `one-piece` and so on. Pick one side to change, or convert in the route.
-- [ ] Schema additions to `Item`: `isFavorite Boolean @default(false)`, a `Sets` value in `Category`, and the image shape (`width`/`height` or `aspectRatio`).
-- [ ] Adding items:
-  - Server: `POST /uploads/clothing` exists for the upload URL, but it needs a "create item" route to save the item after upload.
-  - Client: replace the `src/app/add-item.tsx` placeholder with the real flow: pick a photo, then name and category, then upload, then create.
+- [ ] Schema additions to `Item`: `isFavorite Boolean @default(false)` and a `Sets` value in `Category`.
+- [ ] Adding items from a photo (the client side is built as `uploadItemPhoto` in `src/services/items.ts`, stubbed until these exist):
+  1. `POST /api/items/photo/upload-url { contentType, fileName }` → `{ uploadUrl, key }`, a presigned S3 PUT. `POST /uploads/clothing` covers part of this today.
+  2. The app PUTs the image straight to S3.
+  3. `POST /api/items/photo { key }` → `{ itemId }`. It saves `imageKey`, cuts the piece out, stores it in S3 as `cutoutKey`, and fills in category, color and fit.
+- [ ] Adding items from a link (the client calls `importItemFromLink`, currently a "coming soon" stub): a route that fetches the product page, saves the product image to S3 and returns details for the user to confirm.
+- [ ] Client: a "confirm details" screen after adding, where the user checks what Sage filled in.
 
 ## 5. Client cleanups
 
@@ -78,10 +83,10 @@ What the client needs, split by whether it can be done now.
 - [ ] Move `apiPost` out of `src/services/photos.ts` into a shared `src/services/api.ts` (with `apiGet`) that adds the `Authorization` header automatically. Use it in `photos.ts`, `items.ts` and `auth.ts`.
 - [ ] Make `isSignedIn()` async and add a loading state in `src/app/index.tsx`.
 - [ ] Add a sign-out button to the Settings tab.
-- [ ] Generalize `src/components/onboarding/photo-picker.ts` (its default file name is `body-photo.jpg`) so the add-item flow can reuse it.
+- [x] Move the photo picker to `src/components/photo-picker.ts` with a neutral default file name, so the add-item screen can reuse it.
 
 ### Needs a server decision first
 - [ ] Auth request and response shapes, including the error for an email that's already taken.
 - [ ] Body photo route names and the `uploadUrl`/`url` field name.
 - [ ] Category naming for items.
-- [ ] The create-item route, before building the real add-item screen.
+- [ ] The item-photo and link-import routes (section 4), so `uploadItemPhoto` and `importItemFromLink` can go live.

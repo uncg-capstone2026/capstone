@@ -19,8 +19,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "StyleMe uses your photos so you can choose a full-body photo to preview outfits on.",
-          "cameraPermission": "StyleMe uses the camera so you can take a full-body photo to preview outfits on.",
+          "photosPermission": "StyleMe uses your photos so you can add clothing to your closet and choose a full-body photo to preview outfits on.",
+          "cameraPermission": "StyleMe uses the camera so you can photograph clothing for your closet and take a full-body photo to preview outfits on.",
           "microphonePermission": false
         }
       ],

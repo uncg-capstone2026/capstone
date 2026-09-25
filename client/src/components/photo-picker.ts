@@ -7,7 +7,7 @@ import type { PickedPhoto } from '@/services/photos';
 export type PhotoSource = 'library' | 'camera' | 'files';
 
 const DEFAULT_MIME_TYPE = 'image/jpeg';
-const DEFAULT_FILE_NAME = 'body-photo.jpg';
+const DEFAULT_FILE_NAME = 'photo.jpg';
 
 const SOURCE_OPTIONS: { source: PhotoSource; label: string }[] = [
   { source: 'library', label: 'Photo Library' },

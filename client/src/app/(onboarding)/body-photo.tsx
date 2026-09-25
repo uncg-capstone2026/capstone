@@ -6,7 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MascotMessage } from '@/components/mascot-message';
-import { choosePhotoSource, pickPhoto } from '@/components/onboarding/photo-picker';
+import { choosePhotoSource, pickPhoto } from '@/components/photo-picker';
 import { uploadBodyPhoto, type PickedPhoto } from '@/services/photos';
 
 export default function BodyPhotoScreen() {

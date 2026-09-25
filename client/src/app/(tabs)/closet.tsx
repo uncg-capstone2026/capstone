@@ -1,5 +1,5 @@
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -16,12 +16,16 @@ export default function ClosetScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    listItems()
-      .then(setItems)
-      .catch((e) => setError(e instanceof Error ? e.message : 'Something went wrong.'))
-      .finally(() => setIsLoading(false));
-  }, []);
+  // Reload whenever the closet comes back into view, e.g. after adding an item.
+  useFocusEffect(
+    useCallback(() => {
+      setError(null);
+      listItems()
+        .then(setItems)
+        .catch((e) => setError(e instanceof Error ? e.message : 'Something went wrong.'))
+        .finally(() => setIsLoading(false));
+    }, []),
+  );
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-cream-100">
