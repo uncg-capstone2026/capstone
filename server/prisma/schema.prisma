@@ -20,6 +20,7 @@ enum Category {
   Shoes
   Accessory
   OnePiece
+  Sets
 }
 
 enum Fit {
@@ -55,38 +56,39 @@ model TryOnPhoto {
   id         String   @id @default(uuid())
   userId     String
   user       User     @relation(fields: [userId], references: [id])
-  imageKey   String   // S3 key
+  imageKey   String // S3 key
   isPrimary  Boolean  @default(false)
   capturedAt DateTime @default(now())
 }
 
 model Item {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  name      String
-  category  Category
-  type      String   // Javier's field, e.g. "t-shirt", "jeans", "sneakers"
-  cut       String?  // Emma's field, e.g. "crew neck", "sweater", "jeans" — may overlap with type, revisit with team
-  colorHex  String[] // 1-3 values
-  pattern   String?
-  material  String?
-  season    String?
-  formality String?
-  fit       Fit?
-  imageKey    String
-  cutoutKey   String?
-  sourceURL   String?
-  embedding   Unsupported("vector(768)")?
-  createdAt   DateTime @default(now())
+  id         String                      @id @default(uuid())
+  userId     String
+  user       User                        @relation(fields: [userId], references: [id])
+  name       String
+  category   Category
+  type       String // Javier's field, e.g. "t-shirt", "jeans", "sneakers"
+  cut        String? // Emma's field, e.g. "crew neck", "sweater", "jeans" — may overlap with type, revisit with team
+  colorHex   String[] // 1-3 values
+  pattern    String?
+  material   String?
+  season     String?
+  formality  String?
+  fit        Fit?
+  isFavorite Boolean                     @default(false)
+  imageKey   String
+  cutoutKey  String?
+  sourceURL  String?
+  embedding  Unsupported("vector(768)")?
+  createdAt  DateTime                    @default(now())
 }
 
 model Collection {
-  id        String   @id @default(uuid())
+  id        String           @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  user      User             @relation(fields: [userId], references: [id])
   name      String
-  createdAt DateTime @default(now())
+  createdAt DateTime         @default(now())
   items     CollectionItem[]
 }
 
