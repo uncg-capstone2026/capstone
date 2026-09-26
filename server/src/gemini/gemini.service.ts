@@ -4,9 +4,13 @@ import {
   EMBEDDABLE_IMAGE_TYPES,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
+  CATEGORY_BY_TYPE,
   CLOTHING_TYPES,
+  type ClothingType,
 } from './constants';
 import {
+  IMAGE_ATTRIBUTES_PROMPT,
+  IMAGE_ATTRIBUTES_RESPONSE_SCHEMA,
   QUERY_EXPANSION_PROMPT,
   QUERY_EXPANSION_RESPONSE_SCHEMA,
 } from './prompts';
@@ -31,12 +35,16 @@ export class GeminiService {
     return response.text ?? '';
   }
 
-  async embedImage(image: Buffer, mimeType: string): Promise<number[]> {
+  private assertSupportedImage(mimeType: string) {
     if (!(EMBEDDABLE_IMAGE_TYPES as readonly string[]).includes(mimeType)) {
       throw new Error(
         `Unsupported image type "${mimeType}", expected one of: ${EMBEDDABLE_IMAGE_TYPES.join(', ')}`,
       );
     }
+  }
+
+  async embedImage(image: Buffer, mimeType: string): Promise<number[]> {
+    this.assertSupportedImage(mimeType);
 
     const response = await this.ai.models.embedContent({
       model: EMBEDDING_MODEL,
@@ -127,6 +135,51 @@ export class GeminiService {
         ...item,
         embedding: vectors[i],
       })),
+    };
+  }
+
+  // Prefills an item's fields from a photo of the garment; the user reviews
+  // them before saving. category is derived from type, not chosen by the model.
+  async extractImageAttributes(image: Buffer, mimeType: string) {
+    this.assertSupportedImage(mimeType);
+
+    const response = await this.ai.models.generateContent({
+      model: 'gemini-flash-latest',
+      contents: [
+        { inlineData: { mimeType, data: image.toString('base64') } },
+        { text: IMAGE_ATTRIBUTES_PROMPT },
+      ],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: IMAGE_ATTRIBUTES_RESPONSE_SCHEMA,
+      },
+    });
+    const text = response.text ?? '';
+
+    let attributes: {
+      type: ClothingType;
+      colorHex: string[];
+      [key: string]: unknown;
+    };
+    try {
+      attributes = JSON.parse(text);
+    } catch {
+      throw new Error(`Gemini returned invalid JSON: ${text || '(empty)'}`);
+    }
+
+    const colorHex = (attributes.colorHex ?? [])
+      .map((hex) => hex.toUpperCase())
+      .filter((hex) => /^#[0-9A-F]{6}$/.test(hex));
+    if (colorHex.length === 0) {
+      throw new Error(
+        `Image attributes returned no valid hex colors: ${JSON.stringify(attributes.colorHex)}`,
+      );
+    }
+
+    return {
+      ...attributes,
+      colorHex,
+      category: CATEGORY_BY_TYPE[attributes.type],
     };
   }
 }
