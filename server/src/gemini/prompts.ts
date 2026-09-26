@@ -1,5 +1,8 @@
 import { Type, type Schema } from '@google/genai';
-import { CLOTHING_TYPES } from './constants';
+import { CLOTHING_TYPES, FORMALITY_LEVELS, SEASONS } from './constants';
+
+const quoteList = (xs: readonly string[]) =>
+  xs.map((x) => `"${x}"`).join(', ');
 
 export const QUERY_EXPANSION_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
@@ -22,12 +25,12 @@ export const QUERY_EXPANSION_RESPONSE_SCHEMA: Schema = {
     season: {
       type: Type.STRING,
       nullable: true,
-      enum: ['spring', 'summer', 'fall', 'winter', 'all-season'],
+      enum: [...SEASONS],
     },
     formality: {
       type: Type.STRING,
       nullable: true,
-      enum: ['casual', 'business-casual', 'formal'],
+      enum: [...FORMALITY_LEVELS],
     },
     preferred_colors: { type: Type.ARRAY, items: { type: Type.STRING } },
     exclude_colors: { type: Type.ARRAY, items: { type: Type.STRING } },
@@ -64,7 +67,7 @@ Extract:
 - items: an array with one entry for every garment type that would
   reasonably be part of an outfit matching this request. EXCLUDE types
   that are clearly wrong for the weather, season, or formality implied
-  (e.g. do not include "shorts" or "tank top" for a cold-weather
+  (e.g. do not include "shorts" or "tank-top" for a cold-weather
   request). If the request is broad enough that most types could
   apply, return an empty array rather than guessing narrowly. Each
   entry has:
@@ -77,10 +80,10 @@ Extract:
     own, and do not describe any other garment in this field.
     Example, for a "coat" entry: "tailored long camel wool coat".
     Output only the description, with no prefix.
-- season: one of "spring", "summer", "fall", "winter", "all-season" —
+- season: one of ${quoteList(SEASONS)} —
   ONLY if the request implies a season through explicit mention or
   clear context. Otherwise null.
-- formality: one of "casual", "business-casual", "formal" — ONLY if
+- formality: one of ${quoteList(FORMALITY_LEVELS)} — ONLY if
   the occasion clearly implies one. Otherwise null.
 - preferred_colors: colors if the user names specific colors or if the event/holiday/ocasion normally calls for certain colors in american culture.
   Otherwise an empty list.

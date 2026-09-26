@@ -42,3 +42,9 @@ export const SEASONS = ['spring', 'summer', 'fall', 'winter'] as const;
 export type Season = (typeof SEASONS)[number];
 
 export type FormalityLevel = (typeof FORMALITY_LEVELS)[number];
+
+export const EMBEDDING_MODEL = 'gemini-embedding-2';
+
+export const EMBEDDING_DIMENSIONS = 768;
+
+export const EMBEDDABLE_IMAGE_TYPES = ['image/png', 'image/jpeg'] as const;
