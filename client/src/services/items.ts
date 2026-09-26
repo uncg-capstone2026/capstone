@@ -1,5 +1,6 @@
-import { API_BASE_URL, isBackendConfigured } from '@/config/api';
-import { apiPost, uploadToS3, type PickedPhoto } from '@/services/photos';
+import { isBackendConfigured } from '@/config/api';
+import { apiGet, apiPost } from '@/services/api';
+import { uploadToS3, type PickedPhoto } from '@/services/photos';
 
 // NOTE for the server: Prisma's Item model has no `isFavorite` flag and its Category enum
 // has no `Sets` value yet. Both are used here client-side and need adding to the schema.
@@ -41,18 +42,15 @@ export function filterItems(items: ClosetItem[], filter: ClosetFilter): ClosetIt
 }
 
 // Until EXPO_PUBLIC_API_URL is set, the closet is empty.
-// TODO: backend route not built yet. GET /api/items should return the signed-in user's items.
+// GET /api/items returns the signed-in user's items.
 export async function listItems(): Promise<ClosetItem[]> {
   if (!isBackendConfigured) return [];
 
-  const response = await fetch(`${API_BASE_URL}/api/items`, {
-    // TODO: add the session's Authorization header once auth is wired up.
-    headers: { Accept: 'application/json' },
-  });
-  if (!response.ok) {
+  try {
+    return await apiGet<ClosetItem[]>('/api/items');
+  } catch {
     throw new Error('Could not load your closet. Please try again.');
   }
-  return (await response.json()) as ClosetItem[];
 }
 
 // Clothing photo upload flow. The app never holds AWS credentials:

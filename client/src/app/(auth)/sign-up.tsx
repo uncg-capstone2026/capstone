@@ -13,7 +13,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthCheckbox, AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
 import { PasswordStrength } from '@/components/auth/password-strength';
-import { continueWithApple, continueWithGoogle, signUpWithPassword } from '@/services/auth';
+import {
+  TakenFieldError,
+  continueWithApple,
+  continueWithGoogle,
+  signUpWithPassword,
+} from '@/services/auth';
 import {
   formatPhone,
   isValidEmail,
@@ -36,6 +41,8 @@ export default function SignUpScreen() {
   // A field's error shows once the user has left it, or after they try to submit.
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({});
   const [submitted, setSubmitted] = useState(false);
+  // "Already in use" from the server, shown under its field until that field is edited.
+  const [takenField, setTakenField] = useState<TakenFieldError | null>(null);
 
   const fieldErrors: Record<Field, string | null> = {
     name: name.trim() ? null : 'Enter your name.',
@@ -46,6 +53,7 @@ export default function SignUpScreen() {
   };
 
   function visibleError(field: Field) {
+    if (takenField?.field === field) return takenField.message;
     // Confirm password is checked live once it has text, since a mismatch is obvious mid-typing.
     const shown = submitted || touched[field] || (field === 'confirmPassword' && confirmPassword);
     return shown ? fieldErrors[field] : null;
@@ -57,6 +65,7 @@ export default function SignUpScreen() {
 
   async function handleSubmit() {
     setError(null);
+    setTakenField(null);
     setSubmitted(true);
     if (Object.values(fieldErrors).some(Boolean)) return;
 
@@ -71,6 +80,10 @@ export default function SignUpScreen() {
       });
       router.replace('/body-photo');
     } catch (e) {
+      if (e instanceof TakenFieldError) {
+        setTakenField(e);
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
       setIsSubmitting(false);
@@ -111,7 +124,10 @@ export default function SignUpScreen() {
               />
               <AuthTextInput
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(text) => {
+                  setEmail(text);
+                  if (takenField?.field === 'email') setTakenField(null);
+                }}
                 onBlur={() => markTouched('email')}
                 error={visibleError('email')}
                 placeholder="Email"
@@ -123,7 +139,10 @@ export default function SignUpScreen() {
               />
               <AuthTextInput
                 value={phone}
-                onChangeText={(text) => setPhone(formatPhone(text))}
+                onChangeText={(text) => {
+                  setPhone(formatPhone(text));
+                  if (takenField?.field === 'phone') setTakenField(null);
+                }}
                 onBlur={() => markTouched('phone')}
                 error={visibleError('phone')}
                 placeholder="Phone number (optional)"
