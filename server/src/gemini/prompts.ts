@@ -1,14 +1,14 @@
 import { Type, type Schema } from '@google/genai';
 import { CLOTHING_TYPES, FORMALITY_LEVELS, SEASONS } from './constants';
 
-const quoteList = (xs: readonly string[]) =>
-  xs.map((x) => `"${x}"`).join(', ');
+const quoteList = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(', ');
 
 export const QUERY_EXPANSION_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
     items: {
       type: Type.ARRAY,
+      minItems: '1',
       items: {
         type: Type.OBJECT,
         properties: {
@@ -68,9 +68,10 @@ Extract:
   reasonably be part of an outfit matching this request. EXCLUDE types
   that are clearly wrong for the weather, season, or formality implied
   (e.g. do not include "shorts" or "tank-top" for a cold-weather
-  request). If the request is broad enough that most types could
-  apply, return an empty array rather than guessing narrowly. Each
-  entry has:
+  request). Always return at least one item. If the request is broad
+  (e.g. "something to wear to class"), choose the types a typical
+  outfit for that context would include (e.g. t-shirt, jeans,
+  sneakers). Each entry has:
   - type: exactly one garment type from the list above.
   - semantic_query: a concrete description of that garment only, the
     way it would look in a photo: color (if implied), material,
