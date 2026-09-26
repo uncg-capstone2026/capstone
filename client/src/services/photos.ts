@@ -1,4 +1,5 @@
-import { API_BASE_URL, isBackendConfigured } from '@/config/api';
+import { isBackendConfigured } from '@/config/api';
+import { apiPost } from '@/services/api';
 
 export type PickedPhoto = {
   uri: string;
@@ -54,17 +55,4 @@ export async function uploadToS3(uploadUrl: string, photo: PickedPhoto): Promise
 export async function confirmBodyPhotoUpload(key: string): Promise<string> {
   const result = await apiPost<{ key: string }>('/api/photos/body', { key });
   return result.key;
-}
-
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    // TODO: add the session's Authorization header once auth is wired up.
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) {
-    throw new Error('Something went wrong. Please try again.');
-  }
-  return (await response.json()) as T;
 }

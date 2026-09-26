@@ -28,12 +28,12 @@ The Expo app (`client/`) and the NestJS server (`server/`) can't talk to each ot
 - [ ] Later: Apple and Google sign-in, which each need server-side token verification.
 
 ### Client
-- [ ] Wire `signUpWithPassword` and `loginWithPassword` in `src/services/auth.ts` to the new routes. Both return `{ token, user }`. Login takes `{ email, password }` or `{ phone, password }`, not `mode`/`identifier`. Errors come back as `{ message }`: 409 "Email already in use" / "Phone number already in use", 400 for validation, 401 for a wrong login.
+- [x] Wire `signUpWithPassword` and `loginWithPassword` in `src/services/auth.ts` to the new routes. Both return `{ token, user }`. Login takes `{ email, password }` or `{ phone, password }`, not `mode`/`identifier`. Errors come back as `{ message }`: 409 "Email already in use" / "Phone number already in use", 400 for validation, 401 for a wrong login.
 - [x] Store the token with `expo-secure-store` (`npx expo install expo-secure-store`).
-- [ ] Make `isSignedIn()` read the stored token. Reading it is async, so `src/app/index.tsx` needs a short loading state before redirecting.
-- [ ] Send `Authorization: Bearer <token>` on every API request (`src/services/photos.ts`, `src/services/items.ts`).
+- [x] Make `isSignedIn()` read the stored token. Reading it is async, so `src/app/index.tsx` needs a short loading state before redirecting.
+- [x] Send `Authorization: Bearer <token>` on every API request (`src/services/photos.ts`, `src/services/items.ts`).
 - [x] After a successful login, navigate: `router.replace('/closet')` in `src/app/(auth)/login.tsx`. Right now it does nothing on success.
-- [ ] Add sign-out (clear the token), e.g. from the Settings tab.
+- [x] Add sign-out (clear the token), e.g. from the Settings tab.
 
 ## 3. Body photo upload
 
@@ -108,11 +108,11 @@ What the client needs, split by whether it can be done now.
 - [x] Fix the "Next.js" comments in `src/services/auth.ts` and `.env.example` to say NestJS.
 - [x] Add `router.replace('/closet')` after a successful login in `src/app/(auth)/login.tsx`.
 - [x] Install `expo-secure-store` and add a small session module (save, read and clear the token).
-- [ ] Move `apiPost` out of `src/services/photos.ts` into a shared `src/services/api.ts` (with `apiGet`) that adds the `Authorization` header automatically. Use it in `photos.ts`, `items.ts` and `auth.ts`.
-- [ ] Wire `signUpWithPassword` and `loginWithPassword` to `POST /api/auth/signup` and `POST /api/auth/login`, and save the returned token. Show the 409 "already in use" message under the email or phone field.
-- [ ] Send the `Authorization` header from `listItems()`, so the closet loads from `GET /api/items` (depends on the shared `api.ts` above).
-- [ ] Make `isSignedIn()` async and add a loading state in `src/app/index.tsx`.
-- [ ] Add a sign-out button to the Settings tab.
+- [x] Move `apiPost` out of `src/services/photos.ts` into a shared `src/services/api.ts` (with `apiGet`) that adds the `Authorization` header automatically. Use it in `photos.ts`, `items.ts` and `auth.ts`. (`auth.ts` has no requests yet, so it starts using it when sign-up and login are wired up.)
+- [x] Wire `signUpWithPassword` and `loginWithPassword` to `POST /api/auth/signup` and `POST /api/auth/login`, and save the returned token. Show the 409 "already in use" message under the email or phone field.
+- [x] Send the `Authorization` header from `listItems()`, so the closet loads from `GET /api/items` (depends on the shared `api.ts` above).
+- [x] Make `isSignedIn()` async and add a loading state in `src/app/index.tsx`.
+- [x] Add a sign-out button to the Settings tab.
 - [x] Move the photo picker to `src/components/photo-picker.ts` with a neutral default file name, so the add-item screen can reuse it.
 
 ### Needs a server decision first
