@@ -1,0 +1,130 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Category {
+  Top
+  Bottoms
+  Outerwear
+  Shoes
+  Accessory
+  OnePiece
+}
+
+enum Fit {
+  Slim
+  Regular
+  Relaxed
+  Oversized
+}
+
+enum OutfitSlot {
+  top
+  bottom
+  shoes
+  accessory
+}
+
+model User {
+  id           String       @id @default(uuid())
+  name         String
+  email        String       @unique
+  passwordHash String
+  displayName  String
+  phone        String?
+  createdAt    DateTime     @default(now())
+  items        Item[]
+  photos       TryOnPhoto[]
+  collections  Collection[]
+  outfits      Outfit[]
+}
+
+model TryOnPhoto {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  imageKey   String   // S3 key
+  isPrimary  Boolean  @default(false)
+  capturedAt DateTime @default(now())
+}
+
+model Item {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  category  Category
+  type      String   // Javier's field, e.g. "t-shirt", "jeans", "sneakers"
+  cut       String?  // Emma's field, e.g. "crew neck", "sweater", "jeans" — may overlap with type, revisit with team
+  colorHex  String[] // 1-3 values
+  pattern   String?
+  material  String?
+  season    String?
+  formality String?
+  fit       Fit?
+  imageKey    String
+  cutoutKey   String?
+  sourceURL   String?
+  embedding   Unsupported("vector(768)")?
+  createdAt   DateTime @default(now())
+}
+
+model Collection {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  name      String
+  createdAt DateTime @default(now())
+  items     CollectionItem[]
+}
+
+model CollectionItem {
+  collectionId String
+  collection   Collection @relation(fields: [collectionId], references: [id])
+  itemId       String
+  addedAt      DateTime   @default(now())
+
+  @@id([collectionId, itemId])
+}
+
+model Outfit {
+  id              String          @id @default(uuid())
+  userId          String
+  user            User            @relation(fields: [userId], references: [id])
+  name            String
+  isFavorite      Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  items           OutfitItem[]
+  calendarEntries CalendarEntry[]
+}
+
+model OutfitItem {
+  id       String     @id @default(uuid())
+  outfitId String
+  outfit   Outfit     @relation(fields: [outfitId], references: [id])
+  itemId   String
+  slot     OutfitSlot
+  zIndex   Int
+}
+
+model CalendarEntry {
+  id             String   @id @default(uuid())
+  outfitId       String
+  outfit         Outfit   @relation(fields: [outfitId], references: [id])
+  date           DateTime
+  eventName      String?
+  weatherSummary String?
+  tempHigh       Int?
+  createdAt      DateTime @default(now())
+}

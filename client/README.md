@@ -1,1 +1,3 @@
-This is where the frontend stuff will go
+# StyleMe — Client
+
+This is the client side of StyleMe.
