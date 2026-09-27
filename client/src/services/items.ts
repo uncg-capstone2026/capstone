@@ -1,5 +1,5 @@
 import { isBackendConfigured } from '@/config/api';
-import { apiGet, apiPost } from '@/services/api';
+import { apiGet, apiPost, SessionExpiredError } from '@/services/api';
 import { uploadToS3, type PickedPhoto } from '@/services/photos';
 
 // NOTE for the server: Prisma's Item model has no `isFavorite` flag and its Category enum
@@ -48,7 +48,8 @@ export async function listItems(): Promise<ClosetItem[]> {
 
   try {
     return await apiGet<ClosetItem[]>('/api/items');
-  } catch {
+  } catch (e) {
+    if (e instanceof SessionExpiredError) throw e;
     throw new Error('Could not load your closet. Please try again.');
   }
 }
