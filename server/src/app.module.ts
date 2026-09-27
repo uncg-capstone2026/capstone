@@ -6,8 +6,7 @@ import { S3Module } from './s3/s3.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { ItemsModule } from './items/items.module';
-
-
+import { GeminiModule } from './gemini/gemini.module';
 
 @Module({
   imports: [
@@ -16,6 +15,7 @@ import { ItemsModule } from './items/items.module';
     S3Module,
     AuthModule,
     ItemsModule,
+    GeminiModule,
   ],
   controllers: [AppController],
   providers: [AppService],
