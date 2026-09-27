@@ -1,3 +1,7 @@
+import { isBackendConfigured } from '@/config/api';
+import { ApiError, apiPost } from '@/services/api';
+import { clearToken, getToken, saveToken } from '@/services/session';
+
 export type LoginMode = 'email' | 'phone';
 
 export type PasswordLoginInput = {
@@ -14,20 +18,75 @@ export type SignUpInput = {
   marketingOptIn: boolean;
 };
 
-// TODO: point these at the NestJS auth API once it exists. No persistence yet.
+type AuthResponse = {
+  token: string;
+  user: { id: string; name: string; displayName: string | null; email: string; phone: string | null };
+};
 
-// TODO: read the stored session once the backend issues tokens. Until then every
-// launch starts at login.
-export function isSignedIn(): boolean {
-  return false;
+// Thrown when sign-up hits an email or phone that already has an account (409),
+// so the screen can show it under that field.
+export class TakenFieldError extends Error {
+  constructor(readonly field: 'email' | 'phone') {
+    super(
+      field === 'email'
+        ? 'An account with this email already exists.'
+        : 'An account with this phone number already exists.',
+    );
+  }
 }
 
-export async function loginWithPassword(_input: PasswordLoginInput): Promise<void> {
-  throw new Error('Email/phone login is not wired up to a backend yet.');
+// Signed in means a token is stored. It isn't checked with the server here, so an
+// expired token (they last 30 days) shows up as a 401 on the first request instead.
+export async function isSignedIn(): Promise<boolean> {
+  try {
+    return Boolean(await getToken());
+  } catch {
+    return false;
+  }
 }
 
-// Resolves for now so the post-sign-up onboarding flow is reachable.
-export async function signUpWithPassword(_input: SignUpInput): Promise<void> {}
+export async function signOut(): Promise<void> {
+  await clearToken();
+}
+
+// POST /api/auth/login takes { email, password } or { phone, password }.
+export async function loginWithPassword({ mode, identifier, password }: PasswordLoginInput): Promise<void> {
+  if (!isBackendConfigured) {
+    throw new Error('Login needs EXPO_PUBLIC_API_URL to be set.');
+  }
+
+  const body = mode === 'email' ? { email: identifier, password } : { phone: identifier, password };
+  try {
+    const { token } = await apiPost<AuthResponse>('/api/auth/login', body);
+    await saveToken(token);
+  } catch (e) {
+    throw toAuthError(e);
+  }
+}
+
+// Until EXPO_PUBLIC_API_URL is set, this resolves locally so the onboarding flow stays walkable.
+export async function signUpWithPassword(input: SignUpInput): Promise<void> {
+  if (!isBackendConfigured) return;
+
+  try {
+    const { token } = await apiPost<AuthResponse>('/api/auth/signup', input);
+    await saveToken(token);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 409) {
+      throw new TakenFieldError(e.serverMessage?.toLowerCase().includes('phone') ? 'phone' : 'email');
+    }
+    throw toAuthError(e);
+  }
+}
+
+// The server's 400/401 messages are written for users ("Incorrect email/phone or password").
+function toAuthError(e: unknown): Error {
+  if (e instanceof ApiError && (e.status === 400 || e.status === 401) && e.serverMessage) {
+    return new Error(e.serverMessage);
+  }
+  if (e instanceof ApiError) return e;
+  return new Error("Couldn't reach StyleMe. Check your connection and try again.");
+}
 
 export async function continueWithApple(): Promise<void> {
   throw new Error('Sign in with Apple is not wired up to a backend yet.');
