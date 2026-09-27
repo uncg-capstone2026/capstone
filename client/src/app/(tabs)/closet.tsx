@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CategoryFilter } from '@/components/closet/category-filter';
 import { ClosetGrid } from '@/components/closet/closet-grid';
 import { ClosetTip } from '@/components/closet/closet-tip';
+import { SessionExpiredError } from '@/services/api';
 import { filterItems, listItems, type ClosetFilter, type ClosetItem } from '@/services/items';
 
 const MIN_ITEMS_FOR_SUGGESTIONS = 5;
@@ -22,7 +23,10 @@ export default function ClosetScreen() {
       setError(null);
       listItems()
         .then(setItems)
-        .catch((e) => setError(e instanceof Error ? e.message : 'Something went wrong.'))
+        .catch((e) => {
+          if (e instanceof SessionExpiredError) return;
+          setError(e instanceof Error ? e.message : 'Something went wrong.');
+        })
         .finally(() => setIsLoading(false));
     }, []),
   );

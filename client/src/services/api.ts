@@ -1,5 +1,7 @@
+import { router } from 'expo-router';
+
 import { API_BASE_URL } from '@/config/api';
-import { getToken } from '@/services/session';
+import { clearToken, getToken } from '@/services/session';
 
 export function apiGet<T>(path: string): Promise<T> {
   return apiRequest<T>(path, { method: 'GET' });
@@ -25,10 +27,24 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
+  // A 401 with a token means it expired (or was revoked), so sign out and go to login.
+  // Without a token, a 401 is a normal failure like a wrong password at login.
+  if (response.status === 401 && token) {
+    await clearToken();
+    router.replace('/login');
+    throw new SessionExpiredError();
+  }
   if (!response.ok) {
     throw new ApiError(response.status, await readServerMessage(response));
   }
   return (await response.json()) as T;
+}
+
+// Screens can ignore this one: the user is already being sent to login.
+export class SessionExpiredError extends Error {
+  constructor() {
+    super('Your session has expired. Please log in again.');
+  }
 }
 
 // `message` stays generic so it's safe to show anywhere. Callers that know a route's
