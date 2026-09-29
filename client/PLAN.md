@@ -63,7 +63,18 @@ Clothing photos live in AWS S3. The client uploads the original photo, and the s
   2. The app PUTs the image straight to S3.
   3. `POST /api/items/photo { key }` → `{ itemId }`. It saves `imageKey`, cuts the piece out, stores it in S3 as `cutoutKey`, and fills in category, color and fit.
 - [ ] Adding items from a link (the client calls `importItemFromLink`, currently a "coming soon" stub): a route that fetches the product page, saves the product image to S3 and returns details for the user to confirm.
-- [ ] Client: a "confirm details" screen after adding, where the user checks what Sage filled in.
+- [ ] Client: a "confirm details" screen after adding, where the user checks what StyleMe filled in.
+
+### Item details screen
+
+Tapping an item in the closet opens a details screen. `GET /api/items` only returns `{ id, name, category, imageUrl, isFavorite }`, which isn't enough, and nothing can change or remove an item yet.
+
+- [ ] Server: build `GET /api/items/:id`, returning the full item: the list fields plus `type`, `cut`, `colorHex`, `pattern`, `material`, `season`, `formality`, `fit`, `sourceURL` and `createdAt`. Agree the response shape with the client first (a `ClothingItemDetails` type in `src/services/items.ts`). Convert `category` the same way the list route does.
+- [ ] Server: build `PATCH /api/items/:id` for the favorite toggle and edits (e.g. `{ isFavorite }`, `{ name }`). Validate edited values against the Prisma enums.
+- [ ] Server: build `DELETE /api/items/:id`. It should also delete `imageKey` and `cutoutKey` from S3. Decide what happens to outfits and collections that include the item.
+- [ ] Server: every `:id` route must check the item belongs to the signed-in user. Return 404 (not 403) otherwise, so item ids can't be probed.
+- [ ] Server: `imageUrl` in the details response is a fresh signed URL, so the details screen doesn't show the expired URL from the closet grid (see the expiry note above).
+- [ ] Seed a few items for the test account, since the add-item routes aren't built yet and the closet is otherwise empty.
 
 ### Cutout and tagging (server side)
 
@@ -81,7 +92,7 @@ What happens in step 3 above (`POST /api/items/photo { key }`):
 7. Create the `Item` and return `{ itemId }`.
 
 How it runs:
-- [ ] **Start synchronous.** Do all of the above inside the request and reply when it's finished. That takes a few seconds, which the app's "Sage is cutting it out…" overlay already covers.
+- [ ] **Start synchronous.** Do all of the above inside the request and reply when it's finished. That takes a few seconds, which the app's "StyleMe is cutting it out…" overlay already covers.
 - [ ] **Later, if it's slow:** reply straight away with the item saved using only `imageKey`, and do steps 3–6 in the background, e.g. with an S3-triggered Lambda or a job queue. The `imageUrl` fallback (cutout if ready, otherwise the original) already handles the gap.
 - [ ] If the cutout fails, still save the item with the original photo, rather than making the user retake it.
 
@@ -91,6 +102,31 @@ Possible later extra: on-device cutout on iOS 17+ (Apple's Vision framework) for
 
 - [x] Comments in `src/services/auth.ts` and `.env.example` say the backend is **Next.js**. It's **NestJS**.
 
+## 6. Weather (WeatherAPI.com)
+
+Outfit suggestions should take the weather into account. Weather data comes from [WeatherAPI.com](https://www.weatherapi.com). It uses a plain API key (no JWT like Apple WeatherKit), doesn't need an Apple Developer membership, and works on iOS and Android. The app never calls WeatherAPI.com directly. It calls our server, and the server calls WeatherAPI.com, so the key never ships in the app bundle.
+
+### Server
+- [ ] Sign up for a WeatherAPI.com key. Add `WEATHERAPI_KEY` to `server/.env`, `server/.env.example` and the Railway variables.
+- [ ] Add a `WeatherModule` with a `WeatherService` and `WeatherController`.
+- [ ] Build `GET /api/weather?lat=..&lon=..` behind the auth guard, so strangers can't use up the quota. Also accept `?q=<city>` for users who don't share their location. Validate that `lat`/`lon` are numbers in range.
+- [ ] The service calls `https://api.weatherapi.com/v1/forecast.json?key=<key>&q=<lat>,<lon>&days=1` and returns only what the app needs:
+  `{ tempC, feelsLikeC, highC, lowC, condition, iconUrl, chanceOfRain, uvIndex, windKph, locationName }`.
+  The icon URL comes back protocol-relative (`//cdn.weatherapi.com/...`), so add `https:`.
+- [ ] Cache responses for about 10 minutes, keyed by coordinates rounded to 2 decimals (about 1 km). An in-memory `Map` is enough to start.
+- [ ] Error handling: if WeatherAPI.com fails or times out, return 503 with `{ message }`. Never pass the upstream error through, because it can include the request URL with the key.
+- [ ] Check the free plan's current monthly call limit and forecast days on the WeatherAPI.com pricing page.
+- [ ] Later: fill `CalendarEntry.weatherSummary` and `tempHigh` when an outfit is planned for a date (the forecast endpoint takes `days` up to the plan's limit).
+
+### Client
+- [ ] Install `expo-location` (`npx expo install expo-location`) and add its config plugin to `app.json` with a clear permission message, e.g. "StyleMe uses your location to suggest outfits for today's weather." Apple rejects vague messages.
+- [ ] Add `src/services/weather.ts` with `getWeather({ lat, lon } | { city })`, using `apiGet` from `src/services/api.ts` so it sends the token and handles expired sessions like other requests. Add a `Weather` type matching the server response.
+- [ ] Add a `useWeather` hook: ask for foreground location permission, get the position (`Accuracy.Low` is enough and faster), call `getWeather`, and expose `{ weather, loading, error }`. Keep non-route code outside `src/app/`.
+- [ ] If permission is denied, fall back to a city the user types (and save it for next time), or hide the weather section.
+- [ ] Add a small weather card (icon, temperature, feels-like, chance of rain) where outfit suggestions appear, e.g. the Stylist or Outfits tab.
+- [ ] Show a "Powered by WeatherAPI.com" link near the weather card. The free plan requires it.
+- [ ] Location needs a development build or Expo Go on a real device. Test the denied-permission path too.
+
 ## Suggested order
 
 1. Basic server setup (section 1)
@@ -99,6 +135,7 @@ Possible later extra: on-device cutout on iOS 17+ (Apple's Vision framework) for
 4. Items list (section 4)
 5. Add-item flow (section 4): upload first, saving the item with just the original photo
 6. Cutout and tagging (section 4): add background removal, then AI tagging
+7. Weather (section 6): independent of the item work, so it can be built at any point after auth
 
 ## Client-only checklist
 
@@ -120,4 +157,6 @@ What the client needs, split by whether it can be done now.
 - [ ] Body photo route names and the `uploadUrl`/`url` field name.
 - [x] Category naming for items.
 - [ ] The item-photo and link-import routes (section 4), so `uploadItemPhoto` and `importItemFromLink` can go live.
+- [ ] The item details response shape and the `PATCH`/`DELETE` item routes (section 4), so the details screen can load, favorite, edit and delete items.
+- [ ] The `GET /api/weather` response shape (section 6). The permission setup and `useWeather` hook can be built before it exists.
 

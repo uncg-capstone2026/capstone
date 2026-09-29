@@ -1,13 +1,13 @@
 import { Image } from 'expo-image';
 import { Text, View } from 'react-native';
 
-// A chat-style message from the Sage mascot: avatar on the left, speech bubble on the right.
+// A chat-style message from the StyleMe mascot: avatar on the left, speech bubble on the right.
 export function MascotMessage({ children }: { children: string }) {
   return (
     <View className="flex-row items-end gap-2">
       <View className="h-11 w-11 items-center justify-center rounded-full border border-sage-200 bg-[#f3efe4]">
         <Image
-          source={require('@/assets/images/sage-mascot-chat-transparent.png')}
+          source={require('@/assets/images/styleme-mascot-chat-transparent.png')}
           contentFit="contain"
           accessibilityIgnoresInvertColors
           style={{ width: 30, height: 30, transform: [{ translateY: -1 }] }}
