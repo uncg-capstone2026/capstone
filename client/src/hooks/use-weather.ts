@@ -2,16 +2,21 @@ import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 
 import { SessionExpiredError } from '@/services/api';
-import { getWeather, type Weather } from '@/services/weather';
+import { FORECAST_DAYS_AHEAD, getWeather, type Weather } from '@/services/weather';
+import { daysFromToday, isToday, toDateKey } from '@/utils/dates';
 
 // A reading from the last 10 minutes is close enough and skips waiting for a GPS fix.
 // It matches how long the server caches weather.
 const LAST_KNOWN_MAX_AGE_MS = 10 * 60 * 1000;
 
-// Weather for where the user is now. Asks for foreground location permission the first
-// time. If it's denied, `permissionDenied` is true and `weather` stays null, so the screen
-// can ask for a city instead or hide the weather section.
-export function useWeather() {
+// Weather where the user is now, for today or the given day. Asks for foreground location
+// permission the first time. If it's denied, `permissionDenied` is true and `weather` stays
+// null, and the weather section should be hidden. Days past the forecast range also give
+// `weather: null` without a request (and without asking for location).
+export function useWeather(date?: Date) {
+  // Only sent for a future day, so today keeps using the server's current-weather cache.
+  const dateKey = date && !isToday(date) ? toDateKey(date) : undefined;
+  const hasForecast = !date || daysFromToday(date) <= FORECAST_DAYS_AHEAD;
   const [weather, setWeather] = useState<Weather | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,6 +29,11 @@ export function useWeather() {
     async function load() {
       setLoading(true);
       setError(null);
+      setWeather(null); // don't show the previous day's weather while the new day loads
+      if (!hasForecast) {
+        setLoading(false);
+        return;
+      }
       try {
         // Doesn't show the prompt again once the user has answered it.
         const { granted } = await Location.requestForegroundPermissionsAsync();
@@ -39,7 +49,7 @@ export function useWeather() {
         }
 
         const { latitude: lat, longitude: lon } = position.coords;
-        const result = await getWeather({ lat, lon });
+        const result = await getWeather({ lat, lon }, dateKey);
         if (!cancelled) setWeather(result);
       } catch (e) {
         if (cancelled || e instanceof SessionExpiredError) return;
@@ -53,7 +63,7 @@ export function useWeather() {
     return () => {
       cancelled = true;
     };
-  }, [reloadCount]);
+  }, [reloadCount, dateKey, hasForecast]);
 
   return {
     weather,

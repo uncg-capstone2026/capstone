@@ -123,7 +123,7 @@ Outfit suggestions should take the weather into account. Weather data comes from
 - [x] Responses are cached for 10 minutes in memory, keyed by coordinates rounded to 2 decimals (about 1 km) or the lowercased city.
 - [ ] Later: the cache `Map` never drops expired entries. Fine for now. Evict old entries or cap its size if it grows.
 - [x] Error handling: 503 `{ message: "Weather is unavailable right now" }` if WeatherAPI.com fails or takes more than 5 seconds, and 400 `{ message: "Location not found" }` for an unknown city. The upstream URL (which contains the key) is never logged or returned.
-- [ ] Check the free plan's current monthly call limit and forecast days on the WeatherAPI.com pricing page.
+- [ ] **Weather for a chosen day.** Accept `?date=YYYY-MM-DD` (today through 7 days out; 400 `{ message }` outside that range). The Stylist screen already sends it for any day after today. Call `forecast.json` with `days` = days ahead + 1 and pick that day. Add `date` to the response, since the app uses it to check it got the right day. For a future day, fill `temp`/`feelsLike` from the day's average (`avgtemp_c`/`avgtemp_f`), because the app only shows high/low, condition and rain chance for those days. Include the date in the cache key. Check the WeatherAPI.com plan allows 7 forecast days. Until this ships, the app shows "Forecast for this day isn't available yet." for future days.
 - [ ] Later: fill `CalendarEntry.weatherSummary` and `tempHigh` when an outfit is planned for a date (the forecast endpoint takes `days` up to the plan's limit).
 
 ### Client
@@ -131,10 +131,23 @@ Outfit suggestions should take the weather into account. Weather data comes from
 - [x] Add `src/services/weather.ts` with `getWeather({ lat, lon } | { city })`, using `apiGet` from `src/services/api.ts` so it sends the token and handles expired sessions like other requests. Add a `Weather` type matching the server response above. It shows the server's 400/503 messages ("Location not found", "Weather is unavailable right now") and returns `null` when no backend is configured.
 - [x] Add a °F / °C option to the Settings tab (decided: a setting, not the device locale). The server sends both, so switching doesn't need a new request. It defaults to °F and is saved on the device with AsyncStorage (`src/services/preferences.ts`). It isn't cleared on sign-out. The weather card should read it with `useTemperatureUnit()` (`src/hooks/use-temperature-unit.ts`) and get the numbers from `temperaturesIn(weather, unit)` in `src/services/weather.ts`.
 - [x] Add a `useWeather` hook (`src/hooks/use-weather.ts`): ask for foreground location permission, get the position (a reading from the last 10 minutes if there is one, otherwise `Accuracy.Low`), call `getWeather`, and expose `{ weather, loading, error, permissionDenied, refresh }`.
-- [ ] If permission is denied, fall back to a city the user types (and save it for next time), or hide the weather section. Show the 400 "Location not found" message if the city is unknown.
-- [ ] Add a small weather card (icon, temperature, feels-like, chance of rain) where outfit suggestions appear, e.g. the Stylist or Outfits tab.
-- [ ] Show a "Powered by WeatherAPI.com" link near the weather card. The free plan requires it.
+- [x] Decided: if location permission is denied, hide the weather section (no city fallback). `useWeather()` already reports this as `permissionDenied: true` with `weather: null`.
+- [x] `getWeather(location, date?)` and `useWeather(date?)` take an optional day and send `&date=YYYY-MM-DD` for any day after today.
+- [x] Add a small weather card (`src/components/stylist/weather-card.tsx`) on the Stylist tab for the chosen day. Today shows the icon, temperature, feels-like, high/low and chance of rain; a future day shows the condition, high/low and rain. It renders nothing when `permissionDenied` is true or no backend is configured.
 - [ ] Location needs a development build or Expo Go on a real device. Test the denied-permission path too.
+
+## 7. Stylist ("Plan an outfit")
+
+The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The user picks any upcoming day (defaulting to today), sees that day's weather, types where they're headed, and taps "Style my outfit →".
+
+### Client
+- [x] Screen layout: mascot, "Plan an outfit", the DAY picker, weather card, "Where are you headed?" text box, button and disclaimer.
+- [x] DAY picker (`src/components/stylist/day-picker.tsx`): `DateTimePicker` from `@expo/ui/community/datetime-picker`, from today onward with no upper limit. Past 7 days out (`FORECAST_DAYS_AHEAD` in `src/services/weather.ts`), the weather card is hidden and no weather request is made. Android shows its dialog; iOS shows the inline calendar in a bottom sheet. `day-picker.web.tsx` uses the browser's date input, because `@expo/ui` renders nothing on web.
+- [x] `styleOutfit({ date, occasion })` in `src/services/stylist.ts` is a stub that throws "Outfit styling is coming soon."
+- [ ] The results view (the chat showing the outfit) once the server route exists.
+
+### Server
+- [ ] Build the outfit route, e.g. `POST /api/stylist/outfit { date: 'YYYY-MM-DD', occasion }` → one outfit built from the signed-in user's closet, using that day's weather. Nothing is saved ("This chat isn't saved"). Agree the response shape with the client first.
 
 ## Suggested order
 
@@ -144,7 +157,8 @@ Outfit suggestions should take the weather into account. Weather data comes from
 4. Items list (section 4) (done)
 5. Add-item flow (section 4): upload first, saving the item with just the original photo (server done; client needs the `null` category fix and an end-to-end test)
 6. Cutout and tagging (section 4): add background removal, then AI tagging
-7. Weather (section 6): the server route is built. Next is the client (`expo-location`, `useWeather`, the weather card)
+7. Weather (section 6): today's weather works end to end. Next is the server's `?date=` support for the Stylist day picker
+8. Stylist (section 7): the screen is built. Next is the outfit route
 
 ## Client-only checklist
 
