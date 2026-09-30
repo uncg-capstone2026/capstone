@@ -1,7 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
 
 @Injectable()
 export class S3Service {
@@ -47,5 +59,23 @@ export class S3Service {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );
+  }
+
+  // Maps a content type to a file extension; null means "not an allowed image".
+  extensionFor(contentType: string): string | null {
+    return IMAGE_EXTENSIONS[contentType] ?? null;
+  }
+
+  // True if the file is actually in the bucket (the app finished uploading).
+  async objectExists(key: string): Promise<boolean> {
+    try {
+      await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      return true;
+    } catch (err: any) {
+      if (err?.$metadata?.httpStatusCode === 404) return false;
+      throw err;
+    }
   }
 }

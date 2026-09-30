@@ -65,9 +65,9 @@ model Item {
   id         String                      @id @default(uuid())
   userId     String
   user       User                        @relation(fields: [userId], references: [id])
-  name       String
-  category   Category
-  type       String // Javier's field, e.g. "t-shirt", "jeans", "sneakers"
+  name       String  @default("New item")
+  category   Category?
+  type       String? // Javier's field, e.g. "t-shirt", "jeans", "sneakers"
   cut        String? // Emma's field, e.g. "crew neck", "sweater", "jeans" — may overlap with type, revisit with team
   colorHex   String[] // 1-3 values
   pattern    String?
