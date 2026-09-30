@@ -6,6 +6,7 @@ import { S3Module } from './s3/s3.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { ItemsModule } from './items/items.module';
+import { WeatherModule } from './weather/weather.module';
 
 
 
@@ -16,6 +17,7 @@ import { ItemsModule } from './items/items.module';
     S3Module,
     AuthModule,
     ItemsModule,
+    WeatherModule,
   ],
   controllers: [AppController],
   providers: [AppService],
