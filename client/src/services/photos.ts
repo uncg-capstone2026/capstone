@@ -15,7 +15,8 @@ type UploadUrlResponse = {
 // Try-on (body) photo upload flow. The app never holds AWS credentials:
 //   1. POST /api/photos/body/upload-url { contentType, fileName } -> { uploadUrl, key }
 //   2. PUT the image bytes straight to S3 at uploadUrl
-//   3. POST /api/photos/body { key } -> { key }  (backend saves it on the user)
+//   3. POST /api/photos/body { key } -> { photoId }  (saved as the user's primary try-on photo)
+// Resolves to the new photo's id.
 // Until EXPO_PUBLIC_API_URL is set, this resolves locally so the flow stays walkable.
 export async function uploadBodyPhoto(photo: PickedPhoto): Promise<string> {
   if (!isBackendConfigured) {
@@ -28,8 +29,7 @@ export async function uploadBodyPhoto(photo: PickedPhoto): Promise<string> {
   return confirmBodyPhotoUpload(key);
 }
 
-// TODO: backend route not built yet. It should validate contentType is an image,
-// generate a per-user key, and return a short-lived presigned PUT URL.
+// The server only accepts JPEG, PNG and WebP (400 otherwise).
 export function requestBodyPhotoUploadUrl(photo: PickedPhoto): Promise<UploadUrlResponse> {
   return apiPost<UploadUrlResponse>('/api/photos/body/upload-url', {
     contentType: photo.mimeType,
@@ -50,9 +50,9 @@ export async function uploadToS3(uploadUrl: string, photo: PickedPhoto): Promise
   }
 }
 
-// TODO: backend route not built yet. It should confirm the object exists in S3
-// and save the key on the user's record.
+// The server checks the upload finished (404 otherwise) and returns the existing
+// photo if the same key is sent twice.
 export async function confirmBodyPhotoUpload(key: string): Promise<string> {
-  const result = await apiPost<{ key: string }>('/api/photos/body', { key });
-  return result.key;
+  const result = await apiPost<{ photoId: string }>('/api/photos/body', { key });
+  return result.photoId;
 }
