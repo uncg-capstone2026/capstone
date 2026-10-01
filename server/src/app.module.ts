@@ -7,6 +7,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { ItemsModule } from './items/items.module';
 import { WeatherModule } from './weather/weather.module';
+import { PhotosModule } from './photos/photos.module';
 
 
 
@@ -18,6 +19,7 @@ import { WeatherModule } from './weather/weather.module';
     AuthModule,
     ItemsModule,
     WeatherModule,
+    PhotosModule,
   ],
   controllers: [AppController],
   providers: [AppService],
