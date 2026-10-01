@@ -1,6 +1,7 @@
 import { isBackendConfigured } from '@/config/api';
 import { ApiError, apiGet, SessionExpiredError } from '@/services/api';
 import type { TemperatureUnit } from '@/services/preferences';
+import { daysFromToday } from '@/utils/dates';
 
 // Matches the server's GET /api/weather response. The server sends both units so the
 // app can pick °F or °C without another request.
@@ -24,8 +25,13 @@ export type Weather = {
   date?: string;
 };
 
-// The server can forecast today through this many days out. Past that, there's no weather.
-export const FORECAST_DAYS_AHEAD = 7;
+// The server forecasts 7 days including today (e.g. Oct 1-7). Past that, there's no weather.
+export const FORECAST_DAYS = 7;
+
+export function hasForecast(date: Date): boolean {
+  const days = daysFromToday(date);
+  return days >= 0 && days < FORECAST_DAYS;
+}
 
 export type WeatherLocation = { lat: number; lon: number } | { city: string };
 

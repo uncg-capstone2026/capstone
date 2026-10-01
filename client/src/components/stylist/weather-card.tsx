@@ -4,17 +4,19 @@ import { ActivityIndicator, Text, View } from 'react-native';
 
 import { useTemperatureUnit } from '@/hooks/use-temperature-unit';
 import { useWeather } from '@/hooks/use-weather';
-import { temperaturesIn } from '@/services/weather';
+import { hasForecast, temperaturesIn } from '@/services/weather';
 import { isToday, toDateKey } from '@/utils/dates';
 
 // A small weather summary for the chosen day. Hidden entirely if location permission was
-// denied, the day is past the forecast range, or there's no backend configured.
+// denied, the day is outside the 7-day forecast (today included), or there's no backend configured.
 export function WeatherCard({ date }: { date: Date }) {
   const { weather, loading, error, permissionDenied } = useWeather(date);
   const { unit } = useTemperatureUnit();
   const today = isToday(date);
 
-  if (permissionDenied) return null;
+  // Checked here too, not just in the hook, so the card doesn't flash for a frame while
+  // the hook catches up after the day changes.
+  if (permissionDenied || !hasForecast(date)) return null;
   if (!loading && !error && !weather) return null;
 
   if (loading) {
@@ -26,8 +28,8 @@ export function WeatherCard({ date }: { date: Date }) {
     );
   }
 
-  // Until the server supports ?date=, it answers every request with today's weather.
-  // Don't pass that off as another day's forecast.
+  // The server dates days in the location's local time. If that doesn't match the day
+  // picked here, don't pass the forecast off as that day's.
   if (error || !weather || (!today && weather.date !== toDateKey(date))) {
     return (
       <Card>

@@ -1,5 +1,5 @@
 import { isBackendConfigured } from '@/config/api';
-import { apiGet, apiPost, SessionExpiredError } from '@/services/api';
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
 import { uploadToS3, type PickedPhoto } from '@/services/photos';
 
 export type ClothingCategory =
@@ -19,7 +19,39 @@ export type ClosetItem = {
   isFavorite: boolean;
 };
 
-export type ClosetFilter = 'all' | 'favorites' | ClothingCategory;
+export type ClothingFit = 'slim' | 'regular' | 'relaxed' | 'oversized';
+
+// GET /api/items/:id: the closet fields plus the item's tags. Untagged items have nulls.
+export type ClothingItemDetails = ClosetItem & {
+  type: string | null; // e.g. "t-shirt", "jeans", "sneakers"
+  cut: string | null; // e.g. "crew neck"
+  colorHex: string[]; // 0-3 values like "#1A2B3C"
+  pattern: string | null;
+  material: string | null;
+  season: string | null;
+  formality: string | null;
+  fit: ClothingFit | null;
+  sourceURL: string | null; // the product page, for items added from a link
+  createdAt: string; // ISO date
+};
+
+// PATCH /api/items/:id: only the fields sent are changed. isFavorite, name and colorHex can't
+// be null; the others are cleared by sending null. The server rejects any other field.
+export type ClothingItemChanges = {
+  isFavorite?: boolean;
+  name?: string; // 1-60 characters
+  colorHex?: string[]; // up to 3
+  category?: ClothingCategory | null;
+  fit?: ClothingFit | null;
+  type?: string | null; // these six: up to 50 characters
+  cut?: string | null;
+  pattern?: string | null;
+  material?: string | null;
+  season?: string | null;
+  formality?: string | null;
+};
+
+export type ClosetFilter ='all' | 'favorites' | ClothingCategory;
 
 export const CLOSET_FILTERS: { key: ClosetFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -50,6 +82,41 @@ export async function listItems(): Promise<ClosetItem[]> {
     if (e instanceof SessionExpiredError) throw e;
     throw new Error('Could not load your closet. Please try again.');
   }
+}
+
+// GET /api/items/:id. imageUrl is freshly signed, so use it rather than the closet's copy.
+export async function getItem(id: string): Promise<ClothingItemDetails> {
+  try {
+    return await apiGet<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`);
+  } catch (e) {
+    throw itemError(e, 'Could not load this item. Please try again.');
+  }
+}
+
+// PATCH /api/items/:id -> the updated item.
+export async function updateItem(id: string, changes: ClothingItemChanges): Promise<ClothingItemDetails> {
+  try {
+    return await apiPatch<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`, changes);
+  } catch (e) {
+    throw itemError(e, 'Could not save your changes. Please try again.');
+  }
+}
+
+// DELETE /api/items/:id. The server also removes it from outfits and collections.
+export async function deleteItem(id: string): Promise<void> {
+  try {
+    await apiDelete(`/api/items/${encodeURIComponent(id)}`);
+  } catch (e) {
+    throw itemError(e, 'Could not delete this item. Please try again.');
+  }
+}
+
+// 404 means the item is gone (or isn't this user's). 400 is a validation message worth showing.
+function itemError(e: unknown, fallback: string): Error {
+  if (e instanceof SessionExpiredError) return e;
+  if (e instanceof ApiError && e.status === 404) return new Error('This item no longer exists.');
+  if (e instanceof ApiError && e.status === 400 && e.serverMessage) return new Error(e.serverMessage);
+  return new Error(fallback);
 }
 
 // Clothing photo upload flow. The app never holds AWS credentials:

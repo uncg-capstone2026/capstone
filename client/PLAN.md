@@ -142,7 +142,7 @@ The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The 
 
 ### Client
 - [x] Screen layout: mascot, "Plan an outfit", the DAY picker, weather card, "Where are you headed?" text box, button and disclaimer.
-- [x] DAY picker (`src/components/stylist/day-picker.tsx`): `DateTimePicker` from `@expo/ui/community/datetime-picker`, from today onward with no upper limit. Past 7 days out (`FORECAST_DAYS_AHEAD` in `src/services/weather.ts`), the weather card is hidden and no weather request is made. Android shows its dialog; iOS shows the inline calendar in a bottom sheet. `day-picker.web.tsx` uses the browser's date input, because `@expo/ui` renders nothing on web.
+- [x] DAY picker (`src/components/stylist/day-picker.tsx`): `DateTimePicker` from `@expo/ui/community/datetime-picker`, from today onward with no upper limit. Outside the 7-day forecast including today, e.g. Oct 1–7 (`hasForecast` and `FORECAST_DAYS` in `src/services/weather.ts`), the weather card is hidden and no weather request is made. Android shows its dialog; iOS shows the inline calendar in a bottom sheet. `day-picker.web.tsx` uses the browser's date input, because `@expo/ui` renders nothing on web.
 - [x] `styleOutfit({ date, occasion })` in `src/services/stylist.ts` is a stub that throws "Outfit styling is coming soon."
 - [ ] The results view (the chat showing the outfit) once the server route exists.
 
@@ -177,9 +177,9 @@ What the client needs, split by whether it can be done now.
 - [x] Fix `confirmBodyPhotoUpload` in `src/services/photos.ts`: the server's `POST /api/photos/body` returns `{ photoId }`, not `{ key }`, so `result.key` is currently `undefined`. Also remove the two "backend route not built yet" TODOs and fix the step 3 comment.
 - [ ] Make `ClosetItem.category` nullable, show untagged items under "All", and check the closet grid and filters handle `null`. Then remove the TODO above `uploadItemPhoto` and test adding an item end to end against Railway (the server now also makes the cutout during that request).
 - [x] Check which content types the photo picker sends. HEIC photos from iOS are rejected by both upload routes, so convert them to JPEG or show a clear error.
-- [ ] Add a `ClothingItemDetails` type and `getItem(id)`, `updateItem(id, changes)` and `deleteItem(id)` to `src/services/items.ts`, matching `GET`/`PATCH`/`DELETE /api/items/:id`. `category` and `fit` use lowercase app names and can be `null`. `DELETE` returns 204 with no body.
+- [x] Add a `ClothingItemDetails` type and `getItem(id)`, `updateItem(id, changes)` and `deleteItem(id)` to `src/services/items.ts`, matching `GET`/`PATCH`/`DELETE /api/items/:id`. `category` and `fit` use lowercase app names and can be `null`. `DELETE` returns 204 with no body.
 - [ ] Build the item details screen (e.g. `src/app/item/[id].tsx`), opened by tapping an item in the closet. Show the photo and tags, add the favorite toggle and editing, and delete with a confirmation. Refresh the closet after an edit or delete.
-- [ ] Test the Stylist weather card for a future day against Railway. The server now returns forecasts up to 6 days ahead, so "Forecast for this day isn't available yet." should no longer appear for those days.
+- [X] Test the Stylist weather card for a future day against Railway. The server now returns forecasts up to 6 days ahead, so "Forecast for this day isn't available yet." should no longer appear for those days.
 
 ### Needs a server decision first
 - [x] Auth request and response shapes, including the error for an email that's already taken.
