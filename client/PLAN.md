@@ -67,7 +67,7 @@ Clothing photos live in AWS S3. The client uploads the original photo, and the s
 - [x] Schema: `Item.category` and `Item.type` are now optional and `name` defaults to `"New item"`, so an item can be saved before it's tagged.
 - [ ] Client: `GET /api/items` can now return `category: null`. Make `ClosetItem.category` nullable, and decide where untagged items show (at least under "All"). Check the closet grid and filters don't break on `null`.
 - [ ] Client: remove the "backend routes not built yet" TODO above `uploadItemPhoto`, and test the upload end to end against Railway.
-- [ ] Client: check which content types the picker actually sends. The server rejects anything but JPEG, PNG and WebP, so an iOS HEIC photo would fail. Convert it or show a clear error.
+- [x] Client: check which content types the picker actually sends. The server rejects anything but JPEG, PNG and WebP, so an iOS HEIC photo would fail. Convert it or show a clear error. (Done: `pickPhoto` converts anything else, or an unknown type, to JPEG with `expo-image-manipulator`.)
 - [ ] Adding items from a link (the client calls `importItemFromLink`, currently a "coming soon" stub): a route that fetches the product page, saves the product image to S3 and returns details for the user to confirm.
 - [ ] Client: a "confirm details" screen after adding, where the user checks what StyleMe filled in.
 
@@ -176,7 +176,7 @@ What the client needs, split by whether it can be done now.
 - [x] Move the photo picker to `src/components/photo-picker.ts` with a neutral default file name, so the add-item screen can reuse it.
 - [x] Fix `confirmBodyPhotoUpload` in `src/services/photos.ts`: the server's `POST /api/photos/body` returns `{ photoId }`, not `{ key }`, so `result.key` is currently `undefined`. Also remove the two "backend route not built yet" TODOs and fix the step 3 comment.
 - [ ] Make `ClosetItem.category` nullable, show untagged items under "All", and check the closet grid and filters handle `null`. Then remove the TODO above `uploadItemPhoto` and test adding an item end to end against Railway (the server now also makes the cutout during that request).
-- [ ] Check which content types the photo picker sends. HEIC photos from iOS are rejected by both upload routes, so convert them to JPEG or show a clear error.
+- [x] Check which content types the photo picker sends. HEIC photos from iOS are rejected by both upload routes, so convert them to JPEG or show a clear error.
 - [ ] Add a `ClothingItemDetails` type and `getItem(id)`, `updateItem(id, changes)` and `deleteItem(id)` to `src/services/items.ts`, matching `GET`/`PATCH`/`DELETE /api/items/:id`. `category` and `fit` use lowercase app names and can be `null`. `DELETE` returns 204 with no body.
 - [ ] Build the item details screen (e.g. `src/app/item/[id].tsx`), opened by tapping an item in the closet. Show the photo and tags, add the favorite toggle and editing, and delete with a confirmation. Refresh the closet after an edit or delete.
 - [ ] Test the Stylist weather card for a future day against Railway. The server now returns forecasts up to 6 days ahead, so "Forecast for this day isn't available yet." should no longer appear for those days.

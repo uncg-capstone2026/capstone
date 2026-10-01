@@ -2,8 +2,6 @@ import { isBackendConfigured } from '@/config/api';
 import { apiGet, apiPost, SessionExpiredError } from '@/services/api';
 import { uploadToS3, type PickedPhoto } from '@/services/photos';
 
-// NOTE for the server: Prisma's Item model has no `isFavorite` flag and its Category enum
-// has no `Sets` value yet. Both are used here client-side and need adding to the schema.
 export type ClothingCategory =
   | 'tops'
   | 'bottoms'
@@ -16,7 +14,7 @@ export type ClothingCategory =
 export type ClosetItem = {
   id: string;
   name: string;
-  category: ClothingCategory;
+  category: ClothingCategory | null; // null until the item is tagged; it only shows under "All"
   imageUrl: string; // signed S3 URL for the cutout (Item.cutoutKey), or the original until it's ready
   isFavorite: boolean;
 };
@@ -58,10 +56,11 @@ export async function listItems(): Promise<ClosetItem[]> {
 //   1. POST /api/items/photo/upload-url { contentType, fileName } -> { uploadUrl, key }
 //   2. PUT the image bytes straight to S3 at uploadUrl
 //   3. POST /api/items/photo { key } -> { itemId }
-//      (backend saves imageKey, cuts the piece out, stores it in S3 as cutoutKey,
-//       and fills in category, color and fit)
+//      (backend saves imageKey, then cuts the piece out and stores it in S3 as cutoutKey.
+//       This takes a few seconds. If the cutout fails, the item keeps the original photo.
+//       AI tagging of category, color and fit comes later, so new items are untagged.)
+// The server only accepts JPEG, PNG and WebP (400 otherwise).
 // Until EXPO_PUBLIC_API_URL is set, this resolves locally so the flow stays walkable.
-// TODO: backend routes not built yet (POST /uploads/clothing covers part of step 1).
 export async function uploadItemPhoto(photo: PickedPhoto): Promise<string> {
   if (!isBackendConfigured) {
     await new Promise((resolve) => setTimeout(resolve, 1000));

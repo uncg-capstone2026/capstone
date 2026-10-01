@@ -1,4 +1,5 @@
 import * as DocumentPicker from 'expo-document-picker';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { ActionSheetIOS, Alert, Platform } from 'react-native';
 
@@ -6,8 +7,10 @@ import type { PickedPhoto } from '@/services/photos';
 
 export type PhotoSource = 'library' | 'camera' | 'files';
 
-const DEFAULT_MIME_TYPE = 'image/jpeg';
 const DEFAULT_FILE_NAME = 'photo.jpg';
+
+// The only types the upload routes accept. Anything else (e.g. HEIC from iOS) is converted to JPEG.
+const UPLOADABLE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 const SOURCE_OPTIONS: { source: PhotoSource; label: string }[] = [
   { source: 'library', label: 'Photo Library' },
@@ -46,7 +49,7 @@ export async function pickPhoto(source: PhotoSource): Promise<PickedPhoto | null
     const result = await DocumentPicker.getDocumentAsync({ type: 'image/*', copyToCacheDirectory: true });
     if (result.canceled) return null;
     const { uri, mimeType, name } = result.assets[0];
-    return { uri, mimeType: mimeType ?? DEFAULT_MIME_TYPE, fileName: name };
+    return toUploadable(uri, mimeType, name);
   }
 
   let result: ImagePicker.ImagePickerResult;
@@ -66,5 +69,25 @@ export async function pickPhoto(source: PhotoSource): Promise<PickedPhoto | null
 
   if (result.canceled) return null;
   const { uri, mimeType, fileName } = result.assets[0];
-  return { uri, mimeType: mimeType ?? DEFAULT_MIME_TYPE, fileName: fileName ?? DEFAULT_FILE_NAME };
+  return toUploadable(uri, mimeType, fileName);
+}
+
+// JPEG, PNG and WebP pass through. Anything else, or an unknown type, is re-encoded as JPEG.
+async function toUploadable(
+  uri: string,
+  mimeType: string | null | undefined,
+  fileName: string | null | undefined,
+): Promise<PickedPhoto> {
+  const name = fileName || DEFAULT_FILE_NAME;
+  if (mimeType && UPLOADABLE_MIME_TYPES.includes(mimeType)) {
+    return { uri, mimeType, fileName: name };
+  }
+
+  try {
+    const image = await ImageManipulator.manipulate(uri).renderAsync();
+    const jpeg = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.8 });
+    return { uri: jpeg.uri, mimeType: 'image/jpeg', fileName: name.replace(/\.[^.]*$/, '') + '.jpg' };
+  } catch {
+    throw new Error("This photo's format isn't supported. Choose a JPEG, PNG or WebP image.");
+  }
 }
