@@ -15,6 +15,18 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
   });
 }
 
+export function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return apiRequest<T>(path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function apiDelete(path: string): Promise<void> {
+  return apiRequest<void>(path, { method: 'DELETE' });
+}
+
 // Adds the stored session token as a Bearer header when there is one, so routes behind
 // the server's AuthGuard work without each caller handling it.
 async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
@@ -37,6 +49,8 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
   if (!response.ok) {
     throw new ApiError(response.status, await readServerMessage(response));
   }
+  // 204 No Content (e.g. DELETE) has no body to parse.
+  if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
 

@@ -2,8 +2,8 @@ import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 
 import { SessionExpiredError } from '@/services/api';
-import { FORECAST_DAYS_AHEAD, getWeather, type Weather } from '@/services/weather';
-import { daysFromToday, isToday, toDateKey } from '@/utils/dates';
+import { getWeather, hasForecast as hasForecastFor, type Weather } from '@/services/weather';
+import { isToday, toDateKey } from '@/utils/dates';
 
 // A reading from the last 10 minutes is close enough and skips waiting for a GPS fix.
 // It matches how long the server caches weather.
@@ -16,7 +16,7 @@ const LAST_KNOWN_MAX_AGE_MS = 10 * 60 * 1000;
 export function useWeather(date?: Date) {
   // Only sent for a future day, so today keeps using the server's current-weather cache.
   const dateKey = date && !isToday(date) ? toDateKey(date) : undefined;
-  const hasForecast = !date || daysFromToday(date) <= FORECAST_DAYS_AHEAD;
+  const hasForecast = !date || hasForecastFor(date);
   const [weather, setWeather] = useState<Weather | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

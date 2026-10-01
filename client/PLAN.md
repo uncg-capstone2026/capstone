@@ -44,12 +44,12 @@ The client and server currently disagree on almost every detail:
 | Get an upload URL | `POST /api/photos/body/upload-url` `{ contentType, fileName }` → `{ uploadUrl, key }` | `POST /uploads/body-photo` `{ userId, contentType }` → `{ key, url }` |
 | Save it to the user | `POST /api/photos/body` `{ key }` | **missing** |
 
-- [ ] Agree on one route name and one response field name (`uploadUrl` vs `url`), then update whichever side changes.
-- [ ] Server: take `userId` from the token, not the request body. Otherwise anyone can upload into another user's folder.
-- [ ] Server: build the "save" route. It checks the file exists in S3, then creates a `TryOnPhoto` with `isPrimary: true`.
-- [ ] Server: `buildKey` now takes an extension and `S3Service.extensionFor` maps JPEG/PNG/WebP to one (added for item photos). The body route still passes `'jpg'`. Use `extensionFor` there too and reject anything that isn't an image.
+- [x] Agree on one route name and one response field name (`uploadUrl` vs `url`), then update whichever side changes. (Done: the server uses the app's routes and `uploadUrl`.)
+- [x] Server: take `userId` from the token, not the request body. Otherwise anyone can upload into another user's folder.
+- [x] Server: build the "save" route. It checks the file exists in S3, then creates a `TryOnPhoto` with `isPrimary: true`. (Done: `POST /api/photos/body` returns `{ photoId }`, and the previous primary photo stops being primary.)
+- [x] Server: `buildKey` now takes an extension and `S3Service.extensionFor` maps JPEG/PNG/WebP to one (added for item photos). The body route still passes `'jpg'`. Use `extensionFor` there too and reject anything that isn't an image.
 - [ ] S3: the bucket's CORS settings must allow `PUT` from the app, or web uploads fail.
-- [ ] Server: remove the old `POST /uploads/clothing` and `POST /uploads/body-photo` routes in `s3.controller.ts` once the body route is replaced. They have no auth guard and take `userId` from the body, so anyone can get an upload URL into any user's folder. `/api/items/photo/upload-url` already replaces the clothing one.
+- [x] Server: remove the old `POST /uploads/clothing` and `POST /uploads/body-photo` routes in `s3.controller.ts` once the body route is replaced. They have no auth guard and take `userId` from the body, so anyone can get an upload URL into any user's folder. `/api/items/photo/upload-url` already replaces the clothing one. (Done: `s3.controller.ts` is deleted.)
 
 ## 4. Closet items
 
@@ -67,7 +67,7 @@ Clothing photos live in AWS S3. The client uploads the original photo, and the s
 - [x] Schema: `Item.category` and `Item.type` are now optional and `name` defaults to `"New item"`, so an item can be saved before it's tagged.
 - [ ] Client: `GET /api/items` can now return `category: null`. Make `ClosetItem.category` nullable, and decide where untagged items show (at least under "All"). Check the closet grid and filters don't break on `null`.
 - [ ] Client: remove the "backend routes not built yet" TODO above `uploadItemPhoto`, and test the upload end to end against Railway.
-- [ ] Client: check which content types the picker actually sends. The server rejects anything but JPEG, PNG and WebP, so an iOS HEIC photo would fail. Convert it or show a clear error.
+- [x] Client: check which content types the picker actually sends. The server rejects anything but JPEG, PNG and WebP, so an iOS HEIC photo would fail. Convert it or show a clear error. (Done: `pickPhoto` converts anything else, or an unknown type, to JPEG with `expo-image-manipulator`.)
 - [ ] Adding items from a link (the client calls `importItemFromLink`, currently a "coming soon" stub): a route that fetches the product page, saves the product image to S3 and returns details for the user to confirm.
 - [ ] Client: a "confirm details" screen after adding, where the user checks what StyleMe filled in.
 
@@ -75,30 +75,30 @@ Clothing photos live in AWS S3. The client uploads the original photo, and the s
 
 Tapping an item in the closet opens a details screen. `GET /api/items` only returns `{ id, name, category, imageUrl, isFavorite }`, which isn't enough, and nothing can change or remove an item yet.
 
-- [ ] Server: build `GET /api/items/:id`, returning the full item: the list fields plus `type`, `cut`, `colorHex`, `pattern`, `material`, `season`, `formality`, `fit`, `sourceURL` and `createdAt`. Agree the response shape with the client first (a `ClothingItemDetails` type in `src/services/items.ts`). Convert `category` the same way the list route does. `category` and `type` can be `null` for untagged items.
-- [ ] Server: build `PATCH /api/items/:id` for the favorite toggle and edits (e.g. `{ isFavorite }`, `{ name }`). Validate edited values against the Prisma enums.
-- [ ] Server: build `DELETE /api/items/:id`. It should also delete `imageKey` and `cutoutKey` from S3. Decide what happens to outfits and collections that include the item.
-- [ ] Server: every `:id` route must check the item belongs to the signed-in user. Return 404 (not 403) otherwise, so item ids can't be probed.
-- [ ] Server: `imageUrl` in the details response is a fresh signed URL, so the details screen doesn't show the expired URL from the closet grid (see the expiry note above).
+- [x] Server: build `GET /api/items/:id`, returning the full item: the list fields plus `type`, `cut`, `colorHex`, `pattern`, `material`, `season`, `formality`, `fit`, `sourceURL` and `createdAt`. Agree the response shape with the client first (a `ClothingItemDetails` type in `src/services/items.ts`). Convert `category` the same way the list route does. `category` and `type` can be `null` for untagged items.
+- [x] Server: build `PATCH /api/items/:id` for the favorite toggle and edits (e.g. `{ isFavorite }`, `{ name }`). Validate edited values against the Prisma enums. (Done: also accepts the other tag fields; `category` and `fit` use the app's lowercase names and can be cleared with `null`.)
+- [x] Server: build `DELETE /api/items/:id`. It should also delete `imageKey` and `cutoutKey` from S3. Decide what happens to outfits and collections that include the item. (Decided: the item's outfit and collection entries are deleted with it, in one transaction.)
+- [x] Server: every `:id` route must check the item belongs to the signed-in user. Return 404 (not 403) otherwise, so item ids can't be probed.
+- [x] Server: `imageUrl` in the details response is a fresh signed URL, so the details screen doesn't show the expired URL from the closet grid (see the expiry note above).
 - [ ] Seed a few tagged items for the test account. Items added from a photo have no tags yet, so the closet filters and details screen need seeded data to test against.
 
 ### Cutout and tagging (server side)
 
 The background is removed on the **server**, not the phone. That gives the same result on iOS, Android and web, works in Expo Go, and can be changed without an app update. The server already has to look at the photo to fill in category, color and fit, and that AI key must stay server-side anyway.
 
-What happens in step 3 above (`POST /api/items/photo { key }`). Step 1 is built, and the item is already created with just `imageKey` before the cutout. The `// Later:` comment in `ItemsService.createFromPhoto` marks where steps 2–6 go.
+What happens in step 3 above (`POST /api/items/photo { key }`). Step 1 is built, and the item is already created with just `imageKey` before the cutout. Steps 2–4 (the cutout) are built too. The `// Later:` comment in `ItemsService.createFromPhoto` marks where tagging (steps 5–6) goes.
 1. ~~Check the key belongs to the signed-in user (`users/<sub>/clothing/...`) and that the object exists in S3.~~ Done.
-2. Download the original from S3. Resize it (e.g. longest side 1024px) to keep processing fast and cheap.
-3. **Cut it out.** Pick one:
+2. ~~Download the original from S3. Resize it (e.g. longest side 1024px) to keep processing fast and cheap.~~ Done.
+3. **Cut it out.** Done with **Stability AI's Remove Background API** (`STABILITY_API_KEY`, see `server/src/items/cutout.service.ts`). Nova Canvas reached end-of-life on Sept 30, 2026, and Stability on Bedrock kept failing. The original options were:
    - **Amazon Bedrock, Nova Canvas (recommended to start).** It has a background-removal mode. Call it from NestJS with `@aws-sdk/client-bedrock-runtime`, alongside the existing S3 SDK, so there's no model to host. It costs a few cents per image. Check it's available in your AWS region and that model access is enabled on the account.
    - **Self-hosted rembg.** A free, open-source Python library. It needs a small Python service next to the Node server and a machine with enough memory for the model. If you use a Node background-removal library instead, check its licence (some are AGPL).
-4. Save the result as a transparent PNG to S3 (e.g. `users/<sub>/clothing/<uuid>-cutout.png`) and set `Item.cutoutKey`. `S3Service.buildKey(userId, 'clothing', 'png')` builds the key, but the `-cutout` suffix pairing it with the original isn't supported yet.
+4. ~~Save the result as a transparent PNG to S3 (e.g. `users/<sub>/clothing/<uuid>-cutout.png`) and set `Item.cutoutKey`. `S3Service.buildKey(userId, 'clothing', 'png')` builds the key, but the `-cutout` suffix pairing it with the original isn't supported yet.~~ Done: saved next to the original as `<uuid>-cutout.png`.
 5. **Tag it.** Send the cutout to an AI vision model to fill in `category`, `type`, `colorHex` (1–3 values), `pattern`, `material`, `fit` and a short `name`. Ask for JSON and validate it against the Prisma enums before saving.
 6. Optionally, create the `embedding` for outfit suggestions at the same point.
 7. Update the `Item` with the cutout and tags, then return `{ itemId }`.
 
 How it runs:
-- [ ] **Start synchronous.** Do all of the above inside the request and reply when it's finished. That takes a few seconds, which the app's "StyleMe is cutting it out…" overlay already covers.
+- [x] **Start synchronous.** Do all of the above inside the request and reply when it's finished. That takes a few seconds, which the app's "StyleMe is cutting it out…" overlay already covers. (Done for the cutout. Tagging isn't built yet.)
 - [ ] **Later, if it's slow:** reply straight away with the item saved using only `imageKey`, and do steps 3–6 in the background, e.g. with an S3-triggered Lambda or a job queue. The `imageUrl` fallback (cutout if ready, otherwise the original) already handles the gap.
 - [x] If the cutout fails, still save the item with the original photo, rather than making the user retake it. (Already true: the item is saved before any cutout runs. Keep it that way when steps 2–6 are added.)
 
@@ -116,14 +116,14 @@ Outfit suggestions should take the weather into account. Weather data comes from
 - [ ] Sign up for a WeatherAPI.com key and add `WEATHERAPI_KEY` to `server/.env` and the Railway variables. (`server/.env.example` has it.) Without it, every weather request fails.
 - [x] Add a `WeatherModule` with a `WeatherService` and `WeatherController`.
 - [x] Build `GET /api/weather?lat=..&lon=..` behind the auth guard, so strangers can't use up the quota. Also accepts `?q=<city>` for users who don't share their location.
-- [ ] **Validation doesn't run yet.** `WeatherQueryDto` has the right `class-validator` rules, but the controller's `@Query()` has no `ValidationPipe` and there's no global one in `main.ts`. Out-of-range `lat`/`lon` go straight to WeatherAPI.com, and a request with no parameters asks for `NaN,NaN`. Use `@Query(new ValidationPipe({ transform: true }))`, like the items controller does for bodies.
+- [x] **Validation doesn't run yet.** `WeatherQueryDto` has the right `class-validator` rules, but the controller's `@Query()` has no `ValidationPipe` and there's no global one in `main.ts`. Out-of-range `lat`/`lon` go straight to WeatherAPI.com, and a request with no parameters asks for `NaN,NaN`. Use `@Query(new ValidationPipe({ transform: true }))`, like the items controller does for bodies. (Done.)
 - [x] The service calls `forecast.json?...&days=1` and returns only what the app needs:
   `{ tempC, feelsLikeC, highC, lowC, tempF, feelsLikeF, highF, lowF, condition, iconUrl, chanceOfRain, uvIndex, windKph, locationName }`.
   Fahrenheit fields were added alongside Celsius. `iconUrl` already has `https:` added.
 - [x] Responses are cached for 10 minutes in memory, keyed by coordinates rounded to 2 decimals (about 1 km) or the lowercased city.
-- [ ] Later: the cache `Map` never drops expired entries. Fine for now. Evict old entries or cap its size if it grows.
+- [x] Later: the cache `Map` never drops expired entries. Fine for now. Evict old entries or cap its size if it grows. (Done: expired entries are pruned on each new fetch.)
 - [x] Error handling: 503 `{ message: "Weather is unavailable right now" }` if WeatherAPI.com fails or takes more than 5 seconds, and 400 `{ message: "Location not found" }` for an unknown city. The upstream URL (which contains the key) is never logged or returned.
-- [ ] **Weather for a chosen day.** Accept `?date=YYYY-MM-DD` (today through 7 days out; 400 `{ message }` outside that range). The Stylist screen already sends it for any day after today. Call `forecast.json` with `days` = days ahead + 1 and pick that day. Add `date` to the response, since the app uses it to check it got the right day. For a future day, fill `temp`/`feelsLike` from the day's average (`avgtemp_c`/`avgtemp_f`), because the app only shows high/low, condition and rain chance for those days. Include the date in the cache key. Check the WeatherAPI.com plan allows 7 forecast days. Until this ships, the app shows "Forecast for this day isn't available yet." for future days.
+- [x] **Weather for a chosen day.** Accept `?date=YYYY-MM-DD` (today through 7 days out; 400 `{ message }` outside that range). The Stylist screen already sends it for any day after today. Call `forecast.json` with `days` = days ahead + 1 and pick that day. Add `date` to the response, since the app uses it to check it got the right day. For a future day, fill `temp`/`feelsLike` from the day's average (`avgtemp_c`/`avgtemp_f`), because the app only shows high/low, condition and rain chance for those days. Include the date in the cache key. Check the WeatherAPI.com plan allows 7 forecast days. Until this ships, the app shows "Forecast for this day isn't available yet." for future days. (Done: the cache now stores the whole 7-day forecast per location, so the date isn't part of the key.)
 - [ ] Later: fill `CalendarEntry.weatherSummary` and `tempHigh` when an outfit is planned for a date (the forecast endpoint takes `days` up to the plan's limit).
 
 ### Client
@@ -142,7 +142,7 @@ The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The 
 
 ### Client
 - [x] Screen layout: mascot, "Plan an outfit", the DAY picker, weather card, "Where are you headed?" text box, button and disclaimer.
-- [x] DAY picker (`src/components/stylist/day-picker.tsx`): `DateTimePicker` from `@expo/ui/community/datetime-picker`, from today onward with no upper limit. Past 7 days out (`FORECAST_DAYS_AHEAD` in `src/services/weather.ts`), the weather card is hidden and no weather request is made. Android shows its dialog; iOS shows the inline calendar in a bottom sheet. `day-picker.web.tsx` uses the browser's date input, because `@expo/ui` renders nothing on web.
+- [x] DAY picker (`src/components/stylist/day-picker.tsx`): `DateTimePicker` from `@expo/ui/community/datetime-picker`, from today onward with no upper limit. Outside the 7-day forecast including today, e.g. Oct 1–7 (`hasForecast` and `FORECAST_DAYS` in `src/services/weather.ts`), the weather card is hidden and no weather request is made. Android shows its dialog; iOS shows the inline calendar in a bottom sheet. `day-picker.web.tsx` uses the browser's date input, because `@expo/ui` renders nothing on web.
 - [x] `styleOutfit({ date, occasion })` in `src/services/stylist.ts` is a stub that throws "Outfit styling is coming soon."
 - [ ] The results view (the chat showing the outfit) once the server route exists.
 
@@ -153,11 +153,11 @@ The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The 
 
 1. Basic server setup (section 1) (done)
 2. Auth, plus navigating after login (section 2) (done)
-3. Body photo routes: the smallest real end-to-end test (section 3)
+3. Body photo routes: the smallest real end-to-end test (section 3) (server done; S3 CORS still to check)
 4. Items list (section 4) (done)
 5. Add-item flow (section 4): upload first, saving the item with just the original photo (server done; client needs the `null` category fix and an end-to-end test)
-6. Cutout and tagging (section 4): add background removal, then AI tagging
-7. Weather (section 6): today's weather works end to end. Next is the server's `?date=` support for the Stylist day picker
+6. Cutout and tagging (section 4): background removal done; AI tagging next
+7. Weather (section 6) (done, including `?date=` for the Stylist day picker)
 8. Stylist (section 7): the screen is built. Next is the outfit route
 
 ## Client-only checklist
@@ -174,13 +174,19 @@ What the client needs, split by whether it can be done now.
 - [x] Make `isSignedIn()` async and add a loading state in `src/app/index.tsx`.
 - [x] Add a sign-out button to the Settings tab.
 - [x] Move the photo picker to `src/components/photo-picker.ts` with a neutral default file name, so the add-item screen can reuse it.
+- [x] Fix `confirmBodyPhotoUpload` in `src/services/photos.ts`: the server's `POST /api/photos/body` returns `{ photoId }`, not `{ key }`, so `result.key` is currently `undefined`. Also remove the two "backend route not built yet" TODOs and fix the step 3 comment.
+- [ ] Make `ClosetItem.category` nullable, show untagged items under "All", and check the closet grid and filters handle `null`. Then remove the TODO above `uploadItemPhoto` and test adding an item end to end against Railway (the server now also makes the cutout during that request).
+- [x] Check which content types the photo picker sends. HEIC photos from iOS are rejected by both upload routes, so convert them to JPEG or show a clear error.
+- [x] Add a `ClothingItemDetails` type and `getItem(id)`, `updateItem(id, changes)` and `deleteItem(id)` to `src/services/items.ts`, matching `GET`/`PATCH`/`DELETE /api/items/:id`. `category` and `fit` use lowercase app names and can be `null`. `DELETE` returns 204 with no body.
+- [ ] Build the item details screen (e.g. `src/app/item/[id].tsx`), opened by tapping an item in the closet. Show the photo and tags, add the favorite toggle and editing, and delete with a confirmation. Refresh the closet after an edit or delete.
+- [X] Test the Stylist weather card for a future day against Railway. The server now returns forecasts up to 6 days ahead, so "Forecast for this day isn't available yet." should no longer appear for those days.
 
 ### Needs a server decision first
 - [x] Auth request and response shapes, including the error for an email that's already taken.
-- [ ] Body photo route names and the `uploadUrl`/`url` field name.
+- [x] Body photo route names and the `uploadUrl`/`url` field name.
 - [x] Category naming for items.
 - [x] The item-photo routes (section 4). `uploadItemPhoto` can go live once `ClosetItem.category` allows `null`.
 - [ ] The link-import route (section 4), so `importItemFromLink` can go live.
-- [ ] The item details response shape and the `PATCH`/`DELETE` item routes (section 4), so the details screen can load, favorite, edit and delete items.
+- [x] The item details response shape and the `PATCH`/`DELETE` item routes (section 4), so the details screen can load, favorite, edit and delete items. (Server done; the client can be built now.)
 - [x] The `GET /api/weather` response shape (section 6). The client weather work can start now.
 
