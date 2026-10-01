@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, ValidationPipe } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { WeatherQueryDto } from './weather.dto';
 import { WeatherService } from './weather.service';
@@ -8,8 +8,9 @@ import { WeatherService } from './weather.service';
 export class WeatherController {
   constructor(private weather: WeatherService) {}
 
+  // GET /api/weather?lat=..&lon=..[&date=YYYY-MM-DD]  or  ?q=<city>[&date=...]
   @Get()
-  get(@Query() query: WeatherQueryDto) {
+  get(@Query(new ValidationPipe({ transform: true })) query: WeatherQueryDto) {
     return this.weather.getWeather(query);
   }
 }
