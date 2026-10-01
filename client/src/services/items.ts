@@ -19,7 +19,28 @@ export type ClosetItem = {
   isFavorite: boolean;
 };
 
-export type ClothingFit = 'slim' | 'regular' | 'relaxed' | 'oversized';
+export type ClothingFit = 'fitted' | 'slim' | 'regular' | 'loose' | 'oversized';
+
+// The fit slider's steps, tightest first.
+export const FIT_STEPS: { fit: ClothingFit; label: string; description: string }[] = [
+  { fit: 'fitted', label: 'Fitted', description: 'Hugs the body closely all over.' },
+  { fit: 'slim', label: 'Slim', description: 'Close to the body, with a little room to move.' },
+  { fit: 'regular', label: 'Regular', description: 'The standard cut, neither tight nor loose.' },
+  { fit: 'loose', label: 'Loose', description: 'Extra room through the body; drapes away from you.' },
+  { fit: 'oversized', label: 'Oversized', description: 'Deliberately sized up for a roomy, slouchy look.' },
+];
+
+// Common cuts offered in the Cut dropdown, by category. Users can also add their own.
+const GENERAL_CUTS = ['Classic', 'Cropped', 'Longline', 'Asymmetric'];
+export const COMMON_CUTS: Record<ClothingCategory, string[]> = {
+  tops: ['Crew neck', 'V-neck', 'Scoop neck', 'Turtleneck', 'Mock neck', 'Collared', 'Henley', 'Off-shoulder', 'Halter', 'Cropped', 'Longline'],
+  bottoms: ['Straight leg', 'Skinny', 'Slim', 'Wide leg', 'Bootcut', 'Flare', 'Tapered', 'Barrel', 'A-line', 'Pencil', 'Pleated'],
+  outerwear: ['Single-breasted', 'Double-breasted', 'Cropped', 'Longline', 'Hooded', 'Bomber', 'Trench', 'Shacket'],
+  shoes: ['Low-top', 'High-top', 'Ankle', 'Knee-high', 'Slip-on', 'Lace-up', 'Platform', 'Pointed toe'],
+  accessories: GENERAL_CUTS,
+  'one-piece': ['A-line', 'Bodycon', 'Shift', 'Wrap', 'Slip', 'Fit and flare', 'Shirt dress', 'Jumpsuit', 'Romper'],
+  sets: GENERAL_CUTS,
+};
 
 // GET /api/items/:id: the closet fields plus the item's tags. Untagged items have nulls.
 export type ClothingItemDetails = ClosetItem & {
@@ -33,6 +54,19 @@ export type ClothingItemDetails = ClosetItem & {
   fit: ClothingFit | null;
   sourceURL: string | null; // the product page, for items added from a link
   createdAt: string; // ISO date
+  // Not sent by the server yet (see PLAN.md). The details screen shows placeholders until they are.
+  timesWorn?: number;
+  timesWornThisMonth?: number;
+  excludeFromSuggestions?: boolean;
+  outfits?: { id: string; name: string }[]; // the user's outfits that include this item
+};
+
+// GET /api/items/:id/color-grid: a small downscaled copy of the item's image for the color
+// dropper. pixels is row-major, `width * height` long; null where the cutout is transparent.
+export type ItemColorGrid = {
+  width: number;
+  height: number;
+  pixels: (string | null)[];
 };
 
 // PATCH /api/items/:id: only the fields sent are changed. isFavorite, name and colorHex can't
@@ -49,9 +83,10 @@ export type ClothingItemChanges = {
   material?: string | null;
   season?: string | null;
   formality?: string | null;
+  excludeFromSuggestions?: boolean; // not accepted by the server yet
 };
 
-export type ClosetFilter ='all' | 'favorites' | ClothingCategory;
+export type ClosetFilter = 'all' | 'favorites' | ClothingCategory;
 
 export const CLOSET_FILTERS: { key: ClosetFilter; label: string }[] = [
   { key: 'all', label: 'All' },
@@ -64,6 +99,11 @@ export const CLOSET_FILTERS: { key: ClosetFilter; label: string }[] = [
   { key: 'one-piece', label: 'One-Piece' },
   { key: 'sets', label: 'Sets' },
 ];
+
+// The categories an item can have, for the Category dropdown.
+export const CATEGORY_OPTIONS = CLOSET_FILTERS.filter(
+  (f): f is { key: ClothingCategory; label: string } => f.key !== 'all' && f.key !== 'favorites',
+);
 
 export function filterItems(items: ClosetItem[], filter: ClosetFilter): ClosetItem[] {
   if (filter === 'all') return items;
@@ -87,7 +127,7 @@ export async function listItems(): Promise<ClosetItem[]> {
 // GET /api/items/:id. imageUrl is freshly signed, so use it rather than the closet's copy.
 export async function getItem(id: string): Promise<ClothingItemDetails> {
   try {
-    return await apiGet<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`);
+    return withNewFitNames(await apiGet<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`));
   } catch (e) {
     throw itemError(e, 'Could not load this item. Please try again.');
   }
@@ -96,9 +136,28 @@ export async function getItem(id: string): Promise<ClothingItemDetails> {
 // PATCH /api/items/:id -> the updated item.
 export async function updateItem(id: string, changes: ClothingItemChanges): Promise<ClothingItemDetails> {
   try {
-    return await apiPatch<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`, changes);
+    return withNewFitNames(
+      await apiPatch<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`, changes),
+    );
   } catch (e) {
     throw itemError(e, 'Could not save your changes. Please try again.');
+  }
+}
+
+// The server still calls "loose" "relaxed" until its Fit enum is migrated (see PLAN.md).
+// Until then it also rejects "fitted" and "loose" with a 400.
+function withNewFitNames(item: ClothingItemDetails): ClothingItemDetails {
+  return (item.fit as string) === 'relaxed' ? { ...item, fit: 'loose' } : item;
+}
+
+// GET /api/items/:id/color-grid, for the color dropper. Not built on the server yet, so a 404
+// usually means the route is missing rather than the item.
+export async function getItemColorGrid(id: string): Promise<ItemColorGrid> {
+  try {
+    return await apiGet<ItemColorGrid>(`/api/items/${encodeURIComponent(id)}/color-grid`);
+  } catch (e) {
+    if (e instanceof SessionExpiredError) throw e;
+    throw new Error("The color dropper isn't available yet.");
   }
 }
 
