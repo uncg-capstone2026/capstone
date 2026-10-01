@@ -78,4 +78,25 @@ export class S3Service {
       throw err;
     }
   }
+
+  // Downloads a file from S3 into memory (used to process photos on the server).
+  async getObjectBuffer(key: string): Promise<Buffer> {
+    const res = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    if (!res.Body) throw new Error(`Empty S3 object: ${key}`);
+    return Buffer.from(await res.Body.transformToByteArray());
+  }
+
+  // Uploads a file the server created itself (e.g. the cutout PNG).
+  async putObject(key: string, body: Buffer, contentType: string): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      }),
+    );
+  }
 }

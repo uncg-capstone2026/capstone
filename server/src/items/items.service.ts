@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Category, Item, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
+import { CutoutService } from './cutout.service';
 
 // Server enum value -> the app's ClothingCategory value (client/src/services/items.ts).
 // If a category is ever added to the Prisma enum, TypeScript will error here until it's mapped.
@@ -17,9 +18,12 @@ const CATEGORY_TO_CLIENT: Record<Category, string> = {
 
 @Injectable()
 export class ItemsService {
+  private readonly logger = new Logger(ItemsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
+    private readonly cutout: CutoutService,
   ) {}
 
   // Only the signed-in user's items, newest first.
@@ -42,7 +46,7 @@ export class ItemsService {
     return { uploadUrl, key };
   }
 
-  // Step 3 of adding an item: save it once the photo is in S3.
+  // Step 3 of adding an item: save it once the photo is in S3, then cut it out.
   async createFromPhoto(userId: User['id'], key: string) {
     // Must be in this user's own folder, and the upload must have finished.
     // 404 either way, so nobody can probe other users' files.
@@ -58,9 +62,25 @@ export class ItemsService {
       data: { userId, imageKey: key, colorHex: [] },
     });
 
-    // Later: cut out the background (-> cutoutKey) and AI-tag the item here.
+    await this.addCutout(item.id, key);
+
+    // Later: AI-tag the item here (category, type, colors, fit, name).
 
     return { itemId: item.id };
+  }
+
+  // Removes the background and saves the cutout as a transparent PNG next to the original.
+  // If anything fails, the item simply keeps showing the original photo.
+  private async addCutout(itemId: Item['id'], key: string) {
+    try {
+      const original = await this.s3.getObjectBuffer(key);
+      const cutoutPng = await this.cutout.removeBackground(original);
+      const cutoutKey = key.replace(/\.(jpg|png|webp)$/, '-cutout.png');
+      await this.s3.putObject(cutoutKey, cutoutPng, 'image/png');
+      await this.prisma.item.update({ where: { id: itemId }, data: { cutoutKey } });
+    } catch (err) {
+      this.logger.warn(`Cutout failed for item ${itemId}: ${(err as Error).message}`);
+    }
   }
 
   // Matches the app's ClosetItem type exactly.
