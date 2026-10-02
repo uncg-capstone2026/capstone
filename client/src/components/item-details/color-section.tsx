@@ -1,6 +1,7 @@
 import { Text, View } from 'react-native';
 
 import { colorName } from '@/utils/colors';
+import { formatTag } from '@/utils/format';
 
 type ColorSectionProps = {
   colors: string[]; // 0-3 "#RRGGBB" values
@@ -39,7 +40,7 @@ export function ColorSection({ colors, pattern }: ColorSectionProps) {
         </View>
       )}
       <Text className="font-body text-sm text-sage-500">
-        Pattern: <Text className="text-sage-700">{pattern ?? 'No pattern set'}</Text>
+        Pattern: <Text className="text-sage-700">{pattern ? formatTag(pattern) : 'No pattern set'}</Text>
       </Text>
     </View>
   );

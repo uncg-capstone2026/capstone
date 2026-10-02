@@ -13,6 +13,8 @@ type SelectFieldProps<T extends string> = {
   placeholder?: string;
   // Shows an "Add a custom …" row that lets the user type their own value.
   allowCustom?: { label: string; maxLength: number };
+  // A short note with a sparkle under the label, e.g. to mark a value the AI stylist uses.
+  aiHint?: string;
 };
 
 // A labelled field that opens a bottom sheet of options. Includes a "None" row to clear it.
@@ -23,6 +25,7 @@ export function SelectField<T extends string>({
   onChange,
   placeholder = 'Not set',
   allowCustom,
+  aiHint,
 }: SelectFieldProps<T>) {
   const [isOpen, setIsOpen] = useState(false);
   const [custom, setCustom] = useState<string | null>(null); // null = not typing a custom value
@@ -49,11 +52,15 @@ export function SelectField<T extends string>({
   return (
     <>
       <View className="flex-row items-center justify-between gap-4">
-        <Text className="font-label text-base text-sage-700">{label}</Text>
+        <View className="shrink gap-0.5">
+          <Text className="font-label text-base text-sage-700">{label}</Text>
+          {aiHint ? <AiHint text={aiHint} /> : null}
+        </View>
         <Pressable
           onPress={() => setIsOpen(true)}
           accessibilityRole="button"
           accessibilityLabel={`${label}: ${selectedLabel ?? placeholder}`}
+          accessibilityHint={aiHint}
           className="max-w-[65%] flex-row items-center gap-1.5 rounded-xl border border-sage-200 bg-cream-50 px-4 py-2">
           <Text numberOfLines={1} className={`shrink font-body text-base ${value ? 'text-sage-800' : 'text-sage-400'}`}>
             {selectedLabel ?? placeholder}
@@ -71,6 +78,11 @@ export function SelectField<T extends string>({
               <Text className="font-label text-base text-sage-600">Done</Text>
             </Pressable>
           </View>
+          {aiHint ? (
+            <View className="px-6 pb-2">
+              <AiHint text={aiHint} />
+            </View>
+          ) : null}
 
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="px-4 pb-2">
             {custom !== null && allowCustom ? (
@@ -135,5 +147,14 @@ function OptionRow({ label, selected, onPress }: { label: string; selected: bool
       <Text className={`font-body text-base ${selected ? 'text-sage-800' : 'text-sage-700'}`}>{label}</Text>
       {selected ? <Ionicons name="checkmark" size={18} color="#61754e" /> : null}
     </Pressable>
+  );
+}
+
+function AiHint({ text }: { text: string }) {
+  return (
+    <View className="flex-row items-center gap-1">
+      <Ionicons name="sparkles" size={12} color="#7a9264" />
+      <Text className="font-body text-xs text-sage-500">{text}</Text>
+    </View>
   );
 }
