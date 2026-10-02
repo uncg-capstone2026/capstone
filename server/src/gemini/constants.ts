@@ -49,6 +49,9 @@ export const EMBEDDING_DIMENSIONS = 768;
 
 export const EMBEDDABLE_IMAGE_TYPES = ['image/png', 'image/jpeg'] as const;
 
+// How many closest closet items to keep for each expanded item.
+export const CANDIDATES_PER_TYPE = 5;
+
 export const PATTERNS = [
   'solid',
   'striped',
