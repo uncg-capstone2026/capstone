@@ -1,0 +1,5 @@
+ALTER TABLE "Item"
+  ALTER COLUMN "name" SET DEFAULT 'New item',
+  ALTER COLUMN "category" DROP NOT NULL,
+  ALTER COLUMN "type" DROP NOT NULL;
+  

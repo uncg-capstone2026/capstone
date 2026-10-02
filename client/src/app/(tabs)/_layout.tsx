@@ -74,7 +74,7 @@ function StylistTabButton({ onPress }: { onPress?: (e: GestureResponderEvent) =>
         style={{ boxShadow: '0px 4px 12px rgba(55, 64, 47, 0.3)' }}
         className="-mt-8 h-[68px] w-[68px] items-center justify-center rounded-full border-4 border-white bg-sage-500">
         <Image
-          source={require('@/assets/images/sage-mascot-white-outline.png')}
+          source={require('@/assets/images/styleme-mascot-white-outline.png')}
           contentFit="contain"
           style={{ width: 40, height: 40, transform: [{ translateY: -2 }] }}
         />

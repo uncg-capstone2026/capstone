@@ -1,7 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
 
 @Injectable()
 export class S3Service {
@@ -46,6 +58,45 @@ export class S3Service {
   async deleteObject(key: string): Promise<void> {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+  }
+
+  // Maps a content type to a file extension; null means "not an allowed image".
+  extensionFor(contentType: string): string | null {
+    return IMAGE_EXTENSIONS[contentType] ?? null;
+  }
+
+  // True if the file is actually in the bucket (the app finished uploading).
+  async objectExists(key: string): Promise<boolean> {
+    try {
+      await this.client.send(
+        new HeadObjectCommand({ Bucket: this.bucket, Key: key }),
+      );
+      return true;
+    } catch (err: any) {
+      if (err?.$metadata?.httpStatusCode === 404) return false;
+      throw err;
+    }
+  }
+
+  // Downloads a file from S3 into memory (used to process photos on the server).
+  async getObjectBuffer(key: string): Promise<Buffer> {
+    const res = await this.client.send(
+      new GetObjectCommand({ Bucket: this.bucket, Key: key }),
+    );
+    if (!res.Body) throw new Error(`Empty S3 object: ${key}`);
+    return Buffer.from(await res.Body.transformToByteArray());
+  }
+
+  // Uploads a file the server created itself (e.g. the cutout PNG).
+  async putObject(key: string, body: Buffer, contentType: string): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      }),
     );
   }
 }

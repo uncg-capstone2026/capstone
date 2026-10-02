@@ -114,7 +114,7 @@ export default function AddItemScreen() {
                       {isUploading ? (
                         <View className="absolute inset-0 items-center justify-center gap-2 bg-sage-900/40">
                           <ActivityIndicator color="#fffdf9" />
-                          <Text className="font-label text-sm text-cream-50">Sage is cutting it out…</Text>
+                          <Text className="font-label text-sm text-cream-50">StyleMe is cutting it out…</Text>
                         </View>
                       ) : (
                         <View className="absolute bottom-3 right-3 flex-row items-center gap-1 rounded-full bg-sage-700/80 px-3 py-1.5">
@@ -204,7 +204,7 @@ export default function AddItemScreen() {
                 </Pressable>
               </View>
               <Text className="font-body text-xs text-sage-500">
-                Sage pulls the product image and details, then you can confirm them.
+                StyleMe pulls the product image and details, then you can confirm them.
               </Text>
             </View>
 

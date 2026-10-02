@@ -7,6 +7,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { ItemsModule } from './items/items.module';
 import { GeminiModule } from './gemini/gemini.module';
+import { WeatherModule } from './weather/weather.module';
+import { PhotosModule } from './photos/photos.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { GeminiModule } from './gemini/gemini.module';
     AuthModule,
     ItemsModule,
     GeminiModule,
+    WeatherModule,
+    PhotosModule,
   ],
   controllers: [AppController],
   providers: [AppService],
