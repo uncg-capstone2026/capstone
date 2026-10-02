@@ -15,6 +15,7 @@ import { WearStats } from '@/components/item-details/wear-stats';
 import { SessionExpiredError } from '@/services/api';
 import {
   CATEGORY_OPTIONS,
+  CLOTHING_TYPE_OPTIONS,
   COMMON_CUTS,
   deleteItem,
   getItem,
@@ -178,6 +179,14 @@ export default function ItemDetailsScreen() {
             value={item.category}
             options={CATEGORY_OPTIONS.map(({ key, label }) => ({ value: key, label }))}
             onChange={(category) => save({ category })}
+          />
+
+          <SelectField
+            label="Type"
+            value={item.type}
+            options={[...CLOTHING_TYPE_OPTIONS]}
+            onChange={(type) => save({ type })}
+            aiHint="AI tag · the stylist uses this to pick outfits"
           />
 
           <View className="h-px bg-sage-200" />

@@ -44,7 +44,7 @@ export const COMMON_CUTS: Record<ClothingCategory, string[]> = {
 
 // GET /api/items/:id: the closet fields plus the item's tags. Untagged items have nulls.
 export type ClothingItemDetails = ClosetItem & {
-  type: string | null; // e.g. "t-shirt", "jeans", "sneakers"
+  type: string | null; // one of CLOTHING_TYPE_OPTIONS, or older free text from before the AI tagging
   cut: string | null; // e.g. "crew neck"
   colorHex: string[]; // 0-3 values like "#1A2B3C"
   pattern: string | null;
@@ -104,6 +104,38 @@ export const CLOSET_FILTERS: { key: ClosetFilter; label: string }[] = [
 export const CATEGORY_OPTIONS = CLOSET_FILTERS.filter(
   (f): f is { key: ClothingCategory; label: string } => f.key !== 'all' && f.key !== 'favorites',
 );
+
+// The garment types the AI tags items with, for the Type dropdown. A copy of CLOTHING_TYPES in
+// server/src/gemini/constants.ts: keep the two in sync. The AI stylist only searches by these
+// exact values, so there's no custom option.
+export const CLOTHING_TYPE_OPTIONS = [
+  { value: 't-shirt', label: 'T-shirt' },
+  { value: 'tank-top', label: 'Tank top' },
+  { value: 'blouse', label: 'Blouse' },
+  { value: 'button-up-shirt', label: 'Button-up shirt' },
+  { value: 'long-sleeve-shirt', label: 'Long-sleeve shirt' },
+  { value: 'sweater', label: 'Sweater' },
+  { value: 'hoodie', label: 'Hoodie' },
+  { value: 'cardigan', label: 'Cardigan' },
+  { value: 'jeans', label: 'Jeans' },
+  { value: 'dress-pants', label: 'Dress pants' },
+  { value: 'sweat-pants', label: 'Sweatpants' },
+  { value: 'leggings', label: 'Leggings' },
+  { value: 'shorts', label: 'Shorts' },
+  { value: 'skirt', label: 'Skirt' },
+  { value: 'dress', label: 'Dress' },
+  { value: 'blazer', label: 'Blazer' },
+  { value: 'jacket', label: 'Jacket' },
+  { value: 'coat', label: 'Coat' },
+  { value: 'sneakers', label: 'Sneakers' },
+  { value: 'boots', label: 'Boots' },
+  { value: 'heels', label: 'Heels' },
+  { value: 'flats', label: 'Flats' },
+  { value: 'sandals', label: 'Sandals' },
+  { value: 'hat', label: 'Hat' },
+] as const;
+
+export type ClothingType = (typeof CLOTHING_TYPE_OPTIONS)[number]['value'];
 
 export function filterItems(items: ClosetItem[], filter: ClosetFilter): ClosetItem[] {
   if (filter === 'all') return items;
