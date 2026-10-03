@@ -7,9 +7,8 @@ import { CategoryFilter } from '@/components/closet/category-filter';
 import { ClosetGrid } from '@/components/closet/closet-grid';
 import { ClosetTip } from '@/components/closet/closet-tip';
 import { SessionExpiredError } from '@/services/api';
-import { filterItems, listItems, type ClosetFilter, type ClosetItem } from '@/services/items';
+import { canBuildOutfit, filterItems, listItems, type ClosetFilter, type ClosetItem } from '@/services/items';
 
-const MIN_ITEMS_FOR_SUGGESTIONS = 5;
 
 export default function ClosetScreen() {
   const [items, setItems] = useState<ClosetItem[]>([]);
@@ -43,7 +42,7 @@ export default function ClosetScreen() {
       </View>
 
       <ScrollView contentContainerClassName="gap-4 px-6 pb-8 pt-4">
-        {items.length < MIN_ITEMS_FOR_SUGGESTIONS && !isLoading ? <ClosetTip /> : null}
+        {!canBuildOutfit(items) && !isLoading ? <ClosetTip /> : null}
         {error ? <Text className="font-body text-sm text-red-600">{error}</Text> : null}
 
         {isLoading ? (

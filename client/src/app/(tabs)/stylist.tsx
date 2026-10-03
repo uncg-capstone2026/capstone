@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -16,16 +15,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DayPicker } from '@/components/stylist/day-picker';
 import { WeatherCard } from '@/components/stylist/weather-card';
-import { styleOutfit } from '@/services/stylist';
-import { startOfToday } from '@/utils/dates';
+import { startOfToday, toDateKey } from '@/utils/dates';
 
 const MAX_OCCASION_LENGTH = 200;
 
 export default function StylistScreen() {
   const [date, setDate] = useState(startOfToday);
   const [occasion, setOccasion] = useState('');
-  const [isStyling, setIsStyling] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   // If the app stayed open past midnight, yesterday is no longer a valid choice.
   useFocusEffect(
@@ -34,19 +30,12 @@ export default function StylistScreen() {
     }, []),
   );
 
-  const canSubmit = occasion.trim().length > 0 && !isStyling;
+  const canSubmit = occasion.trim().length > 0;
 
-  async function handleStyle() {
+  // The suggestion screen asks StyleMe for the outfit and shows its own loading state.
+  function handleStyle() {
     if (!canSubmit) return;
-    setIsStyling(true);
-    setMessage(null);
-    try {
-      await styleOutfit({ date, occasion: occasion.trim() });
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
-    } finally {
-      setIsStyling(false);
-    }
+    router.push({ pathname: '/suggestion', params: { date: toDateKey(date), occasion: occasion.trim() } });
   }
 
   return (
@@ -97,18 +86,9 @@ export default function StylistScreen() {
               disabled={!canSubmit}
               accessibilityRole="button"
               className="flex-row items-center justify-center gap-2 rounded-xl bg-sage-600 py-3.5 disabled:opacity-60">
-              {isStyling ? (
-                <ActivityIndicator color="#fffdf9" />
-              ) : (
-                <>
-                  <Text className="font-label text-base text-cream-50">Style my outfit</Text>
-                  <Ionicons name="arrow-forward" size={18} color="#fffdf9" />
-                </>
-              )}
+              <Text className="font-label text-base text-cream-50">Style my outfit</Text>
+              <Ionicons name="arrow-forward" size={18} color="#fffdf9" />
             </Pressable>
-            {message ? (
-              <Text className="text-center font-body text-sm text-sage-600">{message}</Text>
-            ) : null}
             <Text className="text-center font-body text-xs text-sage-500">
               StyleMe builds one outfit from your closet. This chat isn&apos;t saved.
             </Text>
