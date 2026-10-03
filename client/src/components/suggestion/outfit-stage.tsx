@@ -13,6 +13,9 @@ export const SHEET_OVERLAP = 22;
 
 const OVERLAY_BG = 'rgba(255, 253, 249, 0.85)';
 const SIDE_PADDING = 16;
+// The flat-lay's wrapper view gets flattened away, so its pieces' zIndex values compete with
+// the overlay controls directly. Keep the controls above every piece so they stay tappable.
+const CONTROLS_Z_INDEX = 10;
 
 type OutfitStageProps = {
   items: SuggestedPiece[];
@@ -59,7 +62,7 @@ export function OutfitStage({
 
       <View
         className="absolute left-0 right-0 flex-row items-center justify-between"
-        style={{ top: insets.top + 6, paddingHorizontal: SIDE_PADDING }}>
+        style={{ top: insets.top + 6, paddingHorizontal: SIDE_PADDING, zIndex: CONTROLS_Z_INDEX }}>
         <Pressable
           onPress={onBack}
           accessibilityRole="button"
@@ -73,7 +76,7 @@ export function OutfitStage({
         </View>
       </View>
 
-      <View className="absolute items-end gap-2" style={{ right: SIDE_PADDING, bottom: SHEET_OVERLAP + 12 }}>
+      <View className="absolute items-end gap-2" style={{ right: SIDE_PADDING, bottom: SHEET_OVERLAP + 12, zIndex: CONTROLS_Z_INDEX }}>
         {isColorPopoverOpen ? <StageColorPopover color={color} onChange={onChangeColor} /> : null}
         <Pressable
           onPress={onToggleColorPopover}
