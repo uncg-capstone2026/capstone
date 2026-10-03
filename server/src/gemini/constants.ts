@@ -52,6 +52,10 @@ export const EMBEDDABLE_IMAGE_TYPES = ['image/png', 'image/jpeg'] as const;
 // How many closest closet items to keep for each expanded item.
 export const CANDIDATES_PER_TYPE = 5;
 
+// Most candidate items (and so photos) sent to Gemini in one outfit request.
+// Keeps memory use and the inline request size bounded.
+export const MAX_OUTFIT_CANDIDATES = 25;
+
 export const PATTERNS = [
   'solid',
   'striped',

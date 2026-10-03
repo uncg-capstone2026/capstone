@@ -5,6 +5,15 @@ import { EMBEDDABLE_IMAGE_TYPES } from './constants';
 // Formats a list for a prompt: ['a', 'b'] -> '"a", "b"'.
 export const quoteList = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(', ');
 
+// MIME type of a PNG/JPEG photo from its S3 key's extension; null for anything
+// else (e.g. webp), which Gemini isn't sent.
+export function mimeTypeForKey(key: string): string | null
+{
+  if (/\.png$/i.test(key)) return 'image/png';
+  if (/\.jpe?g$/i.test(key)) return 'image/jpeg';
+  return null;
+}
+
 // Shared by every Gemini feature service: the one Gemini client, plus the
 // helpers more than one feature needs.
 @Injectable()
