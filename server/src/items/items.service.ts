@@ -2,6 +2,8 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import type { Item, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
+import { ImageProcessingService } from '../gemini/image-processing/service';
+import { mimeTypeForKey } from '../gemini/helpers';
 import { CutoutService } from './cutout.service';
 import type { UpdateItemDto } from './items.dto';
 import { CATEGORY_TO_CLIENT, FIT_TO_CLIENT, categoryFromClient, fitFromClient } from './item-mappings';
@@ -14,6 +16,7 @@ export class ItemsService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     private readonly cutout: CutoutService,
+    private readonly imageProcessing: ImageProcessingService,
   ) {}
 
   // Only the signed-in user's items, newest first.
@@ -105,7 +108,8 @@ export class ItemsService {
       data: { userId, imageKey: key, colorHex: [] },
     });
 
-    await this.addCutout(item.id, key);
+    const cutoutPng = await this.addCutout(item.id, key);
+    await this.addEmbedding(item.id, key, cutoutPng);
 
     // Later: AI-tag the item here (category, type, colors, fit, name).
 
@@ -121,15 +125,44 @@ export class ItemsService {
 
   // Removes the background and saves the cutout as a transparent PNG next to the original.
   // If anything fails, the item simply keeps showing the original photo.
-  private async addCutout(itemId: Item['id'], key: string) {
+  // Returns the cutout so later steps can reuse it, or null if it failed.
+  private async addCutout(itemId: Item['id'], key: string): Promise<Buffer | null> {
     try {
       const original = await this.s3.getObjectBuffer(key);
       const cutoutPng = await this.cutout.removeBackground(original);
       const cutoutKey = key.replace(/\.(jpg|png|webp)$/, '-cutout.png');
       await this.s3.putObject(cutoutKey, cutoutPng, 'image/png');
       await this.prisma.item.update({ where: { id: itemId }, data: { cutoutKey } });
+      return cutoutPng;
     } catch (err) {
       this.logger.warn(`Cutout failed for item ${itemId}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  // AI (Gemini embedding): turns the item's photo into a 768-number vector so the
+  // Stylist can find it by meaning. Embeds the cutout, or the original if it's a
+  // PNG/JPEG, via ImageProcessingService.embedImage and saves it to Item.embedding.
+  // If anything fails, the item is saved without one and the Stylist skips it.
+  private async addEmbedding(itemId: Item['id'], key: string, cutoutPng: Buffer | null) {
+    try {
+      let image = cutoutPng;
+      let mimeType: string | null = 'image/png';
+      if (!image) {
+        mimeType = mimeTypeForKey(key);
+        if (!mimeType) {
+          this.logger.warn(`Embedding skipped for item ${itemId}: ${key} is not PNG or JPEG`);
+          return;
+        }
+        image = await this.s3.getObjectBuffer(key);
+      }
+
+      const embedding = await this.imageProcessing.embedImage(image, mimeType);
+      // Prisma can't write the vector type, so it goes in as '[0.1,...]' text and is cast in SQL.
+      const vector = `[${embedding.join(',')}]`;
+      await this.prisma.$executeRaw`UPDATE "Item" SET embedding = ${vector}::vector WHERE id = ${itemId}`;
+    } catch (err) {
+      this.logger.warn(`Embedding failed for item ${itemId}: ${(err as Error).message}`);
     }
   }
 
