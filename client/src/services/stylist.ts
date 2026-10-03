@@ -95,9 +95,9 @@ function stylistError(e: unknown, fallback: string): Error {
 // ---- Fixture ----
 
 const FIXTURE_REASONS = [
-  'Covered layers and closed shoes for the light rain.',
-  'Relaxed but put-together, which suits the occasion.',
-  'Leans on the soft neutrals you wear most.',
+  'Comfortable enough to sit through classes and walk across campus.',
+  'Casual but put-together, which suits a regular school day.',
+  'Leans on the easy everyday pieces you wear most.',
 ];
 
 // One of each piece the stylist needs, taken from the closet: a top and bottoms (or a
@@ -125,7 +125,7 @@ async function fixtureSuggestion(request: OutfitRequest): Promise<OutfitSuggesti
   await wait(600);
   return {
     suggestionId: `fixture-${round}`,
-    name: 'Easy layers for the evening',
+    name: 'Casual day at school',
     reasons: FIXTURE_REASONS,
     items: items.map((item) => ({
       id: item.id,

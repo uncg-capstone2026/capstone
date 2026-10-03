@@ -16,8 +16,8 @@ const SEPARATES_LAYOUT: Record<Slot, Frame> = {
   accessory: { left: 0.02, top: 0, width: 0.26, height: 0.28, zIndex: 3 },
   outerwear: { left: 0, top: 0.14, width: 0.5, height: 0.62, zIndex: 1 },
   top: { left: 0.05, top: 0.3, width: 0.53, height: 0.7, zIndex: 2 },
-  bottoms: { left: 0.6, top: 0, width: 0.36, height: 0.64, zIndex: 2 },
-  shoes: { left: 0.6, top: 0.7, width: 0.34, height: 0.3, zIndex: 2 },
+  bottoms: { left: 0.6, top: 0, width: 0.36, height: 0.6, zIndex: 2 },
+  shoes: { left: 0.58, top: 0.6, width: 0.4, height: 0.4, zIndex: 2 },
 };
 
 // A one-piece (or set) takes the top's place and runs the full height. The bottoms slot is
@@ -27,7 +27,7 @@ const ONE_PIECE_LAYOUT: Record<Slot, Frame> = {
   outerwear: { left: 0, top: 0, width: 0.48, height: 0.7, zIndex: 1 },
   top: { left: 0.05, top: 0.04, width: 0.52, height: 0.96, zIndex: 2 },
   bottoms: { left: 0, top: 0, width: 0, height: 0, zIndex: 0 },
-  shoes: { left: 0.6, top: 0.48, width: 0.36, height: 0.34, zIndex: 2 },
+  shoes: { left: 0.58, top: 0.42, width: 0.4, height: 0.46, zIndex: 2 },
 };
 
 const SLOT_BY_CATEGORY: Record<ClothingCategory, Slot> = {
