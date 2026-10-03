@@ -150,7 +150,7 @@ function OptionRow({ label, selected, onPress }: { label: string; selected: bool
   );
 }
 
-function AiHint({ text }: { text: string }) {
+export function AiHint({ text }: { text: string }) {
   return (
     <View className="flex-row items-center gap-1">
       <Ionicons name="sparkles" size={12} color="#7a9264" />

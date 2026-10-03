@@ -21,3 +21,21 @@ export async function getTemperatureUnit(): Promise<TemperatureUnit> {
 export async function setTemperatureUnit(unit: TemperatureUnit): Promise<void> {
   await AsyncStorage.setItem(TEMPERATURE_UNIT_KEY, unit);
 }
+
+// The outfit stage's background on the suggestion screen.
+export const DEFAULT_STAGE_COLOR = '#EFEAE0';
+
+const STAGE_COLOR_KEY = 'styleme.stage-color';
+
+export async function getStageColor(): Promise<string> {
+  try {
+    const stored = await AsyncStorage.getItem(STAGE_COLOR_KEY);
+    return stored && /^#[0-9A-F]{6}$/i.test(stored) ? stored : DEFAULT_STAGE_COLOR;
+  } catch {
+    return DEFAULT_STAGE_COLOR;
+  }
+}
+
+export async function setStageColor(color: string): Promise<void> {
+  await AsyncStorage.setItem(STAGE_COLOR_KEY, color);
+}
