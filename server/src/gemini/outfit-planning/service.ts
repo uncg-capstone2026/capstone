@@ -1,10 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import type { Part } from '@google/genai';
 import { PrismaService } from '../../prisma/prisma.service';
 import { S3Service } from '../../s3/s3.service';
 import { CANDIDATES_PER_TYPE, MAX_OUTFIT_CANDIDATES } from '../constants';
-import { mimeTypeForKey } from '../helpers';
+import { GeminiHelpers, mimeTypeForKey } from '../helpers';
+import { QueryExpansionService } from '../query-expansion/service';
 import { OUTFIT_SELECTION_PROMPT } from './prompt';
+import { buildOutfitSelectionSchema } from './schema';
 
 // A closet item ready to send to Gemini: its details plus its photo in memory.
 export type OutfitCandidate = {
@@ -20,13 +22,45 @@ export type OutfitCandidate = {
   fit: string | null;
   image: Buffer;
   mimeType: string;
+  photoKey: string; // S3 key of the photo above (cutout or original); never sent to Gemini or the app
 };
+
+// What the stylist returns: the chosen items and why they were picked.
+export type PlannedOutfit = {
+  items: { itemId: string; type: string | null; imageUrl: string }[];
+  reason: string;
+};
+
+const NOT_ENOUGH_ITEMS = 'Not enough matching items in your closet to build an outfit';
 
 // Stylist: find matching clothes in the closet, then pick outfits from them.
 @Injectable()
 export class OutfitPlanningService {
-  constructor(private readonly prisma: PrismaService, private readonly s3: S3Service)
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly s3: S3Service,
+    private readonly helpers: GeminiHelpers,
+    private readonly queryExpansion: QueryExpansionService,
+  )
   {}
+
+  // The whole flow: expand the request, find matching closet items, then let
+  // Gemini pick one complete outfit from them. Throws 422 when the closet
+  // doesn't have enough to work with.
+  async planOutfit(userId: string, userRequest: string): Promise<PlannedOutfit>
+  {
+    const expanded = await this.queryExpansion.expandAndEmbedQuery(userRequest);
+
+    const ids = await this.findCandidates(userId, expanded.items);
+    if (ids.length === 0) throw new UnprocessableEntityException(NOT_ENOUGH_ITEMS);
+
+    const candidates = await this.loadCandidates(userId, ids);
+    if (candidates.length === 0) throw new UnprocessableEntityException(NOT_ENOUGH_ITEMS);
+
+    const { outfit, reason } = await this.selectOutfit(userRequest, candidates);
+    if (!outfit) throw new UnprocessableEntityException(reason || NOT_ENOUGH_ITEMS);
+    return outfit;
+  }
 
   // Returns the ids of the user's closest closet items for each expanded item.
   // Runs one query per item, all sent at once. An empty array means nothing
@@ -78,7 +112,7 @@ export class OutfitPlanningService {
         const key = cutoutKey ?? imageKey;
         const mimeType = mimeTypeForKey(key);
         if (!mimeType) throw new Error(`Unsupported image type: ${key}`);
-        return { ...details, image: await this.s3.getObjectBuffer(key), mimeType };
+        return { ...details, image: await this.s3.getObjectBuffer(key), mimeType, photoKey: key };
       }),
     );
     return loaded
@@ -107,7 +141,55 @@ export class OutfitPlanningService {
     return parts;
   }
 
+  // Asks Gemini to pick one outfit from the candidates. outfit is null when it
+  // couldn't build a complete one (reason then says why). Completeness is
+  // checked here too, since the schema can't express it.
+  async selectOutfit(userRequest: string, candidates: OutfitCandidate[]): Promise<{ outfit: PlannedOutfit | null; reason: string }>
+  {
+    const response = await this.helpers.ai.models.generateContent({
+      model: 'gemini-flash-latest',
+      contents: [{ role: 'user', parts: this.buildSelectionParts(userRequest, candidates) }],
+      config: {
+        responseMimeType: 'application/json',
+        responseSchema: buildOutfitSelectionSchema(candidates.map((c) => c.id)),
+      },
+    });
+    const text = response.text ?? '';
+
+    let selection: { outfit: string[]; reason: string };
+    try {
+      selection = JSON.parse(text);
+    } catch {
+      throw new Error(`Gemini returned invalid JSON: ${text || '(empty)'}`);
+    }
+
+    const byId = new Map(candidates.map((c) => [c.id, c]));
+    const chosen = [...new Set(selection.outfit ?? [])]
+      .map((id) => byId.get(id))
+      .filter((c): c is OutfitCandidate => c !== undefined);
+    const reason = selection.reason?.trim() ?? '';
+
+    if (!this.isCompleteOutfit(chosen)) return { outfit: null, reason };
+
+    // Signed URL per item (same image Gemini saw) so the app can show it.
+    const items = await Promise.all(
+      chosen.map(async (c) => ({
+        itemId: c.id,
+        type: c.type,
+        imageUrl: await this.s3.getDownloadUrl(c.photoKey),
+      })),
+    );
+    return { outfit: { items, reason }, reason };
+  }
+
   // ---- Helpers ----
+
+  // Complete means a OnePiece, or a Top and Bottoms. Everything else is optional.
+  private isCompleteOutfit(items: OutfitCandidate[]): boolean
+  {
+    const categories = new Set(items.map((item) => item.category));
+    return categories.has('OnePiece') || (categories.has('Top') && categories.has('Bottoms'));
+  }
 
   // The user's items of this type, closest to the embedding first. Prisma can't
   // send the vector type, so it goes in as '[0.1,...]' text and is cast in SQL.
