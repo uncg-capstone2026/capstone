@@ -67,8 +67,12 @@ export const PATTERNS = [
   'other',
 ] as const;
 
+export type Pattern = (typeof PATTERNS)[number];
+
 // Matches the Fit enum in prisma/schema.prisma.
 export const FITS = ['Slim', 'Regular', 'Relaxed', 'Oversized'] as const;
+
+export type FitValue = (typeof FITS)[number];
 
 // Matches the Category enum in prisma/schema.prisma.
 export type Category =
