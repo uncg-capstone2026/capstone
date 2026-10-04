@@ -9,6 +9,8 @@ import { ItemsModule } from './items/items.module';
 import { GeminiModule } from './gemini/gemini.module';
 import { WeatherModule } from './weather/weather.module';
 import { PhotosModule } from './photos/photos.module';
+import { StylistModule } from './stylist/stylist.module';
+
 
 @Module({
   imports: [
@@ -20,6 +22,7 @@ import { PhotosModule } from './photos/photos.module';
     GeminiModule,
     WeatherModule,
     PhotosModule,
+    StylistModule,
   ],
   controllers: [AppController],
   providers: [AppService],

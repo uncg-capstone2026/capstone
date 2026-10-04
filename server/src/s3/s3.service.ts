@@ -52,7 +52,7 @@ export class S3Service {
       Bucket: this.bucket,
       Key: key,
     });
-    return getSignedUrl(this.client, command, { expiresIn: 300 });
+    return getSignedUrl(this.client, command, { expiresIn: 60 * 60 * 24 }); // 24 hours
   }
 
   async deleteObject(key: string): Promise<void> {
