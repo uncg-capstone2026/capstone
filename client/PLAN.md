@@ -62,22 +62,11 @@ Tapping an item in the closet opens `src/app/item/[id].tsx`. The screen is built
 
 The background is removed on the **server**, not the phone. That gives the same result on iOS, Android and web, works in Expo Go, and can be changed without an app update. The server already has to look at the photo to fill in category, color and fit, and that AI key must stay server-side anyway.
 
-What happens in step 3 above (`POST /api/items/photo { key }`). Step 1 is built, and the item is already created with just `imageKey` before the cutout. Steps 2–4 (the cutout) are built too. The `// Later:` comment in `ItemsService.createFromPhoto` marks where tagging (steps 5–6) goes.
-1. ~~Check the key belongs to the signed-in user (`users/<sub>/clothing/...`) and that the object exists in S3.~~ Done.
-2. ~~Download the original from S3. Resize it (e.g. longest side 1024px) to keep processing fast and cheap.~~ Done.
-3. **Cut it out.** Done with **Stability AI's Remove Background API** (`STABILITY_API_KEY`, see `server/src/items/cutout.service.ts`). Nova Canvas reached end-of-life on Sept 30, 2026, and Stability on Bedrock kept failing. The original options were:
-   - **Amazon Bedrock, Nova Canvas (recommended to start).** It has a background-removal mode. Call it from NestJS with `@aws-sdk/client-bedrock-runtime`, alongside the existing S3 SDK, so there's no model to host. It costs a few cents per image. Check it's available in your AWS region and that model access is enabled on the account.
-   - **Self-hosted rembg.** A free, open-source Python library. It needs a small Python service next to the Node server and a machine with enough memory for the model. If you use a Node background-removal library instead, check its licence (some are AGPL).
-4. ~~Save the result as a transparent PNG to S3 (e.g. `users/<sub>/clothing/<uuid>-cutout.png`) and set `Item.cutoutKey`. `S3Service.buildKey(userId, 'clothing', 'png')` builds the key, but the `-cutout` suffix pairing it with the original isn't supported yet.~~ Done: saved next to the original as `<uuid>-cutout.png`.
-5. **Tag it.** The Gemini service for this is built (`ImageProcessingService.extractImageAttributes` in `server/src/gemini/image-processing/`), but nothing calls it yet.
-6. **Embed it.** Also built (`ImageProcessingService.embedImage`), also not called yet. The Stylist search needs it.
-7. Update the `Item` with the cutout and tags, then return `{ itemId }`.
+All of `POST /api/items/photo { key }` is built: ownership check, download and resize, cutout with Stability AI (`server/src/items/cutout.service.ts`), saving `<uuid>-cutout.png`, then Gemini tagging and embedding in parallel. If a step fails, the item is still saved without that part.
 
-- [ ] Server: wire tagging into `ItemsService.createFromPhoto` after the cutout. Call `extractImageAttributes` on the cutout PNG and save `name`, `type`, `category` (it comes from `CATEGORY_BY_TYPE`), `colorHex`, `pattern`, `material`, `season`, `formality` and `fit`. Import `GeminiModule` into `ItemsModule`. If tagging fails, keep the item untagged, like a failed cutout.
-- [ ] Server: create and save the item's `embedding` with `embedImage` at the same point. Prisma can't write `vector` columns, so use `$executeRaw` with `'[...]'::vector`. Also backfill `type` and `embedding` for items added before this, since the Stylist search skips items without them.
-- [ ] Server: Gemini only accepts PNG and JPEG (`EMBEDDABLE_IMAGE_TYPES`), but the upload routes also accept WebP. Use the cutout PNG, or convert the original to JPEG with sharp when there's no cutout.
+- [ ] Server: backfill `type` and `embedding` for items added before tagging and embedding were wired in, since the Stylist search skips items without them.
+- [ ] Server: Gemini only accepts PNG and JPEG (`EMBEDDABLE_IMAGE_TYPES`), but the upload routes also accept WebP. When there's no cutout, a WebP original is currently skipped (no tags or embedding). Convert it to JPEG with sharp instead.
 - [ ] Server: `FITS` in `server/src/gemini/constants.ts` uses `Relaxed` and has no `Fitted`. Update it together with the Fit enum change (item details screen, above).
-- [ ] Server: the `Category` type in `server/src/gemini/constants.ts` is missing `Sets`, and no clothing type maps to it, but the outfit prompt allows "a Sets item". Either add set types or take that line out of the prompt.
 
 How it runs:
 - [ ] **Later, if it's slow:** reply straight away with the item saved using only `imageKey`, and do steps 3–6 in the background, e.g. with an S3-triggered Lambda or a job queue. The `imageUrl` fallback (cutout if ready, otherwise the original) already handles the gap.
@@ -111,16 +100,14 @@ The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" ope
 - [ ] "Open the outfit" goes to `src/app/outfit/[id].tsx`, which is still a placeholder (section 4).
 
 ### Server
-PR #24 added the building blocks in `server/src/gemini/`: `QueryExpansionService` turns the request into garment types plus search text and embeds it, `OutfitPlanningService.findCandidates` finds the closest closet items with pgvector, and `OUTFIT_SELECTION_PROMPT` with `buildOutfitSelectionSchema(ids)` is ready for picking outfits. Nothing connects them yet.
+`POST /api/stylist/outfit { occasion, date? }` (`server/src/stylist/`) is built: `QueryExpansionService` expands and embeds the request, `OutfitPlanningService.findCandidates` finds the closest closet items with pgvector, and `selectOutfit` has Gemini pick one complete outfit. It currently returns `{ items: [{ itemId, type, imageUrl }], reason }`, or 422 when the closet can't make a complete outfit. The items below bring it in line with what the app expects.
 
-- [ ] Build the outfit route, e.g. `POST /api/stylist/outfit { date: 'YYYY-MM-DD', occasion }`, behind the auth guard and using the signed-in user's id: `expandAndEmbedQuery` → `findCandidates` → a Gemini call with `OUTFIT_SELECTION_PROMPT`, the candidates' details and photos, and `buildOutfitSelectionSchema(ids)`. Nothing is saved ("This chat isn't saved").
-- [ ] Write the outfit-selection call. `OutfitPlanningService` only has `findCandidates` so far. Check every returned id is one of the candidates.
 - [ ] Pass the day's weather (from `WeatherService`, with `date`) into the query expansion and outfit prompts. Neither gets the weather yet, though both rely on it.
 - [ ] `findCandidates` ignores the `season`, `formality`, `preferred_colors` and `exclude_colors` the query expansion returns. Decide whether to filter or rank by them.
 - [ ] `findClosestItems` must skip items with `excludeFromSuggestions` once that column exists (its comment notes this; see "Wear tracking" in section 4).
-- [ ] Return errors as 503 `{ message }`, like weather, instead of the raw Gemini message the test routes send as a 400.
+- [ ] Return Gemini failures as 503 `{ message }`, like weather. Right now they surface as raw errors (the 422 for "not enough items" can stay).
 - [ ] Response shape, agreed with the client (`OutfitSuggestion` in `src/services/stylist.ts`): `POST /api/stylist/outfit { date, occasion, excludeSuggestionIds }` returns **one** outfit, `{ suggestionId, name, reasons, items: { id, name, category, type, imageUrl }[] }`. `category` uses the app's names (as `GET /api/items` does), `imageUrl` is signed like the closet's, and `excludeSuggestionIds` lists outfits already shown, for "Try another suggestion". `suggestionId` only has to identify the suggestion for the accept and feedback routes, since nothing is saved until then.
-- [ ] Extend `buildOutfitSelectionSchema` and `OUTFIT_SELECTION_PROMPT` to return a short outfit `name` and 2-4 short `reasons` (weather, occasion, the user's preferences).
+- [ ] Extend `buildOutfitSelectionSchema` and `OUTFIT_SELECTION_PROMPT` to return a short outfit `name` and 2-4 short `reasons` (weather, occasion, the user's preferences). They return a single `reason` and no name today.
 - [ ] `POST /api/stylist/outfit/accept { suggestionId, itemIds, name, eventName, date }` → `{ outfitId }`. It creates the `Outfit` with its `OutfitItem`s and a `CalendarEntry` with `eventName` for `date`, and logs the accept so later suggestions can learn from it. Check every item id belongs to the user. `OutfitSlot` only has `top`, `bottom`, `shoes` and `accessory`, so add `outerwear` and `onepiece` (with a migration).
 - [ ] `POST /api/stylist/outfit/feedback { suggestionId, itemIds, feedback }` → 204. It saves the user's answer ("What would you rather wear?") to Style Preferences, which needs a new model, and the outfit prompt should use those preferences.
 
@@ -140,9 +127,9 @@ PR #24 added the building blocks in `server/src/gemini/`: `QueryExpansionService
 3. Body photo routes: the smallest real end-to-end test (section 3) (server done; S3 CORS still to check)
 4. Items list (section 4) (done)
 5. Add-item flow (section 4): upload first, saving the item with just the original photo (server and client done; needs an end-to-end test)
-6. Cutout and tagging (section 4): background removal done; AI tagging next (the Gemini service is built and needs wiring into adding an item)
+6. Cutout and tagging (section 4) (done; backfilling older items and WebP conversion still to do)
 7. Weather (section 6) (done, including `?date=` for the Stylist day picker)
-8. Stylist (section 7): the screen is built. Next is the outfit route (Gemini query expansion and candidate search are built)
+8. Stylist (section 7): the screen and a first version of the outfit route are built. Next is matching the agreed response shape and passing in the weather, then the accept and feedback routes
 
 ## Client-only checklist
 
@@ -155,5 +142,4 @@ What the client needs, split by whether it can be done now.
 ### Needs a server decision first
 - [ ] The link-import route (section 4), so `importItemFromLink` can go live.
 - [ ] The Stylist routes (section 7), so the suggestion screen can stop using the fixture.
-- [ ] Wiring AI tagging into adding an item (section 4), so the "confirm details" screen has tags to show.
 - [ ] Outfit routes (there are none yet), so the outfit details screen can replace the `src/app/outfit/[id].tsx` placeholder.
