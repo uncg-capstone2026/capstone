@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AuthDivider, AuthTextInput } from '@/components/auth/auth-ui';
 import { MascotMessage } from '@/components/mascot-message';
 import { pickPhoto, type PhotoSource } from '@/components/photo-picker';
+import { isBackendConfigured } from '@/config/api';
 import { importItemFromLink, isLikelyUrl, uploadItemPhoto } from '@/services/items';
 import type { PickedPhoto } from '@/services/photos';
 
@@ -46,8 +47,12 @@ export default function AddItemScreen() {
     setError(null);
     setIsUploading(true);
     try {
-      await uploadItemPhoto(photo);
-      router.back(); // the closet reloads when it comes back into view
+      const itemId = await uploadItemPhoto(photo);
+      if (isBackendConfigured) {
+        router.push({ pathname: '/confirm-item/[id]', params: { id: itemId } });
+      } else {
+        router.back(); // nothing was saved, so there's nothing to check
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {

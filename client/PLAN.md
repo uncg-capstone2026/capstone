@@ -31,9 +31,10 @@ The client and server currently disagree on almost every detail:
 Clothing photos live in AWS S3. The client uploads the original photo, and the server cuts the piece out and stores the cutout in S3 as well (`Item.imageKey` for the original, `Item.cutoutKey` for the cutout).
 
 - [ ] Server: `getDownloadUrl` signs for 5 minutes, which will break the app's cached images. Use a longer expiry or a CloudFront URL.
-- [ ] Client: remove the "backend routes not built yet" TODO above `uploadItemPhoto`, and test the upload end to end against Railway.
+- [ ] Client: Test the upload end to end against Railway.
 - [ ] Adding items from a link (the client calls `importItemFromLink`, currently a "coming soon" stub): a route that fetches the product page, saves the product image to S3 and returns details for the user to confirm.
-- [ ] Client: a "confirm details" screen after adding, where the user checks what StyleMe filled in.
+- [ ] Client: once `importItemFromLink` returns an item id, open the confirm screen (`src/app/confirm-item/[id].tsx`) for it, as adding from a photo does.
+- [ ] If the app is closed on the confirm screen, the item stays in the closet unchecked (and untagged until tagging is wired in). Later, an `isConfirmed` flag on `Item` (hidden from `GET /api/items` until Save) would stop that.
 
 ### Item details screen
 
@@ -44,7 +45,6 @@ Tapping an item in the closet opens `src/app/item/[id].tsx`. The screen is built
 - [ ] Server: build `GET /api/items/:id/color-grid` for the color dropper → `{ width, height, pixels }`. Use sharp to shrink the cutout (or the original if there's no cutout) to about 64 px on the longest side, keeping its aspect ratio. `pixels` is row-major, `width * height` long, each `"#RRGGBB"`, or `null` where alpha is below 50%. Same ownership check as the other `:id` routes (404). The app loads it once when the dropper is turned on and reads colors from it locally.
 - [ ] Client: an outfit details screen. Outfit chips open `src/app/outfit/[id].tsx`, which is a "coming soon" placeholder for now.
 - [ ] Server: `PATCH /api/items/:id` accepts any `type` up to 50 characters, but the Stylist search matches `type` exactly against `CLOTHING_TYPES` in `server/src/gemini/constants.ts`. Validate `type` against that list, and make the list available to the app (send it, or add `GET /api/items/types`).
-- [ ] Client: the "confirm details" screen (section 4) can now show the AI-filled name and tags for the user to check. `extractImageAttributes`' comment says "the user reviews them before saving".
 
 - [ ] Seed a few tagged items for the test account. Items added from a photo have no tags yet, so the closet filters and details screen need seeded data to test against.
 
@@ -104,7 +104,11 @@ Outfit suggestions should take the weather into account. Weather data comes from
 The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The user picks any upcoming day (defaulting to today), sees that day's weather, types where they're headed, and taps "Style my outfit →".
 
 ### Client
-- [ ] The results view (the chat showing the outfits) once the server route exists. Show up to 3 outfits, each with its items' images (and a reason, if the server adds one), and replace the `styleOutfit` stub in `src/services/stylist.ts`.
+The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" opens it, and it shows one outfit at a time as a flat-lay, with "Not for me" and "Looks right". Until the routes below exist, `USE_STYLIST_FIXTURE` in `src/services/stylist.ts` builds the outfit from the user's own closet (the first top and bottoms, or a one-piece, plus shoes and an accessory), and accepting or rejecting does nothing.
+
+- [ ] Switch `USE_STYLIST_FIXTURE` off once the three routes below are live.
+- [ ] The try-on screen (`src/app/try-on.tsx`, "See it on your photo") and Style Preferences (`src/app/style-preferences.tsx`, "See what was remembered") are "coming soon" placeholders.
+- [ ] "Open the outfit" goes to `src/app/outfit/[id].tsx`, which is still a placeholder (section 4).
 
 ### Server
 PR #24 added the building blocks in `server/src/gemini/`: `QueryExpansionService` turns the request into garment types plus search text and embeds it, `OutfitPlanningService.findCandidates` finds the closest closet items with pgvector, and `OUTFIT_SELECTION_PROMPT` with `buildOutfitSelectionSchema(ids)` is ready for picking outfits. Nothing connects them yet.
@@ -115,7 +119,10 @@ PR #24 added the building blocks in `server/src/gemini/`: `QueryExpansionService
 - [ ] `findCandidates` ignores the `season`, `formality`, `preferred_colors` and `exclude_colors` the query expansion returns. Decide whether to filter or rank by them.
 - [ ] `findClosestItems` must skip items with `excludeFromSuggestions` once that column exists (its comment notes this; see "Wear tracking" in section 4).
 - [ ] Return errors as 503 `{ message }`, like weather, instead of the raw Gemini message the test routes send as a 400.
-- [ ] Agree the response shape with the client. The selection schema returns up to 3 outfits, each a list of item ids.
+- [ ] Response shape, agreed with the client (`OutfitSuggestion` in `src/services/stylist.ts`): `POST /api/stylist/outfit { date, occasion, excludeSuggestionIds }` returns **one** outfit, `{ suggestionId, name, reasons, items: { id, name, category, type, imageUrl }[] }`. `category` uses the app's names (as `GET /api/items` does), `imageUrl` is signed like the closet's, and `excludeSuggestionIds` lists outfits already shown, for "Try another suggestion". `suggestionId` only has to identify the suggestion for the accept and feedback routes, since nothing is saved until then.
+- [ ] Extend `buildOutfitSelectionSchema` and `OUTFIT_SELECTION_PROMPT` to return a short outfit `name` and 2-4 short `reasons` (weather, occasion, the user's preferences).
+- [ ] `POST /api/stylist/outfit/accept { suggestionId, itemIds, name, eventName, date }` → `{ outfitId }`. It creates the `Outfit` with its `OutfitItem`s and a `CalendarEntry` with `eventName` for `date`, and logs the accept so later suggestions can learn from it. Check every item id belongs to the user. `OutfitSlot` only has `top`, `bottom`, `shoes` and `accessory`, so add `outerwear` and `onepiece` (with a migration).
+- [ ] `POST /api/stylist/outfit/feedback { suggestionId, itemIds, feedback }` → 204. It saves the user's answer ("What would you rather wear?") to Style Preferences, which needs a new model, and the outfit prompt should use those preferences.
 
 ## 8. AI (Gemini) setup and cleanup
 
@@ -147,6 +154,6 @@ What the client needs, split by whether it can be done now.
 
 ### Needs a server decision first
 - [ ] The link-import route (section 4), so `importItemFromLink` can go live.
-- [ ] The outfit route's response shape (section 7), so the Stylist results view can be built.
+- [ ] The Stylist routes (section 7), so the suggestion screen can stop using the fixture.
 - [ ] Wiring AI tagging into adding an item (section 4), so the "confirm details" screen has tags to show.
 - [ ] Outfit routes (there are none yet), so the outfit details screen can replace the `src/app/outfit/[id].tsx` placeholder.

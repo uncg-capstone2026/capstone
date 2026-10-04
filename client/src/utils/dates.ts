@@ -35,3 +35,10 @@ export function formatDayLabel(date: Date): string {
   if (toDateKey(date) === toDateKey(addDays(new Date(), 1))) return `Tomorrow · ${label}`;
   return label;
 }
+
+// The reverse of toDateKey: a local YYYY-MM-DD back to midnight that day. Invalid keys give today.
+export function fromDateKey(key: string | undefined): Date {
+  const match = key?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return startOfToday();
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}

@@ -1,6 +1,7 @@
 import { isBackendConfigured } from '@/config/api';
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
 import { uploadToS3, type PickedPhoto } from '@/services/photos';
+import { formatTag } from '@/utils/format';
 
 export type ClothingCategory =
   | 'tops'
@@ -137,10 +138,70 @@ export const CLOTHING_TYPE_OPTIONS = [
 
 export type ClothingType = (typeof CLOTHING_TYPE_OPTIONS)[number]['value'];
 
+// The category each type belongs to, so picking a type can fill in the category. A copy of
+// CATEGORY_BY_TYPE in server/src/gemini/constants.ts, using the app's category names.
+export const CATEGORY_BY_TYPE: Record<ClothingType, ClothingCategory> = {
+  't-shirt': 'tops',
+  'tank-top': 'tops',
+  blouse: 'tops',
+  'button-up-shirt': 'tops',
+  'long-sleeve-shirt': 'tops',
+  sweater: 'tops',
+  hoodie: 'tops',
+  cardigan: 'tops',
+  jeans: 'bottoms',
+  'dress-pants': 'bottoms',
+  'sweat-pants': 'bottoms',
+  leggings: 'bottoms',
+  shorts: 'bottoms',
+  skirt: 'bottoms',
+  dress: 'one-piece',
+  blazer: 'outerwear',
+  jacket: 'outerwear',
+  coat: 'outerwear',
+  sneakers: 'shoes',
+  boots: 'shoes',
+  heels: 'shoes',
+  flats: 'shoes',
+  sandals: 'shoes',
+  hat: 'accessories',
+};
+
+// The values the AI tags pattern, season and formality with. Copies of PATTERNS, SEASONS and
+// FORMALITY_LEVELS in server/src/gemini/constants.ts: keep them in sync.
+const PATTERNS = ['solid', 'striped', 'plaid', 'floral', 'graphic', 'polka-dot', 'camo', 'other'];
+const SEASONS = ['spring', 'summer', 'fall', 'winter'];
+const FORMALITY_LEVELS = [
+  'athletic',
+  'casual',
+  'smart-casual',
+  'business-casual',
+  'business-formal',
+  'cocktail',
+  'formal',
+];
+
+// Material is free text, so these are only suggestions; the dropdown also takes a custom value.
+const COMMON_MATERIALS = ['cotton', 'denim', 'linen', 'wool', 'cashmere', 'silk', 'polyester', 'leather', 'suede', 'knit'];
+
+const toOptions = (values: string[]) => values.map((value) => ({ value, label: formatTag(value) }));
+
+export const PATTERN_OPTIONS = toOptions(PATTERNS);
+export const SEASON_OPTIONS = toOptions(SEASONS);
+export const FORMALITY_OPTIONS = toOptions(FORMALITY_LEVELS);
+export const MATERIAL_OPTIONS = toOptions(COMMON_MATERIALS);
+
 export function filterItems(items: ClosetItem[], filter: ClosetFilter): ClosetItem[] {
   if (filter === 'all') return items;
   if (filter === 'favorites') return items.filter((item) => item.isFavorite);
   return items.filter((item) => item.category === filter);
+}
+
+// The least the stylist needs for an outfit: a top and bottoms, or a one-piece, plus shoes.
+// Matches "A complete outfit" in server/src/gemini/outfit-planning/prompt.ts.
+export function canBuildOutfit(items: ClosetItem[]): boolean {
+  const has = (category: ClothingCategory) => items.some((item) => item.category === category);
+  return ((has('tops') && has('bottoms')) || has('one-piece')) && has('shoes');
 }
 
 // Until EXPO_PUBLIC_API_URL is set, the closet is empty.
