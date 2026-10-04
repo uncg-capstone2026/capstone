@@ -23,6 +23,12 @@ export class ItemsController {
     return this.items.getDetails(userId, id);
   }
 
+  // GET /api/items/:id/color-grid -> { width, height, pixels } for the color dropper
+  @Get(':id/color-grid')
+  colorGrid(@CurrentUserId() userId: User['id'], @Param('id') id: string) {
+    return this.items.getColorGrid(userId, id);
+  }
+
   // PATCH /api/items/:id { ...fields to change } -> the updated item
   @Patch(':id')
   update(
