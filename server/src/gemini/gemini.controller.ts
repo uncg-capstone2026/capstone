@@ -15,6 +15,10 @@ export class GeminiController {
   constructor(private readonly imageProcessing: ImageProcessingService, private readonly queryExpansion: QueryExpansionService)
   {}
 
+  // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+  // Manual Bruno test routes. Upload and outfit planning call the services directly.
+
+  // Test expandQuery
   @Post('expand-query')
   async expandQuery(@Body() body: { userRequest: string })
   {
@@ -25,7 +29,7 @@ export class GeminiController {
     }
   }
 
-  // DELETE LATER: temporary route for manually testing expandAndEmbedQuery from Bruno
+  // Test expandAndEmbedQuery
   @Post('expand-and-embed')
   async expandAndEmbed(@Body() body: { userRequest: string })
   {
@@ -36,7 +40,7 @@ export class GeminiController {
     }
   }
 
-  // DELETE LATER: temporary route for manually testing embedImage from Bruno
+  // Test embedImage (multipart, file field "image")
   @Post('embed-image')
   @UseInterceptors(FileInterceptor('image'))
   async embedImage(@UploadedFile() file?: { buffer: Buffer; mimetype: string })
@@ -50,7 +54,7 @@ export class GeminiController {
     }
   }
 
-  // DELETE LATER: temporary route for manually testing extractImageAttributes from Bruno
+  // Test extractImageAttributes (multipart, file field "image")
   @Post('image-attributes')
   @UseInterceptors(FileInterceptor('image'))
   async imageAttributes(@UploadedFile() file?: { buffer: Buffer; mimetype: string })
@@ -65,4 +69,6 @@ export class GeminiController {
       throw new BadRequestException((err as Error).message);
     }
   }
+
+  // ==================== END TEST / DEBUG ====================
 }
