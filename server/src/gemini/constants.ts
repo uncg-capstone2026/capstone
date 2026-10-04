@@ -52,6 +52,10 @@ export const EMBEDDABLE_IMAGE_TYPES = ['image/png', 'image/jpeg'] as const;
 // How many closest closet items to keep for each expanded item.
 export const CANDIDATES_PER_TYPE = 5;
 
+// Most candidate items (and so photos) sent to Gemini in one outfit request.
+// Keeps memory use and the inline request size bounded.
+export const MAX_OUTFIT_CANDIDATES = 25;
+
 export const PATTERNS = [
   'solid',
   'striped',
@@ -63,8 +67,12 @@ export const PATTERNS = [
   'other',
 ] as const;
 
+export type Pattern = (typeof PATTERNS)[number];
+
 // Matches the Fit enum in prisma/schema.prisma.
 export const FITS = ['Slim', 'Regular', 'Relaxed', 'Oversized'] as const;
+
+export type FitValue = (typeof FITS)[number];
 
 // Matches the Category enum in prisma/schema.prisma.
 export type Category =

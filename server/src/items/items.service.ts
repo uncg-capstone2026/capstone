@@ -2,9 +2,14 @@ import { BadRequestException, Injectable, Logger, NotFoundException } from '@nes
 import type { Item, Prisma, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
+import { ImageProcessingService } from '../gemini/image-processing/service';
+import { mimeTypeForKey } from '../gemini/helpers';
 import { CutoutService } from './cutout.service';
 import type { UpdateItemDto } from './items.dto';
 import { CATEGORY_TO_CLIENT, FIT_TO_CLIENT, categoryFromClient, fitFromClient } from './item-mappings';
+
+// The image the AI steps send to Gemini.
+type AiImage = { image: Buffer; mimeType: string };
 
 @Injectable()
 export class ItemsService {
@@ -14,6 +19,7 @@ export class ItemsService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     private readonly cutout: CutoutService,
+    private readonly imageProcessing: ImageProcessingService,
   ) {}
 
   // Only the signed-in user's items, newest first.
@@ -105,9 +111,18 @@ export class ItemsService {
       data: { userId, imageKey: key, colorHex: [] },
     });
 
-    await this.addCutout(item.id, key);
+    const cutoutPng = await this.addCutout(item.id, key);
 
-    // Later: AI-tag the item here (category, type, colors, fit, name).
+    // AI steps (Gemini embedding + tagging): independent, so they run in parallel
+    // on the same image. Each catches its own errors, so the item is still
+    // created if either fails; missing embeddings/tags can be backfilled later.
+    const aiImage = await this.loadAiImage(item.id, key, cutoutPng);
+    if (aiImage) {
+      await Promise.all([
+        this.addEmbedding(item.id, aiImage),
+        this.addAttributes(item.id, aiImage),
+      ]);
+    }
 
     return { itemId: item.id };
   }
@@ -121,15 +136,107 @@ export class ItemsService {
 
   // Removes the background and saves the cutout as a transparent PNG next to the original.
   // If anything fails, the item simply keeps showing the original photo.
-  private async addCutout(itemId: Item['id'], key: string) {
+  // Returns the cutout so later steps can reuse it, or null if it failed.
+  private async addCutout(itemId: Item['id'], key: string): Promise<Buffer | null> {
     try {
       const original = await this.s3.getObjectBuffer(key);
       const cutoutPng = await this.cutout.removeBackground(original);
       const cutoutKey = key.replace(/\.(jpg|png|webp)$/, '-cutout.png');
       await this.s3.putObject(cutoutKey, cutoutPng, 'image/png');
       await this.prisma.item.update({ where: { id: itemId }, data: { cutoutKey } });
+      return cutoutPng;
     } catch (err) {
       this.logger.warn(`Cutout failed for item ${itemId}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  // AI (shared input): the image both AI steps read. The cutout if there is one
+  // (already in memory), otherwise the original if it's PNG/JPEG. null means
+  // there's nothing Gemini accepts, so both AI steps are skipped.
+  private async loadAiImage(
+    itemId: Item['id'],
+    key: string,
+    cutoutPng: Buffer | null,
+  ): Promise<AiImage | null> {
+    if (cutoutPng) return { image: cutoutPng, mimeType: 'image/png' };
+
+    const mimeType = mimeTypeForKey(key);
+    if (!mimeType) {
+      this.logger.warn(`AI steps skipped for item ${itemId}: ${key} is not PNG or JPEG`);
+      return null;
+    }
+    try {
+      return { image: await this.s3.getObjectBuffer(key), mimeType };
+    } catch (err) {
+      this.logger.warn(`AI steps skipped for item ${itemId}: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  // AI (Gemini embedding): turns the item's photo into a 768-number vector so the
+  // Stylist can find it by meaning, via ImageProcessingService.embedImage, and
+  // saves it to Item.embedding. If anything fails, the item is saved without one
+  // and the Stylist skips it.
+  private async addEmbedding(itemId: Item['id'], { image, mimeType }: AiImage) {
+    // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+    const debugStartedAt = Date.now();
+    this.logger.log(`[DEBUG AI] embedding start item=${itemId} mimeType=${mimeType} size=${Math.round(image.length / 1024)}KB`);
+    // ==================== END TEST / DEBUG ====================
+    try {
+      const embedding = await this.imageProcessing.embedImage(image, mimeType);
+      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+      this.logger.log(`[DEBUG AI] embedding ok item=${itemId} in ${Date.now() - debugStartedAt}ms (dimensions=${embedding.length})`);
+      // ==================== END TEST / DEBUG ====================
+      // Prisma can't write the vector type, so it goes in as '[0.1,...]' text and is cast in SQL.
+      const vector = `[${embedding.join(',')}]`;
+      await this.prisma.$executeRaw`UPDATE "Item" SET embedding = ${vector}::vector WHERE id = ${itemId}`;
+    } catch (err) {
+      this.logger.warn(`Embedding failed for item ${itemId}: ${(err as Error).message}`);
+      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+      this.debugLogAiError('embedding', itemId, err, debugStartedAt);
+      // ==================== END TEST / DEBUG ====================
+    }
+  }
+
+  // AI (Gemini tagging): reads the photo and fills in name, type, category, colors,
+  // pattern, material, season, formality and fit via
+  // ImageProcessingService.extractImageAttributes. If anything fails, the item keeps
+  // its defaults and the user (or a backfill) fills them in.
+  private async addAttributes(itemId: Item['id'], { image, mimeType }: AiImage) {
+    // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+    const debugStartedAt = Date.now();
+    this.logger.log(`[DEBUG AI] tagging start item=${itemId} mimeType=${mimeType} size=${Math.round(image.length / 1024)}KB`);
+    // ==================== END TEST / DEBUG ====================
+    try {
+      const attrs = await this.imageProcessing.extractImageAttributes(image, mimeType);
+      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+      this.logger.log(`[DEBUG AI] tagging ok item=${itemId} in ${Date.now() - debugStartedAt}ms: ${JSON.stringify(attrs)}`);
+      // ==================== END TEST / DEBUG ====================
+
+      // Same length limits as editing an item (items.dto.ts).
+      const name = attrs.name?.trim().slice(0, 60);
+      const material = attrs.material?.trim().slice(0, 50) || null;
+
+      await this.prisma.item.update({
+        where: { id: itemId },
+        data: {
+          ...(name ? { name } : {}), // empty name keeps the "New item" default
+          type: attrs.type,
+          category: attrs.category,
+          colorHex: attrs.colorHex.slice(0, 3),
+          pattern: attrs.pattern ?? null,
+          material,
+          season: attrs.season ?? null,
+          formality: attrs.formality ?? null,
+          fit: attrs.fit ?? null,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Tagging failed for item ${itemId}: ${(err as Error).message}`);
+      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+      this.debugLogAiError('tagging', itemId, err, debugStartedAt);
+      // ==================== END TEST / DEBUG ====================
     }
   }
 
@@ -161,4 +268,40 @@ export class ItemsService {
       createdAt: item.createdAt,
     };
   }
+
+  // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+
+  // GET /api/items/:id/embedding — whether the item has an embedding saved.
+  // Prisma can't read the vector column, so this checks it with raw SQL.
+  async hasEmbedding(userId: User['id'], id: string) {
+    await this.findOwned(userId, id);
+    const [row] = await this.prisma.$queryRaw<{ hasEmbedding: boolean }[]>`
+      SELECT embedding IS NOT NULL AS "hasEmbedding" FROM "Item" WHERE id = ${id}`;
+    return { itemId: id, hasEmbedding: row.hasEmbedding };
+  }
+
+  // Logs everything about a failed AI step: timing, HTTP status, the full
+  // err.cause chain (where "fetch failed" hides ECONNRESET etc.) and the stack.
+  // Never logs the image or request body.
+  private debugLogAiError(step: string, itemId: Item['id'], err: unknown, startedAt: number) {
+    const e = err as Error & { status?: unknown; code?: unknown };
+    const lines = [
+      `[DEBUG AI] ${step} FAILED item=${itemId} after ${Date.now() - startedAt}ms`,
+      `  error: ${e?.name}: ${e?.message} (status=${e?.status ?? '-'}, code=${e?.code ?? '-'})`,
+    ];
+
+    let cause = (err as { cause?: unknown })?.cause;
+    for (let depth = 0; cause && depth < 5; depth++) {
+      const c = cause as Error & Record<string, unknown>;
+      const details = ['code', 'errno', 'syscall', 'address', 'port']
+        .filter((k) => c[k] !== undefined)
+        .map((k) => `${k}=${String(c[k])}`)
+        .join(', ');
+      lines.push(`  cause[${depth}]: ${c.name ?? typeof cause}: ${c.message ?? String(cause)}${details ? ` (${details})` : ''}`);
+      cause = c.cause;
+    }
+
+    this.logger.error(lines.join('\n'), e?.stack);
+  }
+  // ==================== END TEST / DEBUG ====================
 }

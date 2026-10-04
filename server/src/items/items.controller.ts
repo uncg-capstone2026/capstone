@@ -58,4 +58,14 @@ export class ItemsController {
   ) {
     return this.items.createFromPhoto(userId, body.key);
   }
+
+  // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+
+  // GET /api/items/:id/embedding -> { itemId, hasEmbedding }
+  @Get(':id/embedding')
+  hasEmbedding(@CurrentUserId() userId: User['id'], @Param('id') id: string) {
+    return this.items.hasEmbedding(userId, id);
+  }
+
+  // ==================== END TEST / DEBUG ====================
 }
