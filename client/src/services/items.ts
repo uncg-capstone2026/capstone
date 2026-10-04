@@ -214,9 +214,10 @@ function itemError(e: unknown, fallback: string): Error {
 //   1. POST /api/items/photo/upload-url { contentType, fileName } -> { uploadUrl, key }
 //   2. PUT the image bytes straight to S3 at uploadUrl
 //   3. POST /api/items/photo { key } -> { itemId }
-//      (backend saves imageKey, then cuts the piece out and stores it in S3 as cutoutKey.
-//       This takes a few seconds. If the cutout fails, the item keeps the original photo.
-//       AI tagging of category, color and fit comes later, so new items are untagged.)
+//      (backend saves imageKey, cuts the piece out and stores it in S3 as cutoutKey, then
+//       AI-tags it (name, type, category, colors, pattern, material, season, formality, fit)
+//       and embeds it for the stylist. This takes a few seconds. Each step can fail on its
+//       own: the item is still created, keeping the original photo or untagged fields.)
 // The server only accepts JPEG, PNG and WebP (400 otherwise).
 // Until EXPO_PUBLIC_API_URL is set, this resolves locally so the flow stays walkable.
 export async function uploadItemPhoto(photo: PickedPhoto): Promise<string> {
