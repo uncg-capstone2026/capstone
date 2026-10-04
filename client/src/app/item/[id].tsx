@@ -23,9 +23,7 @@ import {
   type ClothingItemChanges,
   type ClothingItemDetails,
 } from '@/services/items';
-import { normalizeHex } from '@/utils/colors';
 
-const MAX_COLORS = 3;
 const MAX_NAME_LENGTH = 60;
 const MAX_CUT_LENGTH = 50;
 
@@ -87,16 +85,6 @@ export default function ItemDetailsScreen() {
     }
   }
 
-  function addColor(hex: string) {
-    if (!item) return;
-    const color = normalizeHex(hex);
-    if (item.colorHex.includes(color)) return;
-    // Full set: the new color replaces the last one.
-    const colors =
-      item.colorHex.length < MAX_COLORS ? [...item.colorHex, color] : [...item.colorHex.slice(0, MAX_COLORS - 1), color];
-    save({ colorHex: colors });
-  }
-
   async function remove() {
     if (!item) return;
     await deleteItem(item.id);
@@ -149,7 +137,7 @@ export default function ItemDetailsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerClassName="gap-6 px-6 pb-12 pt-2" keyboardShouldPersistTaps="handled">
-          <GarmentCard itemId={item.id} imageUrl={item.imageUrl} name={item.name} onPickColor={addColor} />
+          <GarmentCard itemId={item.id} imageUrl={item.imageUrl} name={item.name} />
 
           <ItemName name={item.name} onRename={(name) => save({ name })} />
 
