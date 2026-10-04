@@ -1,10 +1,10 @@
 import { Type, type Schema } from '@google/genai';
 
-// Javier's buildOutfitSelectionSchema plus a name. The enum limits the model
-// to the candidate ids it was sent. An empty outfit means no complete outfit
-// could be built; reason then says why. outfit comes first so the name and
-// reason are written about the pieces already chosen.
-export function buildNamedOutfitSchema(ids: string[]): Schema
+// Javier's buildOutfitSelectionSchema, with name and a list of reasons. The
+// enum limits the model to the candidate ids it was sent. An empty outfit
+// means no complete outfit could be built; reasons then says why. outfit
+// comes first so the name and reasons describe the pieces already chosen.
+export function buildOutfitSuggestionSchema(ids: string[]): Schema
 {
   return {
     type: Type.OBJECT,
@@ -16,9 +16,14 @@ export function buildNamedOutfitSchema(ids: string[]): Schema
         items: { type: Type.STRING, enum: [...ids] },
       },
       name: { type: Type.STRING },
-      reason: { type: Type.STRING },
+      reasons: {
+        type: Type.ARRAY,
+        minItems: '1',
+        maxItems: '4',
+        items: { type: Type.STRING },
+      },
     },
-    required: ['outfit', 'name', 'reason'],
-    propertyOrdering: ['outfit', 'name', 'reason'],
+    required: ['outfit', 'name', 'reasons'],
+    propertyOrdering: ['outfit', 'name', 'reasons'],
   };
 }
