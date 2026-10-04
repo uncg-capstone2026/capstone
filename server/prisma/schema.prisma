@@ -31,9 +31,10 @@ enum NotificationType {
 }
 
 enum Fit {
+  Fitted
   Slim
   Regular
-  Relaxed
+  Loose
   Oversized
 }
 
@@ -42,6 +43,8 @@ enum OutfitSlot {
   bottom
   shoes
   accessory
+  outerwear
+  onepiece
 }
 
 model User {
