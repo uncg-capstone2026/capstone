@@ -7,6 +7,7 @@ import { mimeTypeForKey } from '../gemini/helpers';
 import { CutoutService } from './cutout.service';
 import type { UpdateItemDto } from './items.dto';
 import { CATEGORY_TO_CLIENT, FIT_TO_CLIENT, categoryFromClient, fitFromClient, fitFromAi } from './item-mappings';
+import { buildColorGrid } from './color-grid';
 
 // The image the AI steps send to Gemini.
 type AiImage = { image: Buffer; mimeType: string };
@@ -35,6 +36,14 @@ export class ItemsService {
   async getDetails(userId: User['id'], id: string) {
     const item = await this.findOwned(userId, id);
     return this.toItemDetails(item);
+  }
+
+  // GET /api/items/:id/color-grid — the color dropper's grid, built from the
+  // cutout (or the original if there's no cutout yet).
+  async getColorGrid(userId: User['id'], id: string) {
+    const item = await this.findOwned(userId, id);
+    const image = await this.s3.getObjectBuffer(item.cutoutKey ?? item.imageKey);
+    return buildColorGrid(image);
   }
 
   // PATCH /api/items/:id — change only the fields that were sent.
