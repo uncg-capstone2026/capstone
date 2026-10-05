@@ -2,9 +2,11 @@ import { ApiError, apiPost, SessionExpiredError } from '@/services/api';
 import { listItems, type ClothingCategory } from '@/services/items';
 import { toDateKey } from '@/utils/dates';
 
-// The server routes below aren't built yet (see PLAN.md section 7). Until they are, the
-// fixture builds a suggestion from the user's own closet so the screen can be tested.
-const USE_STYLIST_FIXTURE = true;
+// POST /api/stylist/outfit is live. The accept and feedback routes aren't built yet (see
+// PLAN.md section 7), so those two still fake success. Set USE_OUTFIT_FIXTURE to true to build
+// suggestions from the user's own closet instead, without calling the AI.
+const USE_OUTFIT_FIXTURE = false;
+const USE_ACCEPT_FEEDBACK_FIXTURE = true;
 
 export type OutfitRequest = {
   date: Date;
@@ -15,7 +17,7 @@ export type OutfitRequest = {
 export type SuggestedPiece = {
   id: string; // Item id
   name: string;
-  category: ClothingCategory;
+  category: ClothingCategory | null; // null if the item hasn't been tagged
   type: string | null;
   imageUrl: string; // signed URL for the cutout, or the original until it's ready
 };
@@ -43,7 +45,7 @@ export type RejectOutfitRequest = {
 };
 
 export async function styleOutfit(request: OutfitRequest): Promise<OutfitSuggestion> {
-  if (USE_STYLIST_FIXTURE) return fixtureSuggestion(request);
+  if (USE_OUTFIT_FIXTURE) return fixtureSuggestion(request);
   try {
     return await apiPost<OutfitSuggestion>('/api/stylist/outfit', {
       date: toDateKey(request.date),
@@ -58,7 +60,7 @@ export async function styleOutfit(request: OutfitRequest): Promise<OutfitSuggest
 // POST /api/stylist/outfit/accept: saves the Outfit and a CalendarEntry for the day, and logs
 // the accept so StyleMe learns what worked.
 export async function acceptOutfit(request: AcceptOutfitRequest): Promise<{ outfitId: string }> {
-  if (USE_STYLIST_FIXTURE) {
+  if (USE_ACCEPT_FEEDBACK_FIXTURE) {
     await wait(400);
     return { outfitId: `fixture-outfit-${request.suggestionId}` };
   }
@@ -74,7 +76,7 @@ export async function acceptOutfit(request: AcceptOutfitRequest): Promise<{ outf
 
 // POST /api/stylist/outfit/feedback: saves the answer to Style Preferences.
 export async function rejectOutfit(request: RejectOutfitRequest): Promise<void> {
-  if (USE_STYLIST_FIXTURE) {
+  if (USE_ACCEPT_FEEDBACK_FIXTURE) {
     await wait(400);
     return;
   }
@@ -87,8 +89,12 @@ export async function rejectOutfit(request: RejectOutfitRequest): Promise<void> 
 
 function stylistError(e: unknown, fallback: string): Error {
   if (e instanceof SessionExpiredError) return e;
-  // 503 is the AI or weather service being down; its message is safe to show.
-  if (e instanceof ApiError && e.status === 503 && e.serverMessage) return new Error(e.serverMessage);
+  if (__DEV__) console.warn('Stylist request failed:', e instanceof ApiError ? `${e.status} ${e.serverMessage}` : e);
+  // 422 is the closet not having enough for an outfit, and 503 is the AI or weather service
+  // being down. Both messages are written for the user.
+  if (e instanceof ApiError && (e.status === 422 || e.status === 503) && e.serverMessage) {
+    return new Error(e.serverMessage);
+  }
   return new Error(fallback);
 }
 

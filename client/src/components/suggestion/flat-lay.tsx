@@ -52,9 +52,11 @@ export function FlatLay({ items, width, height }: FlatLayProps) {
   const isOnePiece = items.some((item) => item.category === 'one-piece' || item.category === 'sets');
   const layout = isOnePiece ? ONE_PIECE_LAYOUT : SEPARATES_LAYOUT;
 
-  // One piece per slot. Any extra (e.g. a second accessory) is still in the thumbnails.
+  // One piece per slot. Any extra (e.g. a second accessory), or an untagged piece with no slot,
+  // is still in the thumbnails.
   const placed = new Map<Slot, SuggestedPiece>();
   for (const item of items) {
+    if (!item.category) continue;
     const slot = SLOT_BY_CATEGORY[item.category];
     if (!placed.has(slot)) placed.set(slot, item);
   }
