@@ -12,11 +12,12 @@ export const CATEGORY_TO_CLIENT: Record<Category, string> = {
   Sets: 'sets',
 };
 
-// Lowercase to match how categories look in the app (confirm with Emma).
+// Lowercase, matching ClothingFit in the app (client/src/services/items.ts).
 export const FIT_TO_CLIENT: Record<Fit, string> = {
+  Fitted: 'fitted',
   Slim: 'slim',
   Regular: 'regular',
-  Relaxed: 'relaxed',
+  Loose: 'loose',
   Oversized: 'oversized',
 };
 
@@ -33,3 +34,17 @@ function fromClient<K extends string>(map: Record<K, string>, value: string): K 
 
 export const categoryFromClient = (value: string) => fromClient(CATEGORY_TO_CLIENT, value);
 export const fitFromClient = (value: string) => fromClient(FIT_TO_CLIENT, value);
+
+// The AI's fit tag -> database value. Also accepts the older 'Relaxed' (now
+// 'Loose'), so tagging works whether or not FITS in gemini/constants.ts has
+// been updated yet. Anything unknown becomes null.
+const FIT_FROM_AI: Record<string, Fit> = {
+  Fitted: 'Fitted',
+  Slim: 'Slim',
+  Regular: 'Regular',
+  Loose: 'Loose',
+  Relaxed: 'Loose',
+  Oversized: 'Oversized',
+};
+export const fitFromAi = (value: string | null | undefined): Fit | null =>
+  (value && FIT_FROM_AI[value]) || null;
