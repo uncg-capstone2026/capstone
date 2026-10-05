@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ColorEditor, MAX_COLORS } from '@/components/confirm-item/color-editor';
+import { ColorEditor } from '@/components/confirm-item/color-editor';
 import { FitSlider } from '@/components/item-details/fit-slider';
 import { GarmentCard } from '@/components/item-details/garment-card';
 import { SelectField } from '@/components/item-details/select-field';
@@ -35,7 +35,6 @@ import {
   type ClothingItemDetails,
   type ClothingType,
 } from '@/services/items';
-import { normalizeHex } from '@/utils/colors';
 
 const MAX_NAME_LENGTH = 60;
 const MAX_TEXT_LENGTH = 50;
@@ -109,15 +108,6 @@ export default function ConfirmItemScreen() {
   function changeType(type: string | null) {
     const category = type ? CATEGORY_BY_TYPE[type as ClothingType] : undefined;
     edit(category ? { type, category } : { type });
-  }
-
-  // From the dropper. A full set has its last color replaced, as on the item details screen.
-  function addColor(hex: string) {
-    if (!draft) return;
-    const color = normalizeHex(hex);
-    if (draft.colorHex.includes(color)) return;
-    const colors = draft.colorHex;
-    edit({ colorHex: colors.length < MAX_COLORS ? [...colors, color] : [...colors.slice(0, MAX_COLORS - 1), color] });
   }
 
   async function save() {
@@ -217,7 +207,7 @@ export default function ConfirmItemScreen() {
             </MascotMessage>
 
             <View className="gap-2">
-              <GarmentCard itemId={item.id} imageUrl={item.imageUrl} name={draft.name} onPickColor={addColor} />
+              <GarmentCard itemId={item.id} imageUrl={item.imageUrl} name={draft.name} />
               <Pressable
                 onPress={() => confirmDiscard('retake')}
                 disabled={isBusy}

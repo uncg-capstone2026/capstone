@@ -1,4 +1,5 @@
 import { ColorPicker, Host } from '@expo/ui/swift-ui';
+import { labelsHidden } from '@expo/ui/swift-ui/modifiers';
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
@@ -34,7 +35,7 @@ export function ColorEditor({ colors, onChange, aiHint }: ColorEditorProps) {
       </View>
 
       {colors.length === 0 ? (
-        <Text className="font-body text-sm text-sage-500">No colors yet. Add one or use the dropper.</Text>
+        <Text className="font-body text-sm text-sage-500">No colors yet. Pick one below to add it.</Text>
       ) : (
         <View className="gap-2">
           {colors.map((hex, index) => (
@@ -59,8 +60,10 @@ export function ColorEditor({ colors, onChange, aiHint }: ColorEditorProps) {
 
       {colors.length < MAX_COLORS ? (
         <View className="flex-row items-center gap-3">
-          <Host matchContents>
+          {/* Fixed to the swatch size: without a label the native picker stretches across the row. */}
+          <Host style={{ width: 36, height: 36 }}>
             <ColorPicker
+              modifiers={[labelsHidden()]}
               selection={pending ?? '#9CAF88'}
               onSelectionChange={(value) => setPending(normalizeHex(value))}
             />

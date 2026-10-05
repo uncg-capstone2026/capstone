@@ -16,7 +16,7 @@ export function ColorSection({ colors, pattern }: ColorSectionProps) {
     <View className="gap-2">
       <Text className="font-label text-base text-sage-700">Color</Text>
       {colors.length === 0 ? (
-        <Text className="font-body text-sm text-sage-500">No colors yet — use the dropper.</Text>
+        <Text className="font-body text-sm text-sage-500">No colors yet.</Text>
       ) : (
         <View
           accessible

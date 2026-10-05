@@ -18,14 +18,13 @@ type GarmentCardProps = {
   itemId: string;
   imageUrl: string;
   name: string;
-  // Called with "#RRGGBB" when the user picks a color with the dropper.
-  onPickColor: (hex: string) => void;
 };
 
 // The item's cutout on a soft card, with the color dropper in the corner and its status bar below.
+// A picked color is only shown in the status bar; it isn't saved to the item.
 // The dropper reads colors from a small grid the server makes from the image (loaded once, the
 // first time it's turned on), so the ring can show the color under the finger with no requests.
-export function GarmentCard({ itemId, imageUrl, name, onPickColor }: GarmentCardProps) {
+export function GarmentCard({ itemId, imageUrl, name }: GarmentCardProps) {
   const [isOn, setIsOn] = useState(false);
   const [grid, setGrid] = useState<ItemColorGrid | null>(null);
   const [isLoadingGrid, setIsLoadingGrid] = useState(false);
@@ -84,7 +83,6 @@ export function GarmentCard({ itemId, imageUrl, name, onPickColor }: GarmentCard
     if (Platform.OS !== 'web') setHover(null);
     if (!color) return;
     setPicked(color);
-    onPickColor(color);
   }
 
   const canAim = isOn && grid !== null;
