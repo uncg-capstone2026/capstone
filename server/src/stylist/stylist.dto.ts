@@ -1,4 +1,6 @@
-import { IsOptional, IsString, Length, Matches } from 'class-validator';
+import {
+  ArrayMaxSize, IsArray, IsOptional, IsString, Length, Matches, MaxLength,
+} from 'class-validator';
 
 export class StyleOutfitDto {
   // Where they're headed or what they're going for.
@@ -10,4 +12,12 @@ export class StyleOutfitDto {
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'date must be in YYYY-MM-DD format' })
   date?: string;
+
+  // suggestionIds the user has already seen, for "Try another suggestion".
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(400, { each: true })
+  excludeSuggestionIds?: string[];
 }
