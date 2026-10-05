@@ -6,7 +6,7 @@ import { ImageProcessingService } from '../gemini/image-processing/service';
 import { mimeTypeForKey } from '../gemini/helpers';
 import { CutoutService } from './cutout.service';
 import type { UpdateItemDto } from './items.dto';
-import { CATEGORY_TO_CLIENT, FIT_TO_CLIENT, categoryFromClient, fitFromClient } from './item-mappings';
+import { CATEGORY_TO_CLIENT, FIT_TO_CLIENT, categoryFromClient, fitFromClient, fitFromAi } from './item-mappings';
 import { buildColorGrid } from './color-grid';
 
 // The image the AI steps send to Gemini.
@@ -238,8 +238,7 @@ export class ItemsService {
           material,
           season: attrs.season ?? null,
           formality: attrs.formality ?? null,
-          fit: attrs.fit ?? null,
-        },
+          fit: fitFromAi(attrs.fit),        },
       });
     } catch (err) {
       this.logger.warn(`Tagging failed for item ${itemId}: ${(err as Error).message}`);
