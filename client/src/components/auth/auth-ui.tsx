@@ -58,19 +58,12 @@ export function AuthDivider({ label = 'or continue with' }: { label?: string }) 
 
 type SocialButtonsProps = {
   label: string;
-  onApplePress: () => void;
   onGooglePress: () => void;
 };
 
-export function SocialButtons({ label, onApplePress, onGooglePress }: SocialButtonsProps) {
+export function SocialButtons({ label, onGooglePress }: SocialButtonsProps) {
   return (
     <View className="gap-3">
-      <Pressable
-        onPress={onApplePress}
-        className="flex-row items-center justify-center gap-2 rounded-xl bg-black py-3">
-        <Ionicons name="logo-apple" size={18} color="#fffdf9" />
-        <Text className="font-label text-base text-cream-50">{label} Apple</Text>
-      </Pressable>
       <Pressable
         onPress={onGooglePress}
         className="flex-row items-center justify-center gap-2 rounded-xl border border-sage-200 bg-cream-50 py-3">

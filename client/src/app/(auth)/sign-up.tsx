@@ -15,7 +15,6 @@ import { AuthCheckbox, AuthDivider, AuthTextInput, SocialButtons } from '@/compo
 import { PasswordStrength } from '@/components/auth/password-strength';
 import {
   TakenFieldError,
-  continueWithApple,
   continueWithGoogle,
   signUpWithPassword,
 } from '@/services/auth';
@@ -90,10 +89,10 @@ export default function SignUpScreen() {
     }
   }
 
-  async function handleSocialSignUp(provider: 'apple' | 'google') {
+  async function handleGoogleSignUp() {
     setError(null);
     try {
-      await (provider === 'apple' ? continueWithApple() : continueWithGoogle());
+      await continueWithGoogle();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     }
@@ -196,8 +195,7 @@ export default function SignUpScreen() {
 
             <SocialButtons
               label="Sign up with"
-              onApplePress={() => handleSocialSignUp('apple')}
-              onGooglePress={() => handleSocialSignUp('google')}
+              onGooglePress={handleGoogleSignUp}
             />
 
             <View className="flex-row items-center justify-center gap-1">
