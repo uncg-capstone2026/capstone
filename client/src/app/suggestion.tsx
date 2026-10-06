@@ -1,14 +1,14 @@
-import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DecisionButtons, INK, ResultNote, type DecisionResult } from '@/components/suggestion/decision-result';
 import { OutfitStage, SHEET_OVERLAP } from '@/components/suggestion/outfit-stage';
 import { PieceThumbnails } from '@/components/suggestion/piece-thumbnails';
 import { PromptSheet } from '@/components/suggestion/prompt-sheet';
 import { SelectedPieceBar } from '@/components/suggestion/selected-piece-bar';
+import { StylingLoader } from '@/components/suggestion/styling-loader';
 import { WhyPickedCard } from '@/components/suggestion/why-picked-card';
 import { useTemperatureUnit } from '@/hooks/use-temperature-unit';
 import { useWeather } from '@/hooks/use-weather';
@@ -38,6 +38,7 @@ export default function SuggestionScreen() {
   const [sheet, setSheet] = useState<'feedback' | 'occasion' | null>(null);
   const [result, setResult] = useState<DecisionResult | null>(null);
   const [outfitId, setOutfitId] = useState<string | null>(null);
+  const [isLoaderDone, setIsLoaderDone] = useState(false); // the loader has played through to 100%
 
   const { weather } = useWeather(date);
   const { unit } = useTemperatureUnit();
@@ -75,6 +76,7 @@ export default function SuggestionScreen() {
 
   function retry() {
     setLoadError(null);
+    setIsLoaderDone(false);
     setAttempt((n) => n + 1);
   }
 
@@ -82,14 +84,24 @@ export default function SuggestionScreen() {
     if (!suggestion) return;
     setExcludeIds((ids) => [...ids, suggestion.suggestionId]);
     setSuggestion(null);
+    setIsLoaderDone(false);
     setSelectedId(null);
     setIsColorPopoverOpen(false);
     setResult(null);
     setOutfitId(null);
   }
 
-  if (!suggestion) {
-    return <LoadingState error={loadError} onRetry={retry} onBack={goBack} />;
+  if (!suggestion || !isLoaderDone) {
+    return (
+      <StylingLoader
+        key={`${attempt}-${excludeIds.length}`}
+        ready={!!suggestion}
+        error={loadError}
+        onRetry={retry}
+        onBack={goBack}
+        onFinish={() => setIsLoaderDone(true)}
+      />
+    );
   }
 
   const itemIds = suggestion.items.map((item) => item.id);
@@ -210,38 +222,5 @@ export default function SuggestionScreen() {
         onSubmit={accept}
       />
     </View>
-  );
-}
-
-type LoadingStateProps = {
-  error: string | null;
-  onRetry: () => void;
-  onBack: () => void;
-};
-
-// While StyleMe builds the outfit, or if it couldn't.
-function LoadingState({ error, onRetry, onBack }: LoadingStateProps) {
-  return (
-    <SafeAreaView className="flex-1 items-center justify-center gap-4 bg-cream-100 px-8">
-      <Image
-        source={require('@/assets/images/styleme-mascot-thinking.png')}
-        contentFit="contain"
-        accessibilityIgnoresInvertColors
-        style={{ width: 96, height: 96 }}
-      />
-      <Text accessibilityLiveRegion="polite" className="text-center font-body text-base text-sage-700">
-        {error ?? 'StyleMe is putting your outfit together…'}
-      </Text>
-      {error ? (
-        <View className="items-center gap-2">
-          <Pressable onPress={onRetry} accessibilityRole="button" className="rounded-full bg-sage-500 px-6 py-3">
-            <Text className="font-label text-base text-cream-50">Try again</Text>
-          </Pressable>
-          <Pressable onPress={onBack} accessibilityRole="button" className="px-4 py-2">
-            <Text className="font-label text-base text-sage-600">Back</Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </SafeAreaView>
   );
 }
