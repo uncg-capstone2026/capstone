@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
-import { continueWithApple, continueWithGoogle, loginWithPassword, type LoginMode } from '@/services/auth';
+import { continueWithGoogle, loginWithPassword, type LoginMode } from '@/services/auth';
 import { formatPhone, toE164 } from '@/utils/validation';
 
 const CLOTHESLINE_SIDE_PADDING = 16; // 8px each side, matches the row's px-2
@@ -77,10 +77,10 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleSocialLogin(provider: 'apple' | 'google') {
+  async function handleGoogleLogin() {
     setError(null);
     try {
-      await (provider === 'apple' ? continueWithApple() : continueWithGoogle());
+      await continueWithGoogle();
       router.replace('/closet');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -189,8 +189,7 @@ export default function LoginScreen() {
 
             <SocialButtons
               label="Continue with"
-              onApplePress={() => handleSocialLogin('apple')}
-              onGooglePress={() => handleSocialLogin('google')}
+              onGooglePress={handleGoogleLogin}
             />
 
             <View className="flex-row items-center justify-center gap-1">

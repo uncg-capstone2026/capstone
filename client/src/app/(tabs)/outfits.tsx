@@ -3,16 +3,18 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ConfirmSheet } from '@/components/confirm-sheet';
 import { AllOutfitsCard } from '@/components/outfits/all-outfits-card';
 import { CollectionsGrid } from '@/components/outfits/collections-grid';
-import { DeleteCollectionSheet } from '@/components/outfits/delete-collection-sheet';
 import { FavoritesRow } from '@/components/outfits/favorites-row';
 import { PromptSheet } from '@/components/prompt-sheet';
 import { SessionExpiredError } from '@/services/api';
 import {
+  ALL_OUTFITS_ID,
   COLLECTION_NAME_MAX_LENGTH,
   createCollection,
   deleteCollection,
+  FAVORITES_ID,
   getOutfitsOverview,
   renameCollection,
   type OutfitCollection,
@@ -65,9 +67,10 @@ export default function OutfitsScreen() {
     setRenaming(null);
   }
 
-  async function remove(collection: OutfitCollection) {
-    await deleteCollection(collection.id);
-    const remaining = collections.filter((c) => c.id !== collection.id);
+  async function remove() {
+    if (!deleting) return;
+    await deleteCollection(deleting.id);
+    const remaining = collections.filter((c) => c.id !== deleting.id);
     updateCollections(() => remaining);
     setDeleting(null);
     if (remaining.length === 0) setIsEditing(false);
@@ -89,7 +92,7 @@ export default function OutfitsScreen() {
             <AllOutfitsCard
               count={overview.allOutfits.count}
               cover={overview.allOutfits.cover}
-              onPress={() => openCollection('all')}
+              onPress={() => openCollection(ALL_OUTFITS_ID)}
             />
 
             <View className="mt-2 flex-row items-center justify-between">
@@ -104,7 +107,7 @@ export default function OutfitsScreen() {
               ) : null}
             </View>
 
-            <FavoritesRow count={overview.favorites.count} onPress={() => openCollection('favorites')} />
+            <FavoritesRow count={overview.favorites.count} onPress={() => openCollection(FAVORITES_ID)} />
 
             <CollectionsGrid
               collections={collections}
@@ -142,7 +145,14 @@ export default function OutfitsScreen() {
         onCancel={() => setRenaming(null)}
         onSubmit={rename}
       />
-      <DeleteCollectionSheet collection={deleting} onCancel={() => setDeleting(null)} onDelete={remove} />
+      <ConfirmSheet
+        visible={deleting !== null}
+        title={`Delete “${deleting?.name}”?`}
+        message="The outfits in it stay in All saved outfits."
+        confirmLabel="Delete"
+        onCancel={() => setDeleting(null)}
+        onConfirm={remove}
+      />
     </SafeAreaView>
   );
 }

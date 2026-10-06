@@ -1,5 +1,6 @@
 import { ApiError, apiPost, SessionExpiredError } from '@/services/api';
 import { listItems, type ClosetItem, type ClothingCategory } from '@/services/items';
+import { saveFixtureOutfit } from '@/services/outfits';
 import { toDateKey } from '@/utils/dates';
 
 // POST /api/stylist/outfit is live. The accept and feedback routes aren't built yet (see
@@ -61,8 +62,16 @@ export async function styleOutfit(request: OutfitRequest): Promise<OutfitSuggest
 // the accept so StyleMe learns what worked.
 export async function acceptOutfit(request: AcceptOutfitRequest): Promise<{ outfitId: string }> {
   if (USE_ACCEPT_FEEDBACK_FIXTURE) {
-    await wait(400);
-    return { outfitId: `fixture-outfit-${request.suggestionId}` };
+    // Save it to the Outfits fixture so it shows up in All saved outfits.
+    const closet = await listItems();
+    const outfitId = `fixture-outfit-${request.suggestionId}-${Date.now()}`;
+    saveFixtureOutfit({
+      id: outfitId,
+      name: request.name,
+      isFavorite: false,
+      items: closet.filter((item) => request.itemIds.includes(item.id)).map(toSuggestedPiece),
+    });
+    return { outfitId };
   }
   try {
     return await apiPost<{ outfitId: string }>('/api/stylist/outfit/accept', {
@@ -142,13 +151,11 @@ function fixtureOutfit(closet: ClosetItem[], round = 0): SuggestedPiece[] | null
   const accessory = pick('accessories');
   const items = [...base, shoes, ...(accessory ? [accessory] : [])];
 
-  return items.map((item) => ({
-    id: item.id,
-    name: item.name,
-    category: item.category,
-    type: null,
-    imageUrl: item.imageUrl,
-  }));
+  return items.map(toSuggestedPiece);
+}
+
+function toSuggestedPiece(item: ClosetItem): SuggestedPiece {
+  return { id: item.id, name: item.name, category: item.category, type: null, imageUrl: item.imageUrl };
 }
 
 function wait(ms: number): Promise<void> {
