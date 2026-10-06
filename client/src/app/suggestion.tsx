@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { DecisionButtons, INK, ResultNote, type DecisionResult } from '@/components/suggestion/decision-result';
 import { OutfitStage, SHEET_OVERLAP } from '@/components/suggestion/outfit-stage';
 import { PieceThumbnails } from '@/components/suggestion/piece-thumbnails';
-import { PromptSheet } from '@/components/suggestion/prompt-sheet';
+import { PromptSheet } from '@/components/prompt-sheet';
 import { SelectedPieceBar } from '@/components/suggestion/selected-piece-bar';
 import { StylingLoader } from '@/components/suggestion/styling-loader';
 import { WhyPickedCard } from '@/components/suggestion/why-picked-card';

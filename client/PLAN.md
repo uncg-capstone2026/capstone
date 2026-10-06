@@ -120,6 +120,22 @@ The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" ope
 - [ ] `ai/Prompts.md` has older drafts that differ from the prompts in `server/src/gemini/*/prompt.ts`. Update or delete it so there's one source.
 - [ ] Later: the memory prompt noted at the end of `ai/Prompts.md` ("extract/attach memories relevant to the original user prompt").
 
+## 9. Outfits and collections
+
+The Outfits tab (`src/app/(tabs)/outfits.tsx`) is built: the "All saved outfits" card, the Favorites row, and a grid of collections the user can create, rename and delete. Until the routes below exist, `USE_COLLECTIONS_FIXTURE` in `src/services/outfits.ts` shows no saved outfits and starts with no collections, and creating, renaming and deleting only last until the app restarts. Tapping a card opens `src/app/collection/[id].tsx` (`id` is `all`, `favorites` or a collection id), which is a "coming soon" placeholder.
+
+### Server
+- [ ] Schema: add `Collection { id, userId, name, createdAt }` and a join table `CollectionOutfit { collectionId, outfitId, addedAt }` (`@@id([collectionId, outfitId])`), with a migration. Collection names are unique per user, ignoring case.
+- [ ] `GET /api/collections` → `{ allOutfits: { count, cover }, favorites: { count, cover }, collections: [{ id, name, outfitCount, cover }] }` (`OutfitsOverview` in `src/services/outfits.ts`). `cover` is the items of the most recently added outfit, as `{ id, name, category, type, imageUrl }[]` (the app's category names and signed URLs, as `GET /api/items`), or `null` when there are no outfits. `favorites` counts outfits with `isFavorite: true`. Collections are newest first.
+- [ ] `POST /api/collections { name }` → the new collection, in the same shape (`outfitCount: 0`, `cover: null`). Trim `name` and require 1-40 characters (400). A name the user already has is 409 `{ message }`, which the app shows as is.
+- [ ] `PATCH /api/collections/:id { name }` → the renamed collection. Same validation, and 404 if it isn't the user's.
+- [ ] `DELETE /api/collections/:id` → 204. Deletes the collection and its `CollectionOutfit` rows only. The outfits stay, so they're still in All saved outfits.
+- [ ] For the collection screen (next): `GET /api/outfits` (all, newest first, with `?favorite=true` for Favorites), `GET /api/collections/:id/outfits`, `PUT` and `DELETE /api/collections/:id/outfits/:outfitId` to add or remove an outfit, and `PATCH /api/outfits/:id { isFavorite }`. Each outfit as `{ id, name, isFavorite, items }`, with `items` like `cover`.
+
+### Client
+- [ ] Switch `USE_COLLECTIONS_FIXTURE` off once the routes above are live.
+- [ ] Build the collection screen (`src/app/collection/[id].tsx`): the outfits as flat-lay tiles, opening `src/app/outfit/[id].tsx`, and a way to add outfits to an empty collection ("Add outfits").
+
 ## Suggested order
 
 1. Basic server setup (section 1) (done)
@@ -143,3 +159,4 @@ What the client needs, split by whether it can be done now.
 - [ ] The link-import route (section 4), so `importItemFromLink` can go live.
 - [ ] The Stylist routes (section 7), so the suggestion screen can stop using the fixture.
 - [ ] Outfit routes (there are none yet), so the outfit details screen can replace the `src/app/outfit/[id].tsx` placeholder.
+- [ ] The collection routes (section 9), so the Outfits tab can stop using the fixture and the collection screen can be built.

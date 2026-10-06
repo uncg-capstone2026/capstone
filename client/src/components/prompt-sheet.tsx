@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const MAX_LENGTH = 200;
+const DEFAULT_MAX_LENGTH = 200;
 
 type PromptSheetProps = {
   visible: boolean;
@@ -21,6 +21,8 @@ type PromptSheetProps = {
   confirmLabel: string;
   chips?: string[]; // quick replies; tapping one fills the input
   submitOnEnter?: boolean;
+  initialText?: string; // filled in each time the sheet opens, e.g. the current name when renaming
+  maxLength?: number;
   onCancel: () => void;
   // Throws to keep the sheet open and show the error.
   onSubmit: (text: string) => Promise<void>;
@@ -36,14 +38,23 @@ export function PromptSheet({
   confirmLabel,
   chips,
   submitOnEnter,
+  initialText = '',
+  maxLength = DEFAULT_MAX_LENGTH,
   onCancel,
   onSubmit,
 }: PromptSheetProps) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText);
+  const [wasVisible, setWasVisible] = useState(visible);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Measured out here: inside a Modal the insets can read 0 on the first frame and jump.
   const insets = useSafeAreaInsets();
+
+  // Start from initialText each time the sheet opens.
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
+    if (visible) setText(initialText);
+  }
 
   const canSubmit = text.trim().length > 0 && !isSubmitting;
 
@@ -91,7 +102,7 @@ export function PromptSheet({
             placeholderTextColor="#7a9264"
             accessibilityLabel={title}
             autoFocus
-            maxLength={MAX_LENGTH}
+            maxLength={maxLength}
             returnKeyType={submitOnEnter ? 'done' : 'default'}
             onSubmitEditing={submitOnEnter ? submit : undefined}
             className="rounded-xl border border-sage-200 bg-cream-100 px-4 py-3 font-body text-base text-sage-800"
