@@ -71,14 +71,13 @@ export class ItemsService {
     return this.toItemDetails(item);
   }
 
-  // DELETE /api/items/:id — the item, every outfit/collection entry pointing at it, and its photos.
+    // DELETE /api/items/:id — the item, every outfit entry pointing at it, and its photos.
   async remove(userId: User['id'], id: string) {
     const item = await this.findOwned(userId, id);
 
     // All or nothing: outfits and collections never end up pointing at a deleted item.
     await this.prisma.$transaction([
       this.prisma.outfitItem.deleteMany({ where: { itemId: id } }),
-      this.prisma.collectionItem.deleteMany({ where: { itemId: id } }),
       this.prisma.item.delete({ where: { id } }),
     ]);
 
