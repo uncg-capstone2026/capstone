@@ -45,4 +45,16 @@ export class PhotosService {
     ]);
     return { photoId: photo.id };
   }
+
+  // GET /api/photos/body -> { photoId, imageUrl } for the user's primary try-on
+  // photo, or 404 if they haven't added one yet.
+  async getPrimaryBodyPhoto(userId: User['id']) {
+    const photo = await this.prisma.tryOnPhoto.findFirst({
+      where: { userId, isPrimary: true },
+      orderBy: { capturedAt: 'desc' }, // newest, just in case there were ever two
+      select: { id: true, imageKey: true },
+    });
+    if (!photo) throw new NotFoundException({ message: 'No body photo yet' });
+    return { photoId: photo.id, imageUrl: await this.s3.getDownloadUrl(photo.imageKey) };
+  }
 }
