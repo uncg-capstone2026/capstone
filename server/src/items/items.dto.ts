@@ -24,6 +24,13 @@ export class SavePhotoDto {
   key!: string;
 }
 
+// POST /api/items/link { url }. The service checks it's a usable http/https link.
+export class ImportLinkDto {
+  @IsString()
+  @MaxLength(2048)
+  url!: string;
+}
+
 // PATCH /api/items/:id — every field is optional; only the ones sent get changed.
 export class UpdateItemDto {
   // These can't be null in the database, so null is rejected (only "missing" is allowed).

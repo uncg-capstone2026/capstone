@@ -3,7 +3,7 @@ import {
 } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import { AuthGuard, CurrentUserId } from '../auth/auth.guard';
-import { PhotoUploadUrlDto, SavePhotoDto, UpdateItemDto } from './items.dto';
+import { ImportLinkDto, PhotoUploadUrlDto, SavePhotoDto, UpdateItemDto } from './items.dto';
 import { ItemsService } from './items.service';
 
 @Controller('items')
@@ -63,6 +63,15 @@ export class ItemsController {
     @Body(new ValidationPipe()) body: SavePhotoDto,
   ) {
     return this.items.createFromPhoto(userId, body.key);
+  }
+
+  // POST /api/items/link { url } -> { itemId }. 400 with a message if it can't be imported.
+  @Post('link')
+  importLink(
+    @CurrentUserId() userId: User['id'],
+    @Body(new ValidationPipe()) body: ImportLinkDto,
+  ) {
+    return this.items.createFromLink(userId, body.url);
   }
 
   // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
