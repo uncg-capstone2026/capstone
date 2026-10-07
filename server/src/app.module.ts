@@ -12,6 +12,8 @@ import { PhotosModule } from './photos/photos.module';
 import { StylistModule } from './stylist/stylist.module';
 import { OutfitsModule } from './outfits/outfits.module';
 import { CollectionsModule } from './collections/collections.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { WearTrackingModule } from './wear-tracking/wear-tracking.module';
 
 
 @Module({
@@ -27,6 +29,8 @@ import { CollectionsModule } from './collections/collections.module';
     StylistModule,
     OutfitsModule,
     CollectionsModule,
+    ScheduleModule.forRoot(),
+    WearTrackingModule,
   ],
 
   controllers: [AppController],
