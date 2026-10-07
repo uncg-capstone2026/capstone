@@ -4,7 +4,8 @@ import {
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
 } from '../constants';
-import { GeminiHelpers } from '../helpers';
+import type { Weather } from '../../weather/weather.service';
+import { GeminiHelpers, describeWeather } from '../helpers';
 import { QUERY_EXPANSION_PROMPT } from './prompt';
 import { QUERY_EXPANSION_RESPONSE_SCHEMA } from './schema';
 
@@ -14,22 +15,22 @@ export class QueryExpansionService {
   constructor(private readonly helpers: GeminiHelpers)
   {}
 
-  async expandQuery(userRequest: string)
+  // weather is the forecast for the day the outfit is for, when known. It
+  // comes before the search so the types picked suit the day.
+  async expandQuery(userRequest: string, weather?: Weather | null)
   {
     const promptWithTypes = QUERY_EXPANSION_PROMPT.replace(
       '{available_types}',
       CLOTHING_TYPES.join(', '),
     );
-    const fullPrompt = `${promptWithTypes}\n\nUser request: ${userRequest}`;
+    let fullPrompt = `${promptWithTypes}\n\nUser request: ${userRequest}`;
+    if (weather) fullPrompt += `\n${describeWeather(weather)}`;
     const text = await this.helpers.generateJson(
       fullPrompt,
       QUERY_EXPANSION_RESPONSE_SCHEMA,
     );
 
-    let expanded: {
-      items: { type: string; semantic_query: string }[];
-      [key: string]: unknown;
-    };
+    let expanded: { items: { type: string; semantic_query: string }[] };
     try {
       expanded = JSON.parse(text);
     } catch {
@@ -51,9 +52,9 @@ export class QueryExpansionService {
 
   // Expands the request, then attaches each item's semantic_query embedding
   // to that item.
-  async expandAndEmbedQuery(userRequest: string)
+  async expandAndEmbedQuery(userRequest: string, weather?: Weather | null)
   {
-    const expanded = await this.expandQuery(userRequest);
+    const expanded = await this.expandQuery(userRequest, weather);
     const vectors = await this.embedTexts(
       expanded.items.map((item) => item.semantic_query),
     );
