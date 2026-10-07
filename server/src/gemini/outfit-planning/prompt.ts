@@ -3,6 +3,9 @@ the clothes already in their closet.
 
 You will be given:
 - the user's request: where they're going or what they're going for.
+- the day's weather, if known: a "Weather on ..." line after the
+  request. Use it to decide on outerwear and layers, and to avoid
+  pieces that are wrong for the temperature or rain.
 - a list of candidate items from their closet. Each item is a line of
   details starting with its id, followed by a photo of that item. The
   photo and the details line above it describe the same item. Use the

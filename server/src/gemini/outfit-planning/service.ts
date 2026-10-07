@@ -1,9 +1,10 @@
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import type { Part } from '@google/genai';
 import { PrismaService } from '../../prisma/prisma.service';
+import type { Weather } from '../../weather/weather.service';
 import { S3Service } from '../../s3/s3.service';
 import { CANDIDATES_PER_TYPE, MAX_OUTFIT_CANDIDATES } from '../constants';
-import { GeminiHelpers, mimeTypeForKey } from '../helpers';
+import { GeminiHelpers, describeWeather, mimeTypeForKey } from '../helpers';
 import { QueryExpansionService } from '../query-expansion/service';
 import { OUTFIT_SELECTION_PROMPT } from './prompt';
 import { buildOutfitSelectionSchema } from './schema';
@@ -120,13 +121,14 @@ export class OutfitPlanningService {
       .map((result) => result.value);
   }
 
-  // Builds the request for Gemini: the prompt, then for each candidate a
-  // details line starting with its id, followed by its photo.
-  buildSelectionParts(userRequest: string, candidates: OutfitCandidate[]): Part[]
+  // Builds the request for Gemini: the prompt and the day's weather (when
+  // known), then for each candidate a details line starting with its id,
+  // followed by its photo.
+  buildSelectionParts(userRequest: string, candidates: OutfitCandidate[], weather?: Weather | null): Part[]
   {
-    const parts: Part[] = [
-      { text: `${OUTFIT_SELECTION_PROMPT}\n\nUser request: ${userRequest}` },
-    ];
+    let header = `${OUTFIT_SELECTION_PROMPT}\n\nUser request: ${userRequest}`;
+    if (weather) header += `\n${describeWeather(weather)}`;
+    const parts: Part[] = [{ text: header }];
     for (const candidate of candidates) {
       parts.push(
         { text: this.describeCandidate(candidate) },
