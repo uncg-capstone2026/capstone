@@ -10,6 +10,7 @@ import { GeminiModule } from './gemini/gemini.module';
 import { WeatherModule } from './weather/weather.module';
 import { PhotosModule } from './photos/photos.module';
 import { StylistModule } from './stylist/stylist.module';
+import { OutfitsModule } from './outfits/outfits.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { StylistModule } from './stylist/stylist.module';
     WeatherModule,
     PhotosModule,
     StylistModule,
+    OutfitsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
