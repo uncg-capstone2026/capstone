@@ -9,7 +9,7 @@ import { Prisma } from '@prisma/client';
 import type { User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { LoginDto, SignupDto } from './auth.dto';
+import { LoginDto, SignupDto, UpdateMeDto } from './auth.dto';
 import {
   assertStrongPassword,
   isValidEmail,
@@ -47,6 +47,9 @@ export class AuthService {
           phone,
           passwordHash,
           marketingOptIn: body.marketingOptIn === true,
+          // Optional at signup. A missing or invalid zone keeps the default
+          // rather than blocking the sign-up; the app sends it again later.
+          ...(isValidTimeZone(body.timeZone) ? { timeZone: body.timeZone } : {}),
         },
       });
       return this.buildAuthResponse(user);
@@ -90,6 +93,16 @@ export class AuthService {
     return this.toPublicUser(user);
   }
 
+  // PATCH /api/auth/me { timeZone } -> 204. 400 if it isn't a real IANA time zone.
+  async updateMe(userId: User['id'], body: UpdateMeDto) {
+    const timeZone = body?.timeZone;
+    if (timeZone === undefined) throw new BadRequestException('Nothing to update');
+    if (!isValidTimeZone(timeZone)) throw new BadRequestException('Unknown time zone');
+
+    const { count } = await this.prisma.user.updateMany({ where: { id: userId }, data: { timeZone } });
+    if (count === 0) throw new UnauthorizedException();
+  }
+
   private async buildAuthResponse(user: User) {
     const token = await this.jwt.signAsync({ sub: user.id });
     return { token, user: this.toPublicUser(user) };
@@ -104,5 +117,19 @@ export class AuthService {
       email: user.email,
       phone: user.phone,
     };
+  }
+}
+
+// An IANA name like "America/Chicago" that Intl recognizes. Raw offsets like
+// "+05:00" are rejected: Postgres reads their sign the opposite way.
+const TIME_ZONE_NAME = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)*$/;
+
+function isValidTimeZone(value: unknown): value is string {
+  if (typeof value !== 'string' || value.length > 100 || !TIME_ZONE_NAME.test(value)) return false;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value }); // throws RangeError if unknown
+    return true;
+  } catch {
+    return false;
   }
 }
