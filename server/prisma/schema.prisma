@@ -1,4 +1,4 @@
-// This Is your Prisma schema file,
+// This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
@@ -47,6 +47,11 @@ enum OutfitSlot {
   onepiece
 }
 
+enum StyleFeedbackKind {
+  Accepted
+  Rejected
+}
+
 model User {
   id             String         @id @default(uuid())
   name           String
@@ -62,6 +67,7 @@ model User {
   collections    Collection[]
   outfits        Outfit[]
   notifications  Notification[]
+  styleFeedback  StyleFeedback[]
 }
 
 model TryOnPhoto {
@@ -180,4 +186,19 @@ model Notification {
 
   @@index([userId, scheduledFor]) // "my notifications, in order"
   @@index([scheduledFor, sentAt]) // "which notifications are due and not sent yet"
+}
+
+// "Looks right" and "Not for me" on Stylist suggestions, for learning the user's style.
+model StyleFeedback {
+  id           String            @id @default(uuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind         StyleFeedbackKind
+  suggestionId String
+  itemIds      String[]
+  outfitId     String? // the saved outfit, for Accepted
+  feedback     String? // "What would you rather wear?", for Rejected
+  createdAt    DateTime          @default(now())
+
+  @@index([userId, createdAt])
 }
