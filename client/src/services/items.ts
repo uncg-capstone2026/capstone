@@ -84,7 +84,7 @@ export type ClothingItemChanges = {
   material?: string | null;
   season?: string | null;
   formality?: string | null;
-  excludeFromSuggestions?: boolean; // not accepted by the server yet
+  excludeFromSuggestions?: boolean;
 };
 
 export type ClosetFilter = 'all' | 'favorites' | ClothingCategory;
@@ -220,7 +220,7 @@ export async function listItems(): Promise<ClosetItem[]> {
 // GET /api/items/:id. imageUrl is freshly signed, so use it rather than the closet's copy.
 export async function getItem(id: string): Promise<ClothingItemDetails> {
   try {
-    return withNewFitNames(await apiGet<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`));
+    return await apiGet<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`);
   } catch (e) {
     throw itemError(e, 'Could not load this item. Please try again.');
   }
@@ -229,28 +229,18 @@ export async function getItem(id: string): Promise<ClothingItemDetails> {
 // PATCH /api/items/:id -> the updated item.
 export async function updateItem(id: string, changes: ClothingItemChanges): Promise<ClothingItemDetails> {
   try {
-    return withNewFitNames(
-      await apiPatch<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`, changes),
-    );
+    return await apiPatch<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`, changes);
   } catch (e) {
     throw itemError(e, 'Could not save your changes. Please try again.');
   }
 }
 
-// The server still calls "loose" "relaxed" until its Fit enum is migrated (see PLAN.md).
-// Until then it also rejects "fitted" and "loose" with a 400.
-function withNewFitNames(item: ClothingItemDetails): ClothingItemDetails {
-  return (item.fit as string) === 'relaxed' ? { ...item, fit: 'loose' } : item;
-}
-
-// GET /api/items/:id/color-grid, for the color dropper. Not built on the server yet, so a 404
-// usually means the route is missing rather than the item.
+// GET /api/items/:id/color-grid, for the color dropper.
 export async function getItemColorGrid(id: string): Promise<ItemColorGrid> {
   try {
     return await apiGet<ItemColorGrid>(`/api/items/${encodeURIComponent(id)}/color-grid`);
   } catch (e) {
-    if (e instanceof SessionExpiredError) throw e;
-    throw new Error("The color dropper isn't available yet.");
+    throw itemError(e, "Couldn't load the colors. Please try again.");
   }
 }
 

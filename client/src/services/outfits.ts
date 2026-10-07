@@ -1,10 +1,10 @@
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
 import type { SuggestedPiece } from '@/services/stylist';
 
-// The outfit and collection routes aren't built yet (see PLAN.md section 9). Until they are,
-// the Outfits screens use an in-memory fixture. It starts empty; accepting a Stylist suggestion
-// saves an outfit into it (see acceptOutfit in services/stylist.ts).
-const USE_COLLECTIONS_FIXTURE = true;
+// The outfit and collection routes are live. Set this to true to use an in-memory fixture
+// instead. It starts empty; accepting a Stylist suggestion saves an outfit into it while
+// USE_ACCEPT_FEEDBACK_FIXTURE in services/stylist.ts is on.
+const USE_COLLECTIONS_FIXTURE = false;
 
 export const COLLECTION_NAME_MAX_LENGTH = 40;
 

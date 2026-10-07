@@ -2,14 +2,17 @@ import { Redirect } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 
-import { isSignedIn } from '@/services/auth';
+import { isSignedIn, syncTimeZone } from '@/services/auth';
 
 export default function Index() {
   // null while the stored token is being read.
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
 
   useEffect(() => {
-    isSignedIn().then(setSignedIn);
+    isSignedIn().then((value) => {
+      setSignedIn(value);
+      if (value) void syncTimeZone();
+    });
   }, []);
 
   if (signedIn === null) {

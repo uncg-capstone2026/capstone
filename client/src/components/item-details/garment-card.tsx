@@ -50,7 +50,7 @@ export function GarmentCard({ itemId, imageUrl, name }: GarmentCardProps) {
     } catch (e) {
       setIsOn(false);
       if (!(e instanceof SessionExpiredError)) {
-        setUnavailable(e instanceof Error ? e.message : "The color dropper isn't available yet.");
+        setUnavailable(e instanceof Error ? e.message : "Couldn't load the colors. Please try again.");
       }
     } finally {
       setIsLoadingGrid(false);

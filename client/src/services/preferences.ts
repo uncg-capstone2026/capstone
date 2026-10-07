@@ -39,3 +39,18 @@ export async function getStageColor(): Promise<string> {
 export async function setStageColor(color: string): Promise<void> {
   await AsyncStorage.setItem(STAGE_COLOR_KEY, color);
 }
+
+// The time zone last sent to the server, so it's only sent again when the device's changes.
+const SENT_TIME_ZONE_KEY = 'styleme.sent-time-zone';
+
+export async function getSentTimeZone(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(SENT_TIME_ZONE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function setSentTimeZone(timeZone: string): Promise<void> {
+  await AsyncStorage.setItem(SENT_TIME_ZONE_KEY, timeZone);
+}

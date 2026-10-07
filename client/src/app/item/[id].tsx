@@ -236,7 +236,6 @@ function ItemName({ name, onRename }: { name: string; onRename: (name: string) =
   );
 }
 
-// Disabled until the server sends excludeFromSuggestions (see PLAN.md).
 function ExcludeToggle({ value, onChange }: { value?: boolean; onChange: (value: boolean) => void }) {
   const isAvailable = value !== undefined;
   return (
