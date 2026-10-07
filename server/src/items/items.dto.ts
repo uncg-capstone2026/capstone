@@ -38,6 +38,10 @@ export class UpdateItemDto {
   @Matches(/^#[0-9a-fA-F]{6}$/, { each: true, message: 'colorHex values must look like #1A2B3C' })
   colorHex?: string[];
 
+  // When true, the Stylist never uses this item in outfit suggestions.
+  @ValidateIf((_, v) => v !== undefined) @IsBoolean()
+  excludeFromSuggestions?: boolean;
+
   // These can be cleared by sending null.
   @IsOptional() @IsIn(CLIENT_CATEGORIES)
   category?: string | null;

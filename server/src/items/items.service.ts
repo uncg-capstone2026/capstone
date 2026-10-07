@@ -12,6 +12,9 @@ import { buildColorGrid } from './color-grid';
 // The image the AI steps send to Gemini.
 type AiImage = { image: Buffer; mimeType: string };
 
+// Each item's wear period is 30 days, counted from when it was added.
+const WEAR_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+
 @Injectable()
 export class ItemsService {
   private readonly logger = new Logger(ItemsService.name);
@@ -66,6 +69,7 @@ export class ItemsService {
     if (dto.material !== undefined) data.material = dto.material;
     if (dto.season !== undefined) data.season = dto.season;
     if (dto.formality !== undefined) data.formality = dto.formality;
+    if (dto.excludeFromSuggestions !== undefined) data.excludeFromSuggestions = dto.excludeFromSuggestions;
 
     const item = await this.prisma.item.update({ where: { id }, data });
     return this.toItemDetails(item);
@@ -259,8 +263,20 @@ export class ItemsService {
     };
   }
 
-  // Matches the app's ClothingItemDetails type. To add a field, add one line here.
+    // Matches the app's ClothingItemDetails type. To add a field, add one line here.
   private async toItemDetails(item: Item) {
+    // The user's outfits that include this item, newest first. Each outfit       // ← new
+    // appears once, even if the item is in it twice.
+    const outfits = await this.prisma.outfit.findMany({
+      where: { userId: item.userId, items: { some: { itemId: item.id } } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true },
+    });
+
+    // If the 30-day period ran out and the hourly job hasn't reset it yet,       // ← new
+    // the stored count is from an old period, so send 0 instead.
+    const periodIsCurrent = Date.now() - item.wearPeriodStart.getTime() < WEAR_PERIOD_MS;
+
     return {
       ...(await this.toClosetItem(item)),
       type: item.type,
@@ -273,6 +289,10 @@ export class ItemsService {
       fit: item.fit ? FIT_TO_CLIENT[item.fit] : null,
       sourceURL: item.sourceURL,
       createdAt: item.createdAt,
+      timesWorn: item.timesWorn,                                                   // ← new
+      timesWornThisMonth: periodIsCurrent ? item.timesWornThisMonth : 0,           // ← new
+      excludeFromSuggestions: item.excludeFromSuggestions,                         // ← new
+      outfits,                                                                     // ← new
     };
   }
 
