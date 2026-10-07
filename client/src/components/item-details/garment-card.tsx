@@ -5,7 +5,7 @@ import { ActivityIndicator, Platform, Pressable, Text, View, type GestureRespond
 
 import { SessionExpiredError } from '@/services/api';
 import { getItemColorGrid, type ItemColorGrid } from '@/services/items';
-import { colorName } from '@/utils/colors';
+import { colorName, isMainlyWhite, WHITE_ITEM_BACKGROUND } from '@/utils/colors';
 
 const RING_SIZE = 32;
 // On a touch screen the ring sits above the finger so the finger doesn't hide it.
@@ -18,13 +18,14 @@ type GarmentCardProps = {
   itemId: string;
   imageUrl: string;
   name: string;
+  colorHex: string[]; // main color first; a white item gets a tan card so it stays visible
 };
 
 // The item's cutout on a soft card, with the color dropper in the corner and its status bar below.
 // A picked color is only shown in the status bar; it isn't saved to the item.
 // The dropper reads colors from a small grid the server makes from the image (loaded once, the
 // first time it's turned on), so the ring can show the color under the finger with no requests.
-export function GarmentCard({ itemId, imageUrl, name }: GarmentCardProps) {
+export function GarmentCard({ itemId, imageUrl, name, colorHex }: GarmentCardProps) {
   const [isOn, setIsOn] = useState(false);
   const [grid, setGrid] = useState<ItemColorGrid | null>(null);
   const [isLoadingGrid, setIsLoadingGrid] = useState(false);
@@ -86,10 +87,14 @@ export function GarmentCard({ itemId, imageUrl, name }: GarmentCardProps) {
   }
 
   const canAim = isOn && grid !== null;
+  const isWhite = isMainlyWhite(colorHex);
 
   return (
     <View className="gap-2">
-      <View style={{ aspectRatio: 1 }} className="w-full rounded-3xl bg-cream-50 p-4">
+      <View
+        // The background is set one way only: a bg- class would override the inline colour.
+        style={[{ aspectRatio: 1 }, isWhite && { backgroundColor: WHITE_ITEM_BACKGROUND }]}
+        className={`w-full rounded-3xl p-4 ${isWhite ? '' : 'bg-cream-50'}`}>
         <View
           className="flex-1"
           onLayout={(e) => setArea(e.nativeEvent.layout)}

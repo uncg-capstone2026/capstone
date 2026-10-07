@@ -17,14 +17,7 @@ All done.
 
 ## 3. Body photo upload
 
-The client and server currently disagree on almost every detail:
-
-| | App calls | Server has |
-|---|---|---|
-| Get an upload URL | `POST /api/photos/body/upload-url` `{ contentType, fileName }` → `{ uploadUrl, key }` | `POST /uploads/body-photo` `{ userId, contentType }` → `{ key, url }` |
-| Save it to the user | `POST /api/photos/body` `{ key }` | **missing** |
-
-- [ ] S3: the bucket's CORS settings must allow `PUT` from the app, or web uploads fail.
+All done.
 
 ## 4. Closet items
 
@@ -37,12 +30,6 @@ Clothing photos live in AWS S3. The client uploads the original photo, and the s
 ### Item details screen
 
 Tapping an item in the closet opens `src/app/item/[id].tsx`. The screen is built. The server now sends everything it shows: wear stats, "Saved in outfits", the exclude toggle, the Fitted and Loose fit steps and the color dropper.
-
-- [ ] Client: an outfit details screen. Outfit chips, outfit tiles and "Open the outfit" all open `src/app/outfit/[id].tsx`, which is a "coming soon" placeholder for now. It can be built now against `GET /api/outfits/:id` (`SavedOutfit` in `src/services/outfits.ts`, section 9).
-- [ ] Client: show the remaining AI tags on the item details screen in a collapsed section (e.g. "More details" with a chevron that opens and closes it) so they don't clutter the screen:
-  - `type` (move the existing Type dropdown in here), `material`, `season` and `formality`. `ClothingItemDetails` already has them all. Cut, colors, fit and category stay where they are, and `pattern` stays under the colors in `ColorSection`.
-  - Show the values with `formatTag`, and let the user edit them like the other tags.
-  - Label each one "Filled in by StyleMe", the same `aiHint` the confirm screen uses (`AI_HINT` in `src/app/confirm-item/[id].tsx`; move it somewhere shared, e.g. `src/services/items.ts`, rather than copying it). Like the confirm screen, show it only when the field has a value. This replaces Type's current hint ("AI tag · the stylist uses this to pick outfits"). The server doesn't record whether the user changed a tag since, so the label shows on edited values too; hiding it for those would need a new field on `Item`.
 
 - [ ] Seed a few tagged items for the test account. Items added from a photo have no tags yet, so the closet filters and details screen need seeded data to test against.
 
@@ -70,7 +57,7 @@ All done.
 Outfit suggestions should take the weather into account. Weather data comes from [WeatherAPI.com](https://www.weatherapi.com). It uses a plain API key (no JWT like Apple WeatherKit), doesn't need an Apple Developer membership, and works on iOS and Android. The app never calls WeatherAPI.com directly. It calls our server, and the server calls WeatherAPI.com, so the key never ships in the app bundle.
 
 ### Server
-- [ ] Later: fill `CalendarEntry.weatherSummary` and `tempHigh` when an outfit is planned for a date (the forecast endpoint takes `days` up to the plan's limit).
+All done.
 
 ### Client
 
@@ -84,7 +71,6 @@ The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The 
 The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" opens it, and it shows one outfit at a time as a flat-lay, with "Not for me" and "Looks right". It calls the live `POST /api/stylist/outfit` (`USE_OUTFIT_FIXTURE` is off). "Looks right" calls `POST /api/stylist/outfit/accept`, which saves the outfit with a calendar entry for the day, and "Not for me" sends the answer to `POST /api/stylist/outfit/feedback` (`USE_ACCEPT_FEEDBACK_FIXTURE` is off).
 
 - [ ] The try-on screen (`src/app/try-on.tsx`, "See it on your photo") and Style Preferences (`src/app/style-preferences.tsx`, "See what was remembered") are "coming soon" placeholders.
-- [ ] "Open the outfit" goes to `src/app/outfit/[id].tsx`, which is still a placeholder (see "Item details screen" in section 4).
 
 ### Server
 `POST /api/stylist/outfit { occasion, date? }` (`server/src/stylist/`) is built: `QueryExpansionService` expands and embeds the request, `OutfitPlanningService.findCandidates` finds the closest closet items with pgvector, and `selectOutfit` has Gemini pick one complete outfit. It returns the shape agreed with the app (`OutfitSuggestion` in `src/services/stylist.ts`): `{ suggestionId, name, reasons, items: { id, name, category, type, imageUrl }[] }`, taking `{ date, occasion, excludeSuggestionIds }`, or 422 when the closet can't make a complete outfit.
@@ -111,7 +97,7 @@ Everything that touches Gemini, the embeddings or the pgvector search: setup, it
 ### Outfit suggestions (`POST /api/stylist/outfit`, section 7)
 - [ ] Pass the day's weather (from `WeatherService`, with `date`) into the query expansion and outfit prompts. Neither gets the weather yet, though both rely on it.
 - [ ] `findCandidates` ignores the `season`, `formality`, `preferred_colors` and `exclude_colors` the query expansion returns. Decide whether to filter or rank by them.
-- [ ] Make "Exclude from future outfit suggestions" work on the backend. `findClosestItems` in `server/src/gemini/outfit-planning/service.ts` is where all Stylist candidates come from, and it now skips items with `excludeFromSuggestions = true` (fixed on `eesladden`, not merged yet). Still to do: merge it, check the two Oct 7 migrations have run on Railway (`build` and `start` don't run `prisma migrate deploy`), then test it: exclude an item, ask the Stylist for an outfit it would suit, and check it's never suggested. (See "Wear tracking" in section 4.)
+- [ ] Server: make "Exclude from future outfit suggestions" work. `findClosestItems` in `server/src/gemini/outfit-planning/service.ts` is where all Stylist candidates come from, but it doesn't check `excludeFromSuggestions` yet (its "Later" comment says it's waiting for the column, which exists now). Add `AND "excludeFromSuggestions" = false` to its `WHERE`, and update the comment. Also check the two Oct 7 migrations have run on Railway (`build` and `start` don't run `prisma migrate deploy`). To test: exclude an item, ask the Stylist for an outfit it would suit, and check it's never suggested. (See "Wear tracking" in section 4.)
 - [ ] Return Gemini failures as 503 `{ message }`, like weather. Right now they surface as raw errors (the 422 for "not enough items" can stay).
 - [ ] Use the Style Preferences saved by the feedback route (section 7) in the outfit prompt, so suggestions learn from what the user turned down.
 
@@ -126,31 +112,39 @@ The Outfits tab (`src/app/(tabs)/outfits.tsx`) is built: the "All saved outfits"
 Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where `id` is `all`, `favorites` or a collection id): the title, the outfit count and a grid of outfits, each opening `src/app/outfit/[id].tsx`. In edit mode, a user collection can be renamed and have outfits added ("Add from all saved outfits") or removed. Favorites can have outfits added (favorited) or removed (unfavorited). All saved outfits can only delete outfits, after a confirmation.
 
 ### Server
+- [ ] The outfit details screen (`src/app/outfit/[id].tsx`) can edit an outfit's pieces and plan it for dates. Until these routes exist, `USE_OUTFIT_EDITS_FIXTURE` in `src/services/outfits.ts` keeps those changes in memory for the session:
+  - `PATCH /api/outfits/:id { itemIds }` → 204. Replaces the outfit's pieces (add, remove or swap) and works out each piece's `slot` and `zIndex` again, like `OutfitsService.create`. 1–8 ids, every item the user's (404 otherwise), and the result must still be complete (a OnePiece, or a Top and Bottoms; 400 otherwise). Keep accepting `{ isFavorite }` on the same route.
+  - `scheduled: { id, date, eventName }[]` on `GET /api/outfits/:id`: its `CalendarEntry` rows, past and upcoming, with `date` as `YYYY-MM-DD` and `eventName` or `null`. (Entries from Stylist "Looks right" should show up here too.)
+  - `POST /api/outfits/:id/schedule { date: 'YYYY-MM-DD', eventName?: string }` → the new entry, in the same shape. Always creates a new `CalendarEntry`: an outfit can be planned for any number of events, including two on the same day. `eventName` up to 100 characters; 404 if the outfit isn't the user's.
+  - `DELETE /api/outfits/:id/schedule/:entryId` → 204. Removes that one entry; 404 if it isn't one of this user's outfit's entries. An entry that was already counted as worn keeps its wear counts.
+- [ ] Add `collections: { id, name }[]` to `GET /api/outfits/:id`: the user's collections that include the outfit. Until then, `listOutfitCollections` in `src/services/outfits.ts` loads every collection to work it out.
+- [ ] `GET /api/photos/body` → `{ photoId, imageUrl }` for the user's primary body photo (signed URL), or 404 if they haven't added one. Try on needs it to show outfits on the user's photo.
 - [ ] Later: let the user say they didn't wear a planned outfit (e.g. "Didn't wear it" on a past calendar day). That would undo the counts for that entry, rolling `lastWorn` back to the outfit's previous worn entry.
 
 ### Client
-- [ ] Add `timesWorn`, `lastWorn` and `createdAt` to `SavedOutfit` once the server sends them, and show them on the outfit details screen.
+- [ ] Switch `USE_OUTFIT_EDITS_FIXTURE` off in `src/services/outfits.ts` once the pieces and schedule routes above are live.
+- [ ] Once `GET /api/outfits/:id` sends `collections`, use it in `src/app/outfit/[id].tsx` instead of `listOutfitCollections`.
+- [ ] Try on (`src/app/try-on.tsx`) is still "coming soon". It needs a way to get the user's body photo back from the server (there's only upload and save today).
 
 ## Suggested order
 
 1. Basic server setup (section 1) (done)
 2. Auth, plus navigating after login (section 2) (done)
-3. Body photo routes: the smallest real end-to-end test (section 3) (server done; S3 CORS still to check)
+3. Body photo routes: the smallest real end-to-end test (section 3) (done)
 4. Items list (section 4) (done)
 5. Add-item flow (section 4): upload first, saving the item with just the original photo (done)
 6. Cutout and tagging (section 4) (done; backfilling older items, WebP conversion and `FITS` are in section 8)
 7. Weather (section 6) (done, including `?date=` for the Stylist day picker)
 8. Stylist (section 7): the screen and the outfit route are built, with the agreed response shape. The accept and feedback routes are done and the app uses them. Next is passing in the weather (section 8)
-9. Outfits and collections (section 9): the client screens are built and use the live routes. The schema, `OutfitsService.create` and the outfit and collection routes are done on the server. So are `PATCH /api/auth/me { timeZone }` and the hourly wear tracking job. The app sends the device's time zone. Next is the outfit details screen
+9. Outfits and collections (section 9): the client screens are built and use the live routes. The schema, `OutfitsService.create` and the outfit and collection routes are done on the server. So are `PATCH /api/auth/me { timeZone }` and the hourly wear tracking job. The app sends the device's time zone. The outfit details screen is built; next is showing wear stats on it
 
 ## Client-only checklist
 
 What the client needs, split by whether it can be done now.
 
 ### Can do now
-- [ ] Build the outfit details screen (`src/app/outfit/[id].tsx`) against `GET /api/outfits/:id` (section 4, "Item details screen").
-- [ ] Move Type and add `material`, `season` and `formality` to a collapsed "More details" section on the item details screen, each labelled "Filled in by StyleMe" (section 4, "Item details screen").
 - [ ] Test the Outfits tab and the collection screen on a device: accept a Stylist suggestion, then create a collection, add and remove outfits, rename it, favorite and unfavorite, and delete an outfit (section 9).
 
 ### Needs a server decision first
 - [ ] The link-import route (section 4), so `importItemFromLink` can go live.
+- [ ] The outfit pieces and schedule routes, and `collections` on `GET /api/outfits/:id` (section 9), so `USE_OUTFIT_EDITS_FIXTURE` can be switched off.

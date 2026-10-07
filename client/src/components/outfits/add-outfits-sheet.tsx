@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'rea
 
 import { OutfitGrid } from '@/components/outfits/outfit-grid';
 import { OutfitTile } from '@/components/outfits/outfit-tile';
+import { useOutfitColors } from '@/hooks/use-outfit-colors';
 import { SessionExpiredError } from '@/services/api';
 import { listOutfits, type SavedOutfit } from '@/services/outfits';
 
@@ -20,6 +21,7 @@ export function AddOutfitsSheet({ visible, existingIds, onCancel, onAdd }: AddOu
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const colorFor = useOutfitColors();
 
   // Load (or reload) the outfits each time the sheet opens.
   function load() {
@@ -105,6 +107,7 @@ export function AddOutfitsSheet({ visible, existingIds, onCancel, onAdd }: AddOu
                 return (
                   <OutfitTile
                     outfit={outfit}
+                    backgroundColor={colorFor(outfit.id)}
                     isSelected={isExisting || selectedIds.includes(outfit.id)}
                     disabled={isExisting}
                     onPress={() => toggle(outfit.id)}

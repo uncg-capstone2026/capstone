@@ -4,7 +4,8 @@ import { Pressable, Text, View } from 'react-native';
 import { DEFAULT_STAGE_COLOR } from '@/services/preferences';
 import { normalizeHex } from '@/utils/colors';
 
-export const STAGE_COLOR_PRESETS = [DEFAULT_STAGE_COLOR, '#F7F3EA', '#E3E8DA', '#E9DCD3', '#D9DEE4'];
+// White, off-white, then shades of the default sage from lightest to darkest.
+export const STAGE_COLOR_PRESETS = ['#FFFFFF', '#FAF8F3', '#E9EEE1', DEFAULT_STAGE_COLOR, '#D3DDC5', '#B3C49F'];
 
 type StageColorPopoverProps = {
   color: string;

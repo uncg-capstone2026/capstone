@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Pressable, Text, View, type GestureResponderEvent } from 'react-native';
 
+import { AiHint } from '@/components/item-details/select-field';
 import { FIT_STEPS, type ClothingFit } from '@/services/items';
 
 const THUMB_SIZE = 24;
@@ -8,11 +9,12 @@ const THUMB_SIZE = 24;
 type FitSliderProps = {
   value: ClothingFit | null;
   onChange: (fit: ClothingFit) => void;
+  aiHint?: string; // a sparkle note under the label, as on SelectField
 };
 
 // A 5-step slider from Fitted to Oversized. Tap a step or drag along the track. While the
 // finger is down, a tooltip above the thumb explains the step under it.
-export function FitSlider({ value, onChange }: FitSliderProps) {
+export function FitSlider({ value, onChange, aiHint }: FitSliderProps) {
   const [trackWidth, setTrackWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState<number | null>(null); // step under the finger
   const activeRef = useRef<number | null>(null); // the same, readable on release without a re-render
@@ -61,7 +63,10 @@ export function FitSlider({ value, onChange }: FitSliderProps) {
   return (
     <View className="gap-3">
       <View className="flex-row items-baseline justify-between">
-        <Text className="font-label text-base text-sage-700">Fit</Text>
+        <View className="shrink gap-0.5">
+          <Text className="font-label text-base text-sage-700">Fit</Text>
+          {aiHint ? <AiHint text={aiHint} /> : null}
+        </View>
         <Text className="font-body text-base text-sage-600">
           {valueIndex >= 0 ? FIT_STEPS[valueIndex].label : 'Not set'}
         </Text>

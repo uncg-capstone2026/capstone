@@ -22,8 +22,9 @@ export async function setTemperatureUnit(unit: TemperatureUnit): Promise<void> {
   await AsyncStorage.setItem(TEMPERATURE_UNIT_KEY, unit);
 }
 
-// The outfit stage's background on the suggestion screen.
-export const DEFAULT_STAGE_COLOR = '#EFEAE0';
+// The outfit stage's background on the suggestion screen, and each saved outfit's until the
+// user picks one.
+export const DEFAULT_STAGE_COLOR = '#DEE6D3';
 
 const STAGE_COLOR_KEY = 'styleme.stage-color';
 
@@ -53,4 +54,41 @@ export async function getSentTimeZone(): Promise<string | null> {
 
 export async function setSentTimeZone(timeZone: string): Promise<void> {
   await AsyncStorage.setItem(SENT_TIME_ZONE_KEY, timeZone);
+}
+
+// Each saved outfit's background, keyed by outfit id. Kept on this device only. Read from
+// storage once, then kept in memory; screens showing outfits subscribe, so a colour changed on
+// the outfit details screen shows everywhere straight away (see useOutfitColors).
+const OUTFIT_COLORS_KEY = 'styleme.outfit-colors';
+
+let outfitColors: Record<string, string> | null = null;
+let loadingOutfitColors: Promise<Record<string, string>> | null = null;
+const outfitColorListeners = new Set<() => void>();
+
+export function getOutfitColors(): Promise<Record<string, string>> {
+  if (outfitColors) return Promise.resolve(outfitColors);
+  loadingOutfitColors ??= AsyncStorage.getItem(OUTFIT_COLORS_KEY)
+    .then((stored) => (stored ? (JSON.parse(stored) as Record<string, string>) : {}))
+    .catch(() => ({}))
+    .then((loaded) => {
+      // A colour set while loading wins over the stored one.
+      outfitColors = { ...loaded, ...outfitColors };
+      return outfitColors;
+    });
+  return loadingOutfitColors;
+}
+
+export async function setOutfitColor(outfitId: string, color: string): Promise<void> {
+  const colors = await getOutfitColors();
+  outfitColors = { ...colors, [outfitId]: color };
+  outfitColorListeners.forEach((listener) => listener());
+  await AsyncStorage.setItem(OUTFIT_COLORS_KEY, JSON.stringify(outfitColors));
+}
+
+// Calls listener whenever an outfit's colour changes. Returns the unsubscribe function.
+export function subscribeToOutfitColors(listener: () => void): () => void {
+  outfitColorListeners.add(listener);
+  return () => {
+    outfitColorListeners.delete(listener);
+  };
 }
