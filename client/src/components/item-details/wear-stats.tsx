@@ -15,7 +15,7 @@ export function WearStats({ timesWorn, timesWornThisMonth }: WearStatsProps) {
   );
 }
 
-function StatCard({ value, label }: { value?: number; label: string }) {
+export function StatCard({ value, label }: { value?: number | string; label: string }) {
   return (
     <View
       accessible

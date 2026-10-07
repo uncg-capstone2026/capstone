@@ -1,5 +1,6 @@
 import { isBackendConfigured } from '@/config/api';
-import { ApiError, apiPost } from '@/services/api';
+import { ApiError, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
+import { getSentTimeZone, setSentTimeZone } from '@/services/preferences';
 import { clearToken, getToken, saveToken } from '@/services/session';
 
 export type LoginMode = 'email' | 'phone';
@@ -59,6 +60,7 @@ export async function loginWithPassword({ mode, identifier, password }: Password
   try {
     const { token } = await apiPost<AuthResponse>('/api/auth/login', body);
     await saveToken(token);
+    void syncTimeZone({ force: true });
   } catch (e) {
     throw toAuthError(e);
   }
@@ -71,11 +73,37 @@ export async function signUpWithPassword(input: SignUpInput): Promise<void> {
   try {
     const { token } = await apiPost<AuthResponse>('/api/auth/signup', input);
     await saveToken(token);
+    void syncTimeZone({ force: true });
   } catch (e) {
     if (e instanceof ApiError && e.status === 409) {
       throw new TakenFieldError(e.serverMessage?.toLowerCase().includes('phone') ? 'phone' : 'email');
     }
     throw toAuthError(e);
+  }
+}
+
+// PATCH /api/auth/me { timeZone }, so the server counts planned outfits as worn at the user's
+// own midnight. Sent when the app opens if the device's time zone has changed since it was last
+// sent (e.g. after travelling), and always after login, since the device may have been used by
+// another account. A failure is ignored and retried next launch.
+export async function syncTimeZone({ force = false } = {}): Promise<void> {
+  const timeZone = deviceTimeZone();
+  if (!isBackendConfigured || !timeZone) return;
+  try {
+    if (!force && (await getSentTimeZone()) === timeZone) return;
+    await apiPatch<void>('/api/auth/me', { timeZone });
+    await setSentTimeZone(timeZone);
+  } catch (e) {
+    if (__DEV__ && !(e instanceof SessionExpiredError)) console.warn('Could not send the time zone:', e);
+  }
+}
+
+// The device's IANA time zone, e.g. "America/Chicago". No permission or package needed.
+function deviceTimeZone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
   }
 }
 

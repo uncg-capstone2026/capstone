@@ -9,6 +9,7 @@ import { AddOutfitsButton } from '@/components/outfits/add-outfits-button';
 import { AddOutfitsSheet } from '@/components/outfits/add-outfits-sheet';
 import { OutfitGrid } from '@/components/outfits/outfit-grid';
 import { OutfitTile } from '@/components/outfits/outfit-tile';
+import { useOutfitColors } from '@/hooks/use-outfit-colors';
 import { SessionExpiredError } from '@/services/api';
 import {
   addOutfitsToCollection,
@@ -41,6 +42,7 @@ export default function CollectionScreen() {
   const [isPicking, setIsPicking] = useState(false);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<SavedOutfit | null>(null);
+  const colorFor = useOutfitColors();
 
   const load = useCallback(() => {
     getCollection(id)
@@ -97,11 +99,6 @@ export default function CollectionScreen() {
     if (isEditing && !(await saveName())) return;
     setError(null);
     setIsEditing((editing) => !editing);
-  }
-
-  function startAdding() {
-    setIsEditing(true);
-    setIsPicking(true);
   }
 
   async function add(outfitIds: string[]) {
@@ -173,18 +170,24 @@ export default function CollectionScreen() {
               <View className="flex-row items-center gap-2 border-b-2 border-sage-300">
                 <TextInput
                   value={draftName}
-                  onChangeText={setDraftName}
+                  // Multiline so a long name wraps instead of scrolling out of view. Return
+                  // still saves, and pasted line breaks become spaces.
+                  onChangeText={(text) => setDraftName(text.replace(/\n/g, ' '))}
                   onSubmitEditing={saveName}
+                  multiline
+                  submitBehavior="blurAndSubmit"
                   editable={!isSavingName}
                   maxLength={COLLECTION_NAME_MAX_LENGTH}
                   returnKeyType="done"
                   accessibilityLabel="Collection name"
-                  className="flex-1 py-1 font-heading text-4xl text-sage-800"
+                  className={`flex-1 py-1 font-heading text-sage-800 ${titleSize(draftName)}`}
                 />
                 <Ionicons name="pencil" size={18} color="#7a9264" />
               </View>
             ) : (
-              <Text accessibilityRole="header" className="font-heading text-4xl text-sage-800">
+              <Text
+                accessibilityRole="header"
+                className={`font-heading text-sage-800 ${titleSize(collection.name)}`}>
                 {collection.name}
               </Text>
             )}
@@ -198,29 +201,25 @@ export default function CollectionScreen() {
           error ? null : <ActivityIndicator color="#7a9264" className="mt-8" />
         ) : (
           <>
-            {isEditing && !isAllOutfits ? <AddOutfitsButton onPress={() => setIsPicking(true)} /> : null}
+            {/* Always shown while the list is empty (a new collection, or after removing the
+                last outfit), so outfits can be added without going into edit mode first. */}
+            {!isAllOutfits && (isEditing || outfits.length === 0) ? (
+              <AddOutfitsButton onPress={() => setIsPicking(true)} />
+            ) : null}
 
-            {outfits.length === 0 && !isEditing ? (
-              <View className="mt-8 items-center gap-2">
-                {isAllOutfits ? (
-                  <Text className="text-center font-body text-base text-sage-500">
-                    Outfits you save from the Stylist show up here.
-                  </Text>
-                ) : (
-                  <>
-                    <Text className="font-body text-base text-sage-500">No outfits yet.</Text>
-                    <Pressable onPress={startAdding} accessibilityRole="button" hitSlop={8}>
-                      <Text className="font-label text-base text-sage-700 underline">Add outfits</Text>
-                    </Pressable>
-                  </>
-                )}
-              </View>
+            {outfits.length === 0 ? (
+              isAllOutfits && !isEditing ? (
+                <Text className="mt-8 text-center font-body text-base text-sage-500">
+                  Outfits you save from the Stylist show up here.
+                </Text>
+              ) : null
             ) : (
               <OutfitGrid
                 outfits={outfits}
                 renderTile={(outfit) => (
                   <OutfitTile
                     outfit={outfit}
+                    backgroundColor={colorFor(outfit.id)}
                     disabled={removingId === outfit.id}
                     onPress={
                       isEditing ? undefined : () => router.push({ pathname: '/outfit/[id]', params: { id: outfit.id } })
@@ -250,4 +249,13 @@ export default function CollectionScreen() {
       />
     </SafeAreaView>
   );
+}
+
+// Long names get a smaller size so they stay within about 2 lines on the smallest iPhones
+// (about 15 characters a line at text-4xl). Sized by length rather than adjustsFontSizeToFit,
+// which leaves a gap under shrunk text on iOS.
+function titleSize(name: string): string {
+  if (name.length > 30) return 'text-2xl';
+  if (name.length > 22) return 'text-3xl';
+  return 'text-4xl';
 }

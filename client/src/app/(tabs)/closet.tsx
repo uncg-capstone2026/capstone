@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CategoryFilter } from '@/components/closet/category-filter';
 import { ClosetGrid } from '@/components/closet/closet-grid';
 import { ClosetTip } from '@/components/closet/closet-tip';
+import { useItemColors } from '@/hooks/use-item-colors';
 import { SessionExpiredError } from '@/services/api';
 import { canBuildOutfit, filterItems, listItems, type ClosetFilter, type ClosetItem } from '@/services/items';
 
@@ -15,6 +16,7 @@ export default function ClosetScreen() {
   const [filter, setFilter] = useState<ClosetFilter>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const itemsWithColors = useItemColors(items);
 
   // Reload whenever the closet comes back into view, e.g. after adding an item.
   useFocusEffect(
@@ -49,7 +51,7 @@ export default function ClosetScreen() {
           <ActivityIndicator color="#7a9264" className="mt-8" />
         ) : (
           <ClosetGrid
-            items={filterItems(items, filter)}
+            items={filterItems(itemsWithColors, filter)}
             onAddPress={() => router.push('/add-item')}
             isClosetEmpty={items.length === 0}
           />

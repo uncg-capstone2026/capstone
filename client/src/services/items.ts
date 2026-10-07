@@ -1,5 +1,6 @@
 import { isBackendConfigured } from '@/config/api';
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
+import { rememberItemColors } from '@/services/item-colors';
 import { uploadToS3, type PickedPhoto } from '@/services/photos';
 import { formatTag } from '@/utils/format';
 
@@ -18,6 +19,7 @@ export type ClosetItem = {
   category: ClothingCategory | null; // null until the item is tagged; it only shows under "All"
   imageUrl: string; // signed S3 URL for the cutout (Item.cutoutKey), or the original until it's ready
   isFavorite: boolean;
+  colorHex?: string[]; // main color first; added from the device's cache (see useItemColors)
 };
 
 export type ClothingFit = 'fitted' | 'slim' | 'regular' | 'loose' | 'oversized';
@@ -84,7 +86,7 @@ export type ClothingItemChanges = {
   material?: string | null;
   season?: string | null;
   formality?: string | null;
-  excludeFromSuggestions?: boolean; // not accepted by the server yet
+  excludeFromSuggestions?: boolean;
 };
 
 export type ClosetFilter = 'all' | 'favorites' | ClothingCategory;
@@ -186,6 +188,17 @@ const COMMON_MATERIALS = ['cotton', 'denim', 'linen', 'wool', 'cashmere', 'silk'
 
 const toOptions = (values: string[]) => values.map((value) => ({ value, label: formatTag(value) }));
 
+// Labels for tags the AI filled in. The stylist reads most of them (with the photo) to pick
+// outfits; cut is the exception.
+export const AI_HINT = 'Filled in by StyleMe';
+
+// For a tag the stylist uses: who filled it in once it has a value, and always that the
+// stylist reads it.
+export function stylistHint(value: unknown): string {
+  const isEmpty = value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
+  return isEmpty ? 'Used by the stylist' : `${AI_HINT} · used by the stylist`;
+}
+
 export const PATTERN_OPTIONS = toOptions(PATTERNS);
 export const SEASON_OPTIONS = toOptions(SEASONS);
 export const FORMALITY_OPTIONS = toOptions(FORMALITY_LEVELS);
@@ -220,7 +233,7 @@ export async function listItems(): Promise<ClosetItem[]> {
 // GET /api/items/:id. imageUrl is freshly signed, so use it rather than the closet's copy.
 export async function getItem(id: string): Promise<ClothingItemDetails> {
   try {
-    return withNewFitNames(await apiGet<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`));
+    return withRememberedColors(await apiGet<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`));
   } catch (e) {
     throw itemError(e, 'Could not load this item. Please try again.');
   }
@@ -229,7 +242,7 @@ export async function getItem(id: string): Promise<ClothingItemDetails> {
 // PATCH /api/items/:id -> the updated item.
 export async function updateItem(id: string, changes: ClothingItemChanges): Promise<ClothingItemDetails> {
   try {
-    return withNewFitNames(
+    return withRememberedColors(
       await apiPatch<ClothingItemDetails>(`/api/items/${encodeURIComponent(id)}`, changes),
     );
   } catch (e) {
@@ -237,20 +250,18 @@ export async function updateItem(id: string, changes: ClothingItemChanges): Prom
   }
 }
 
-// The server still calls "loose" "relaxed" until its Fit enum is migrated (see PLAN.md).
-// Until then it also rejects "fitted" and "loose" with a 400.
-function withNewFitNames(item: ClothingItemDetails): ClothingItemDetails {
-  return (item.fit as string) === 'relaxed' ? { ...item, fit: 'loose' } : item;
+// Saves the item's colors on the device for the closet, which doesn't get them from the server.
+function withRememberedColors(item: ClothingItemDetails): ClothingItemDetails {
+  void rememberItemColors(item.id, item.colorHex);
+  return item;
 }
 
-// GET /api/items/:id/color-grid, for the color dropper. Not built on the server yet, so a 404
-// usually means the route is missing rather than the item.
+// GET /api/items/:id/color-grid, for the color dropper.
 export async function getItemColorGrid(id: string): Promise<ItemColorGrid> {
   try {
     return await apiGet<ItemColorGrid>(`/api/items/${encodeURIComponent(id)}/color-grid`);
   } catch (e) {
-    if (e instanceof SessionExpiredError) throw e;
-    throw new Error("The color dropper isn't available yet.");
+    throw itemError(e, "Couldn't load the colors. Please try again.");
   }
 }
 

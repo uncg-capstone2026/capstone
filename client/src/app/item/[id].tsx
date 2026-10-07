@@ -8,17 +8,23 @@ import { GOLD } from '@/components/closet/category-filter';
 import { ColorSection } from '@/components/item-details/color-section';
 import { FitSlider } from '@/components/item-details/fit-slider';
 import { GarmentCard } from '@/components/item-details/garment-card';
+import { MoreDetails } from '@/components/item-details/more-details';
 import { OutfitChips } from '@/components/item-details/outfit-chips';
 import { RemoveItem } from '@/components/item-details/remove-item';
 import { SelectField } from '@/components/item-details/select-field';
 import { WearStats } from '@/components/item-details/wear-stats';
 import { SessionExpiredError } from '@/services/api';
 import {
+  AI_HINT,
   CATEGORY_OPTIONS,
   CLOTHING_TYPE_OPTIONS,
   COMMON_CUTS,
   deleteItem,
+  FORMALITY_OPTIONS,
   getItem,
+  MATERIAL_OPTIONS,
+  SEASON_OPTIONS,
+  stylistHint,
   updateItem,
   type ClothingItemChanges,
   type ClothingItemDetails,
@@ -26,6 +32,7 @@ import {
 
 const MAX_NAME_LENGTH = 60;
 const MAX_CUT_LENGTH = 50;
+const MAX_MATERIAL_LENGTH = 50;
 
 // Every cut from every category, for items that don't have a category yet.
 const ALL_CUTS = [...new Set(Object.values(COMMON_CUTS).flat())].sort();
@@ -137,7 +144,7 @@ export default function ItemDetailsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerClassName="gap-6 px-6 pb-12 pt-2" keyboardShouldPersistTaps="handled">
-          <GarmentCard itemId={item.id} imageUrl={item.imageUrl} name={item.name} />
+          <GarmentCard itemId={item.id} imageUrl={item.imageUrl} name={item.name} colorHex={item.colorHex} />
 
           <ItemName name={item.name} onRename={(name) => save({ name })} />
 
@@ -147,9 +154,14 @@ export default function ItemDetailsScreen() {
 
           <View className="h-px bg-sage-200" />
 
-          <ColorSection colors={item.colorHex} pattern={item.pattern} />
+          <ColorSection
+            colors={item.colorHex}
+            pattern={item.pattern}
+            colorsHint={stylistHint(item.colorHex)}
+            patternHint={stylistHint(item.pattern)}
+          />
 
-          <FitSlider value={item.fit} onChange={(fit) => save({ fit })} />
+          <FitSlider value={item.fit} onChange={(fit) => save({ fit })} aiHint={stylistHint(item.fit)} />
 
           <SelectField
             label="Cut"
@@ -160,6 +172,7 @@ export default function ItemDetailsScreen() {
             }))}
             onChange={(cut) => save({ cut })}
             allowCustom={{ label: 'Add a custom cut…', maxLength: MAX_CUT_LENGTH }}
+            aiHint={item.cut ? AI_HINT : undefined}
           />
 
           <SelectField
@@ -167,15 +180,40 @@ export default function ItemDetailsScreen() {
             value={item.category}
             options={CATEGORY_OPTIONS.map(({ key, label }) => ({ value: key, label }))}
             onChange={(category) => save({ category })}
+            aiHint={stylistHint(item.category)}
           />
 
-          <SelectField
-            label="Type"
-            value={item.type}
-            options={[...CLOTHING_TYPE_OPTIONS]}
-            onChange={(type) => save({ type })}
-            aiHint="AI tag · the stylist uses this to pick outfits"
-          />
+          <MoreDetails summary="Type, material, season and formality">
+            <SelectField
+              label="Type"
+              value={item.type}
+              options={[...CLOTHING_TYPE_OPTIONS]}
+              onChange={(type) => save({ type })}
+              aiHint={stylistHint(item.type)}
+            />
+            <SelectField
+              label="Material"
+              value={item.material}
+              options={MATERIAL_OPTIONS}
+              onChange={(material) => save({ material })}
+              allowCustom={{ label: 'Add a custom material…', maxLength: MAX_MATERIAL_LENGTH }}
+              aiHint={stylistHint(item.material)}
+            />
+            <SelectField
+              label="Season"
+              value={item.season}
+              options={SEASON_OPTIONS}
+              onChange={(season) => save({ season })}
+              aiHint={stylistHint(item.season)}
+            />
+            <SelectField
+              label="Formality"
+              value={item.formality}
+              options={FORMALITY_OPTIONS}
+              onChange={(formality) => save({ formality })}
+              aiHint={stylistHint(item.formality)}
+            />
+          </MoreDetails>
 
           <View className="h-px bg-sage-200" />
 
@@ -236,7 +274,6 @@ function ItemName({ name, onRename }: { name: string; onRename: (name: string) =
   );
 }
 
-// Disabled until the server sends excludeFromSuggestions (see PLAN.md).
 function ExcludeToggle({ value, onChange }: { value?: boolean; onChange: (value: boolean) => void }) {
   const isAvailable = value !== undefined;
   return (

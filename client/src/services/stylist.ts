@@ -3,11 +3,11 @@ import { listItems, type ClosetItem, type ClothingCategory } from '@/services/it
 import { saveFixtureOutfit } from '@/services/outfits';
 import { toDateKey } from '@/utils/dates';
 
-// POST /api/stylist/outfit is live. The accept and feedback routes aren't built yet (see
-// PLAN.md section 7), so those two still fake success. Set USE_OUTFIT_FIXTURE to true to build
-// suggestions from the user's own closet instead, without calling the AI.
+// All three Stylist routes are live. Set USE_OUTFIT_FIXTURE to true to build suggestions from
+// the user's own closet instead, without calling the AI, and USE_ACCEPT_FEEDBACK_FIXTURE to save
+// accepted outfits into the Outfits fixture instead of the server.
 const USE_OUTFIT_FIXTURE = false;
-const USE_ACCEPT_FEEDBACK_FIXTURE = true;
+const USE_ACCEPT_FEEDBACK_FIXTURE = false;
 
 export type OutfitRequest = {
   date: Date;

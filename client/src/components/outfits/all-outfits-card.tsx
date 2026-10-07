@@ -7,11 +7,12 @@ import { formatOutfitCount, type OutfitPreview } from '@/services/outfits';
 type AllOutfitsCardProps = {
   count: number;
   cover: OutfitPreview | null;
+  coverColor: string; // the cover outfit's background, as on its tile
   onPress: () => void;
 };
 
 // Dark card at the top of the Outfits tab: a small flat-lay on the left, title and count on the right.
-export function AllOutfitsCard({ count, cover, onPress }: AllOutfitsCardProps) {
+export function AllOutfitsCard({ count, cover, coverColor, onPress }: AllOutfitsCardProps) {
   const countLabel = `${formatOutfitCount(count)} saved`;
 
   return (
@@ -20,7 +21,12 @@ export function AllOutfitsCard({ count, cover, onPress }: AllOutfitsCardProps) {
       accessibilityRole="button"
       accessibilityLabel={`All saved outfits, ${countLabel}`}
       className="flex-row items-center gap-4 rounded-2xl bg-sage-800 p-3 active:opacity-90">
-      <View className="h-[84px] w-[84px] items-center justify-center overflow-hidden rounded-xl bg-cream-50 p-2">
+      {/* The background is set one way only: a bg- class would override the inline colour. */}
+      <View
+        style={cover ? { backgroundColor: coverColor } : undefined}
+        className={`h-[84px] w-[84px] items-center justify-center overflow-hidden rounded-xl p-2 ${
+          cover ? '' : 'bg-cream-50'
+        }`}>
         {cover ? (
           <OutfitCover items={cover} />
         ) : (

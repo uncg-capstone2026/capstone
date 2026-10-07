@@ -1,10 +1,15 @@
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
 import type { SuggestedPiece } from '@/services/stylist';
 
-// The outfit and collection routes aren't built yet (see PLAN.md section 9). Until they are,
-// the Outfits screens use an in-memory fixture. It starts empty; accepting a Stylist suggestion
-// saves an outfit into it (see acceptOutfit in services/stylist.ts).
-const USE_COLLECTIONS_FIXTURE = true;
+// The outfit and collection routes are live. Set this to true to use an in-memory fixture
+// instead. It starts empty; accepting a Stylist suggestion saves an outfit into it while
+// USE_ACCEPT_FEEDBACK_FIXTURE in services/stylist.ts is on.
+const USE_COLLECTIONS_FIXTURE = false;
+
+// Changing an outfit's pieces and its scheduled dates aren't on the server yet (see PLAN.md
+// section 9). While this is on, those changes are kept in memory for the session and shown on
+// top of what the server sends.
+const USE_OUTFIT_EDITS_FIXTURE = true;
 
 export const COLLECTION_NAME_MAX_LENGTH = 40;
 
@@ -20,11 +25,22 @@ const BUILT_IN_NAMES: Record<string, string> = {
 // An outfit's pieces, laid out with FlatLay.
 export type OutfitPreview = SuggestedPiece[];
 
+// A day the outfit is planned for. An outfit can have any number, even two on the same day.
+export type ScheduledDate = {
+  id: string; // the calendar entry's id
+  date: string; // YYYY-MM-DD
+  eventName: string | null;
+};
+
 // GET /api/outfits
 export type SavedOutfit = {
   id: string;
   name: string;
   isFavorite: boolean;
+  timesWorn?: number;
+  lastWorn?: string | null; // ISO date of the most recent day it was worn; null if never
+  createdAt?: string;
+  scheduled?: ScheduledDate[]; // not sent by the server yet (see USE_OUTFIT_EDITS_FIXTURE)
   items: OutfitPreview;
 };
 
@@ -69,9 +85,25 @@ export async function listOutfits(): Promise<SavedOutfit[]> {
     return fixtureOutfits;
   }
   try {
-    return await apiGet<SavedOutfit[]>('/api/outfits');
+    return (await apiGet<SavedOutfit[]>('/api/outfits')).map(withEdits);
   } catch (e) {
     throw collectionsError(e, 'Could not load your outfits. Please try again.');
+  }
+}
+
+// GET /api/outfits/:id, for the outfit details screen.
+export async function getOutfit(id: string): Promise<SavedOutfit> {
+  if (USE_COLLECTIONS_FIXTURE) {
+    await wait(300);
+    const outfit = fixtureOutfits.find((o) => o.id === id);
+    if (!outfit) throw new Error('This outfit no longer exists.');
+    return withEdits(outfit);
+  }
+  try {
+    return withEdits(await apiGet<SavedOutfit>(`/api/outfits/${encodeURIComponent(id)}`));
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) throw new Error('This outfit no longer exists.');
+    throw collectionsError(e, 'Could not load this outfit. Please try again.');
   }
 }
 
@@ -86,9 +118,10 @@ export async function getCollection(id: string): Promise<CollectionDetails> {
     if (id === ALL_OUTFITS_ID || id === FAVORITES_ID) {
       const query = id === FAVORITES_ID ? '?favorite=true' : '';
       const outfits = await apiGet<SavedOutfit[]>(`/api/outfits${query}`);
-      return { id, name: BUILT_IN_NAMES[id], outfits };
+      return { id, name: BUILT_IN_NAMES[id], outfits: outfits.map(withEdits) };
     }
-    return await apiGet<CollectionDetails>(`/api/collections/${id}`);
+    const collection = await apiGet<CollectionDetails>(`/api/collections/${id}`);
+    return { ...collection, outfits: collection.outfits.map(withEdits) };
   } catch (e) {
     throw collectionsError(e, 'Could not load this collection. Please try again.');
   }
@@ -208,6 +241,86 @@ export async function deleteOutfit(outfitId: string): Promise<void> {
   }
 }
 
+// PATCH /api/outfits/:id { isFavorite }
+export async function setOutfitFavorite(outfitId: string, isFavorite: boolean): Promise<void> {
+  if (USE_COLLECTIONS_FIXTURE) {
+    await wait(300);
+    fixtureOutfits = fixtureOutfits.map((o) => (o.id === outfitId ? { ...o, isFavorite } : o));
+    return;
+  }
+  try {
+    await apiPatch(`/api/outfits/${outfitId}`, { isFavorite });
+  } catch (e) {
+    throw collectionsError(e, 'Could not update your favorites. Please try again.');
+  }
+}
+
+// The user's collections that include this outfit. GET /api/outfits/:id doesn't list them yet
+// (see PLAN.md), so this loads each collection that has outfits.
+export async function listOutfitCollections(outfitId: string): Promise<{ id: string; name: string }[]> {
+  const overview = await getOutfitsOverview();
+  const withOutfits = overview.collections.filter((collection) => collection.outfitCount > 0);
+  const details = await Promise.all(withOutfits.map((collection) => getCollection(collection.id)));
+  return details
+    .filter((collection) => collection.outfits.some((outfit) => outfit.id === outfitId))
+    .map(({ id, name }) => ({ id, name }));
+}
+
+// Complete means a one-piece (or set), or a top and bottoms. Pieces can't be removed past this.
+export function isCompleteOutfit(pieces: OutfitPreview): boolean {
+  const categories = new Set(pieces.map((piece) => piece.category));
+  return (
+    categories.has('one-piece') || categories.has('sets') || (categories.has('tops') && categories.has('bottoms'))
+  );
+}
+
+// PATCH /api/outfits/:id { itemIds }: replaces the outfit's pieces (add, remove or swap).
+export async function updateOutfitItems(outfitId: string, pieces: OutfitPreview): Promise<void> {
+  if (USE_OUTFIT_EDITS_FIXTURE) {
+    await wait(300);
+    fixturePieces[outfitId] = pieces;
+    return;
+  }
+  try {
+    await apiPatch(`/api/outfits/${outfitId}`, { itemIds: pieces.map((piece) => piece.id) });
+  } catch (e) {
+    throw collectionsError(e, 'Could not update this outfit. Please try again.');
+  }
+}
+
+// POST /api/outfits/:id/schedule { date, eventName } -> the new entry. Always adds one, so an
+// outfit can be planned for several events.
+export async function scheduleOutfit(
+  outfitId: string,
+  entry: { date: string; eventName: string | null },
+): Promise<ScheduledDate> {
+  if (USE_OUTFIT_EDITS_FIXTURE) {
+    await wait(300);
+    const created = { id: `fixture-entry-${Date.now()}`, ...entry };
+    fixtureSchedules[outfitId] = [...(fixtureSchedules[outfitId] ?? []), created];
+    return created;
+  }
+  try {
+    return await apiPost<ScheduledDate>(`/api/outfits/${outfitId}/schedule`, entry);
+  } catch (e) {
+    throw collectionsError(e, 'Could not schedule this outfit. Please try again.');
+  }
+}
+
+// DELETE /api/outfits/:id/schedule/:entryId: removes that one date only.
+export async function unscheduleOutfit(outfitId: string, entryId: string): Promise<void> {
+  if (USE_OUTFIT_EDITS_FIXTURE) {
+    await wait(300);
+    fixtureSchedules[outfitId] = (fixtureSchedules[outfitId] ?? []).filter((entry) => entry.id !== entryId);
+    return;
+  }
+  try {
+    await apiDelete(`/api/outfits/${outfitId}/schedule/${entryId}`);
+  } catch (e) {
+    throw collectionsError(e, 'Could not remove this date. Please try again.');
+  }
+}
+
 export function formatOutfitCount(count: number): string {
   return `${count} ${count === 1 ? 'outfit' : 'outfits'}`;
 }
@@ -223,6 +336,19 @@ function collectionsError(e: unknown, fallback: string): Error {
 }
 
 // ---- Fixture ----
+
+// USE_OUTFIT_EDITS_FIXTURE: each outfit's edited pieces and scheduled dates, by outfit id.
+const fixturePieces: Record<string, OutfitPreview> = {};
+const fixtureSchedules: Record<string, ScheduledDate[]> = {};
+
+function withEdits(outfit: SavedOutfit): SavedOutfit {
+  if (!USE_OUTFIT_EDITS_FIXTURE) return outfit;
+  return {
+    ...outfit,
+    items: fixturePieces[outfit.id] ?? outfit.items,
+    scheduled: fixtureSchedules[outfit.id] ?? outfit.scheduled ?? [],
+  };
+}
 
 // Kept for the session so changes show up when the screens reload. Outfits and members are
 // newest first.
