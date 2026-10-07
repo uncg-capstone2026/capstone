@@ -1,10 +1,11 @@
-import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { Injectable, Logger, UnprocessableEntityException } from '@nestjs/common';
 import type { Category } from '@prisma/client';
 import { GeminiHelpers } from '../gemini/helpers';
 import { OutfitPlanningService, type OutfitCandidate } from '../gemini/outfit-planning/service';
 import { QueryExpansionService } from '../gemini/query-expansion/service';
 import { CATEGORY_TO_CLIENT } from '../items/item-mappings';
 import { S3Service } from '../s3/s3.service';
+import { WeatherService, type Weather } from '../weather/weather.service';
 import { OUTFIT_DETAILS_INSTRUCTIONS, alreadyShownText } from './outfit-selection/prompt';
 import { buildOutfitSuggestionSchema } from './outfit-selection/schema';
 
@@ -35,17 +36,31 @@ const DISPLAY_ORDER: Category[] = ['Outerwear', 'Top', 'OnePiece', 'Sets', 'Bott
 // and "Try another suggestion" support on top.
 @Injectable()
 export class StylistService {
+  private readonly logger = new Logger(StylistService.name);
+
   constructor(
     private readonly helpers: GeminiHelpers,
     private readonly queryExpansion: QueryExpansionService,
     private readonly outfitPlanning: OutfitPlanningService,
     private readonly s3: S3Service,
+    private readonly weather: WeatherService,
   ) {}
 
   // Expand the request, find matching closet items, then have Gemini pick one
   // complete outfit the user hasn't seen yet. 422 when there isn't one.
-  async suggestOutfit(userId: string, userRequest: string, excludeSuggestionIds: string[]): Promise<OutfitSuggestion> {
-    const expanded = await this.queryExpansion.expandAndEmbedQuery(userRequest);
+  async suggestOutfit(
+    userId: string,
+    userRequest: string,
+    excludeSuggestionIds: string[],
+    context: { location: { lat: number; lon: number } | null; date?: string } = { location: null },
+  ): Promise<OutfitSuggestion> {
+    // Fetched first, so the expansion already picks clothes for the day.
+    const weather = await this.dayWeather(context.location, context.date);
+
+    // AI (Gemini query expansion + embedding): turns the request and the day's
+    // weather into garment types with photo-like descriptions, embedded so the
+    // closet can be searched by meaning.
+    const expanded = await this.queryExpansion.expandAndEmbedQuery(userRequest, weather);
 
     const ids = await this.outfitPlanning.findCandidates(userId, expanded.items);
     if (ids.length === 0) throw new UnprocessableEntityException(NOT_ENOUGH_ITEMS);
@@ -61,10 +76,23 @@ export class StylistService {
       .map(fromSuggestionId)
       .filter((list): list is string[] => list !== null && list.every((id) => candidateIds.has(id)));
 
-    return this.selectSuggestion(userRequest, candidates, shownBefore, excluded);
+    return this.selectSuggestion(userRequest, candidates, shownBefore, excluded, weather);
   }
 
   // ---- Helpers ----
+
+  // The forecast for the outfit's day (today when no date), or null without a
+  // location or if it fails (no key, past the forecast range, API down).
+  // Weather only improves the picks, so a failure never blocks a suggestion.
+  private async dayWeather(location: { lat: number; lon: number } | null, date?: string): Promise<Weather | null> {
+    if (!location) return null;
+    try {
+      return await this.weather.getWeather({ ...location, date });
+    } catch (err) {
+      this.logger.warn(`Suggesting without weather: ${(err as Error).message}`);
+      return null;
+    }
+  }
 
   // Same request Javier's selectOutfit sends (his prompt and the candidate
   // photos), plus outfits to avoid and the name/reasons instructions.
@@ -73,8 +101,9 @@ export class StylistService {
     candidates: OutfitCandidate[],
     shownBefore: string[][],
     excluded: Set<string>,
+    weather: Weather | null,
   ): Promise<OutfitSuggestion> {
-    const parts = this.outfitPlanning.buildSelectionParts(userRequest, candidates);
+    const parts = this.outfitPlanning.buildSelectionParts(userRequest, candidates, weather);
     if (shownBefore.length > 0) parts.push({ text: alreadyShownText(shownBefore) });
     parts.push({ text: OUTFIT_DETAILS_INSTRUCTIONS });
 

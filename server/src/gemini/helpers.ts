@@ -1,9 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { GoogleGenAI, Schema } from '@google/genai';
+import type { Weather } from '../weather/weather.service';
 import { EMBEDDABLE_IMAGE_TYPES } from './constants';
 
 // Formats a list for a prompt: ['a', 'b'] -> '"a", "b"'.
 export const quoteList = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(', ');
+
+// One line for a prompt, in °F since users are in the US, e.g. "Weather on
+// 2026-10-06 in Greensboro: Partly cloudy, high 72°F, low 55°F, ...".
+export function describeWeather(w: Weather): string
+{
+  const r = Math.round;
+  return `Weather on ${w.date} in ${w.locationName}: ${w.condition}, ` +
+    `high ${r(w.highF)}°F, low ${r(w.lowF)}°F, feels like ${r(w.feelsLikeF)}°F, ` +
+    `${r(w.chanceOfRain)}% chance of rain, wind ${r(w.windKph)} km/h, UV ${r(w.uvIndex)}.`;
+}
 
 // MIME type of a PNG/JPEG photo from its S3 key's extension; null for anything
 // else (e.g. webp), which Gemini isn't sent.

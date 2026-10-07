@@ -9,7 +9,7 @@ import { StylistService } from './stylist.service';
 export class StylistController {
   constructor(private readonly stylist: StylistService) {}
 
-  // POST /api/stylist/outfit { occasion, date?, excludeSuggestionIds? }
+  // POST /api/stylist/outfit { occasion, date?, lat?, lon?, excludeSuggestionIds? }
   //   -> { suggestionId, name, reasons, items: [{ id, name, category, type, imageUrl }] }
   // Matches OutfitSuggestion in client/src/services/stylist.ts.
   // 422 when the closet doesn't have enough matching items for a complete outfit,
@@ -21,6 +21,12 @@ export class StylistController {
     @Body(new ValidationPipe()) body: StyleOutfitDto,
   ) {
     const userRequest = body.date ? `${body.occasion}\nDate: ${body.date}` : body.occasion;
-    return this.stylist.suggestOutfit(userId, userRequest, body.excludeSuggestionIds ?? []);
+    const location = body.lat !== undefined && body.lon !== undefined
+      ? { lat: body.lat, lon: body.lon }
+      : null;
+    return this.stylist.suggestOutfit(userId, userRequest, body.excludeSuggestionIds ?? [], {
+      location,
+      date: body.date,
+    });
   }
 }
