@@ -44,10 +44,10 @@ const UNTAGGED_SLOT: OutfitSlot = 'accessory';
 const LAYER_ORDER: OutfitSlot[] = ['shoes', 'bottom', 'onepiece', 'outerwear', 'top', 'accessory'];
 
 // What every outfit query loads: its pieces with their items, bottom layer first.
-const WITH_PIECES = {
+export const WITH_PIECES = {
   items: { include: { item: true }, orderBy: { zIndex: 'asc' } },
 } satisfies Prisma.OutfitInclude;
-type OutfitWithPieces = Prisma.OutfitGetPayload<{ include: typeof WITH_PIECES }>;
+export type OutfitWithPieces = Prisma.OutfitGetPayload<{ include: typeof WITH_PIECES }>;
 
 @Injectable()
 export class OutfitsService {
