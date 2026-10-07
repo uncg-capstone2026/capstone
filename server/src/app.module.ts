@@ -11,6 +11,8 @@ import { WeatherModule } from './weather/weather.module';
 import { PhotosModule } from './photos/photos.module';
 import { StylistModule } from './stylist/stylist.module';
 import { OutfitsModule } from './outfits/outfits.module';
+import { CollectionsModule } from './collections/collections.module';
+
 
 @Module({
   imports: [
@@ -24,7 +26,9 @@ import { OutfitsModule } from './outfits/outfits.module';
     PhotosModule,
     StylistModule,
     OutfitsModule,
+    CollectionsModule,
   ],
+
   controllers: [AppController],
   providers: [AppService],
 })
