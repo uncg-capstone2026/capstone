@@ -46,13 +46,13 @@ export class S3Service {
     return getSignedUrl(this.client, command, { expiresIn: 300 }); // 5 minutes
   }
 
-  // Returns a short-lived URL the client can GET the file from.
+  // Returns a URL the client can GET the file from, valid for 24 hours. 
   async getDownloadUrl(key: string): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
     });
-    return getSignedUrl(this.client, command, { expiresIn: 300 });
+    return getSignedUrl(this.client, command, { expiresIn: 60 * 60 * 24 }); // 24 hours  
   }
 
   async deleteObject(key: string): Promise<void> {
