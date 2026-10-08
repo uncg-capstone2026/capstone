@@ -5,6 +5,8 @@ import { GeminiHelpers } from './helpers';
 import { ImageProcessingService } from './image-processing/service';
 import { QueryExpansionService } from './query-expansion/service';
 import { OutfitPlanningService } from './outfit-planning/service';
+import { HistorySummaryService } from './history-summary/service';
+import { RepromptRouterService } from './reprompt-router/service';
 
 @Module({
   imports: [S3Module],
@@ -14,7 +16,15 @@ import { OutfitPlanningService } from './outfit-planning/service';
     ImageProcessingService,
     QueryExpansionService,
     OutfitPlanningService,
+    RepromptRouterService,
+    HistorySummaryService,
   ],
-  exports: [ImageProcessingService, QueryExpansionService, OutfitPlanningService],
+  exports: [
+    ImageProcessingService,
+    QueryExpansionService,
+    OutfitPlanningService,
+    RepromptRouterService,
+    HistorySummaryService,
+  ],
 })
 export class GeminiModule {}
