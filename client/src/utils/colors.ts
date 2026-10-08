@@ -46,6 +46,18 @@ export function hexToRgb(hex: string): Rgb {
   return { r: (value >> 16) & 255, g: (value >> 8) & 255, b: value & 255 };
 }
 
+// A light tan card behind white clothing, which would otherwise disappear into the cream cards.
+export const WHITE_ITEM_BACKGROUND = '#D2BC9F';
+
+// True when the item's main (first) color is white or near-white (ivory, off-white): every
+// channel bright and close together.
+export function isMainlyWhite(colorHex: string[] | undefined): boolean {
+  const main = colorHex?.[0];
+  if (!main) return false;
+  const { r, g, b } = hexToRgb(main);
+  return Math.min(r, g, b) >= 225 && Math.max(r, g, b) - Math.min(r, g, b) <= 24;
+}
+
 // Always "#RRGGBB" in uppercase, which is what the server stores.
 export function normalizeHex(hex: string): string {
   return `#${hex.replace('#', '').slice(0, 6).toUpperCase()}`;

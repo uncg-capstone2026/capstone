@@ -4,7 +4,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DecisionButtons, INK, ResultNote, type DecisionResult } from '@/components/suggestion/decision-result';
-import { OutfitStage, SHEET_OVERLAP } from '@/components/suggestion/outfit-stage';
+import { OutfitStage, OVERLAY_BG, SHEET_OVERLAP } from '@/components/suggestion/outfit-stage';
 import { PieceThumbnails } from '@/components/suggestion/piece-thumbnails';
 import { PromptSheet } from '@/components/prompt-sheet';
 import { SelectedPieceBar } from '@/components/suggestion/selected-piece-bar';
@@ -152,6 +152,11 @@ export default function SuggestionScreen() {
         <OutfitStage
           items={suggestion.items}
           selectedPiece={selectedPiece}
+          topRight={
+            <View style={{ backgroundColor: OVERLAY_BG }} className="rounded-full px-3 py-1.5">
+              <Text className="font-label text-[11px] uppercase tracking-widest text-sage-500">Suggested</Text>
+            </View>
+          }
           color={stageColor}
           isColorPopoverOpen={isColorPopoverOpen}
           onToggleColorPopover={() => setIsColorPopoverOpen((open) => !open)}

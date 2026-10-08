@@ -24,6 +24,13 @@ export class SavePhotoDto {
   key!: string;
 }
 
+// POST /api/items/link { url }. The service checks it's a usable http/https link.
+export class ImportLinkDto {
+  @IsString()
+  @MaxLength(2048)
+  url!: string;
+}
+
 // PATCH /api/items/:id — every field is optional; only the ones sent get changed.
 export class UpdateItemDto {
   // These can't be null in the database, so null is rejected (only "missing" is allowed).
@@ -37,6 +44,10 @@ export class UpdateItemDto {
   @IsArray() @ArrayMaxSize(3)
   @Matches(/^#[0-9a-fA-F]{6}$/, { each: true, message: 'colorHex values must look like #1A2B3C' })
   colorHex?: string[];
+
+  // When true, the Stylist never uses this item in outfit suggestions.
+  @ValidateIf((_, v) => v !== undefined) @IsBoolean()
+  excludeFromSuggestions?: boolean;
 
   // These can be cleared by sending null.
   @IsOptional() @IsIn(CLIENT_CATEGORIES)

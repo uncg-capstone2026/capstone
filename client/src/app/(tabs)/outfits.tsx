@@ -8,6 +8,7 @@ import { AllOutfitsCard } from '@/components/outfits/all-outfits-card';
 import { CollectionsGrid } from '@/components/outfits/collections-grid';
 import { FavoritesRow } from '@/components/outfits/favorites-row';
 import { PromptSheet } from '@/components/prompt-sheet';
+import { useOutfitColors } from '@/hooks/use-outfit-colors';
 import { SessionExpiredError } from '@/services/api';
 import {
   ALL_OUTFITS_ID,
@@ -16,9 +17,12 @@ import {
   deleteCollection,
   FAVORITES_ID,
   getOutfitsOverview,
+  listOutfits,
   renameCollection,
   type OutfitCollection,
+  type OutfitPreview,
   type OutfitsOverview,
+  type SavedOutfit,
 } from '@/services/outfits';
 
 export default function OutfitsScreen() {
@@ -28,6 +32,8 @@ export default function OutfitsScreen() {
   const [isCreating, setIsCreating] = useState(false);
   const [renaming, setRenaming] = useState<OutfitCollection | null>(null);
   const [deleting, setDeleting] = useState<OutfitCollection | null>(null);
+  const [outfits, setOutfits] = useState<SavedOutfit[]>([]); // only to colour the covers
+  const colorFor = useOutfitColors();
 
   // Reload whenever the tab comes back into view, e.g. after saving an outfit. Leaving the
   // tab ends edit mode.
@@ -40,11 +46,24 @@ export default function OutfitsScreen() {
           if (e instanceof SessionExpiredError) return;
           setError(e instanceof Error ? e.message : 'Something went wrong.');
         });
+      listOutfits()
+        .then(setOutfits)
+        .catch(() => {
+          // Covers just use the default background.
+        });
       return () => setIsEditing(false);
     }, []),
   );
 
   const collections = overview?.collections ?? [];
+
+  // A cover is an outfit's pieces without its id, so its background colour comes from the saved
+  // outfit with the same pieces (the default sage if none matches).
+  function coverColor(cover: OutfitPreview | null): string {
+    const key = cover ? piecesKey(cover) : null;
+    const outfit = outfits.find((o) => piecesKey(o.items) === key);
+    return colorFor(outfit?.id ?? '');
+  }
 
   function openCollection(id: string) {
     router.push({ pathname: '/collection/[id]', params: { id } });
@@ -92,6 +111,7 @@ export default function OutfitsScreen() {
             <AllOutfitsCard
               count={overview.allOutfits.count}
               cover={overview.allOutfits.cover}
+              coverColor={coverColor(overview.allOutfits.cover)}
               onPress={() => openCollection(ALL_OUTFITS_ID)}
             />
 
@@ -111,6 +131,7 @@ export default function OutfitsScreen() {
 
             <CollectionsGrid
               collections={collections}
+              coverColorFor={(collection) => coverColor(collection.cover)}
               isEditing={isEditing}
               onNewPress={() => setIsCreating(true)}
               onCollectionPress={(collection) =>
@@ -155,4 +176,12 @@ export default function OutfitsScreen() {
       />
     </SafeAreaView>
   );
+}
+
+// The same pieces in any order give the same key.
+function piecesKey(pieces: OutfitPreview): string {
+  return pieces
+    .map((piece) => piece.id)
+    .sort()
+    .join(',');
 }

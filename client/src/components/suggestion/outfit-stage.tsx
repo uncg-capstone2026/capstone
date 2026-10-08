@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Pressable, Text, useWindowDimensions, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FlatLay } from '@/components/suggestion/flat-lay';
@@ -11,7 +12,8 @@ export const STAGE_HEIGHT = 420;
 // How far the sheet below slides up over the stage.
 export const SHEET_OVERLAP = 22;
 
-const OVERLAY_BG = 'rgba(255, 253, 249, 0.85)';
+// The stage's round buttons and pills sit on this, so they read on any background colour.
+export const OVERLAY_BG = 'rgba(255, 253, 249, 0.85)';
 const SIDE_PADDING = 16;
 // The flat-lay's wrapper view gets flattened away, so its pieces' zIndex values compete with
 // the overlay controls directly. Keep the controls above every piece so they stay tappable.
@@ -20,6 +22,7 @@ const CONTROLS_Z_INDEX = 10;
 type OutfitStageProps = {
   items: SuggestedPiece[];
   selectedPiece: SuggestedPiece | null; // null shows the whole flat-lay
+  topRight: ReactNode; // e.g. the suggestion screen's "Suggested" pill, or a favorite button
   color: string;
   isColorPopoverOpen: boolean;
   onToggleColorPopover: () => void;
@@ -30,6 +33,7 @@ type OutfitStageProps = {
 export function OutfitStage({
   items,
   selectedPiece,
+  topRight,
   color,
   isColorPopoverOpen,
   onToggleColorPopover,
@@ -71,9 +75,7 @@ export function OutfitStage({
           className="h-10 w-10 items-center justify-center rounded-full">
           <Ionicons name="chevron-back" size={22} color="#4d5d3f" />
         </Pressable>
-        <View style={{ backgroundColor: OVERLAY_BG }} className="rounded-full px-3 py-1.5">
-          <Text className="font-label text-[11px] uppercase tracking-widest text-sage-500">Suggested</Text>
-        </View>
+        {topRight}
       </View>
 
       <View className="absolute items-end gap-2" style={{ right: SIDE_PADDING, bottom: SHEET_OVERLAP + 12, zIndex: CONTROLS_Z_INDEX }}>

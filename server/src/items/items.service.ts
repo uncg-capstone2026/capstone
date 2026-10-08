@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Item, Prisma, User } from '@prisma/client';
+import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 import { ImageProcessingService } from '../gemini/image-processing/service';
@@ -8,9 +9,14 @@ import { CutoutService } from './cutout.service';
 import type { UpdateItemDto } from './items.dto';
 import { CATEGORY_TO_CLIENT, FIT_TO_CLIENT, categoryFromClient, fitFromClient, fitFromAi } from './item-mappings';
 import { buildColorGrid } from './color-grid';
+import { findProduct } from './product-page';
+import { LinkFetchError, checkUrl, safeFetch } from './safe-fetch';
 
 // The image the AI steps send to Gemini.
 type AiImage = { image: Buffer; mimeType: string };
+
+// Each item's wear period is 30 days, counted from when it was added.
+const WEAR_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class ItemsService {
@@ -66,19 +72,19 @@ export class ItemsService {
     if (dto.material !== undefined) data.material = dto.material;
     if (dto.season !== undefined) data.season = dto.season;
     if (dto.formality !== undefined) data.formality = dto.formality;
+    if (dto.excludeFromSuggestions !== undefined) data.excludeFromSuggestions = dto.excludeFromSuggestions;
 
     const item = await this.prisma.item.update({ where: { id }, data });
     return this.toItemDetails(item);
   }
 
-  // DELETE /api/items/:id — the item, every outfit/collection entry pointing at it, and its photos.
+  // DELETE /api/items/:id — the item, every outfit entry pointing at it, and its photos.
   async remove(userId: User['id'], id: string) {
     const item = await this.findOwned(userId, id);
 
-    // All or nothing: outfits and collections never end up pointing at a deleted item.
+    // All or nothing: outfits never end up pointing at a deleted item.
     await this.prisma.$transaction([
       this.prisma.outfitItem.deleteMany({ where: { itemId: id } }),
-      this.prisma.collectionItem.deleteMany({ where: { itemId: id } }),
       this.prisma.item.delete({ where: { id } }),
     ]);
 
@@ -134,6 +140,59 @@ export class ItemsService {
     }
 
     return { itemId: item.id };
+  }
+
+  // POST /api/items/link { url } -> { itemId }. Reads the store's product page,
+  // saves its photo to S3, then runs the same cutout and AI steps as adding from
+  // a photo. Problems the user can act on (bad link, blocked site, no photo) are
+  // 400s with a message the app shows.
+  async createFromLink(userId: User['id'], rawUrl: string) {
+    try {
+      const pageUrl = checkUrl(rawUrl.trim());
+
+      // If the app retries, or the same link is pasted twice, don't make a duplicate.
+      const existing = await this.prisma.item.findFirst({
+        where: { userId, sourceURL: pageUrl.href },
+        select: { id: true },
+      });
+      if (existing) return { itemId: existing.id };
+
+      const page = await safeFetch(pageUrl, { maxBytes: 3_000_000, accept: 'text/html,application/xhtml+xml' });
+      const product = findProduct(page.body.toString('utf8'), page.finalUrl);
+      if (!product.imageUrl) {
+        throw new LinkFetchError("Couldn't find a product photo on that page. Try adding a photo instead.");
+      }
+
+      const image = await safeFetch(product.imageUrl, { maxBytes: 10_000_000, accept: 'image/*' });
+      const jpeg = await toJpeg(image.body);
+
+      const key = this.s3.buildKey(userId, 'clothing', 'jpg');
+      await this.s3.putObject(key, jpeg, 'image/jpeg');
+      const item = await this.prisma.item.create({
+        data: {
+          userId,
+          imageKey: key,
+          colorHex: [],
+          sourceURL: pageUrl.href,
+          ...(product.name ? { name: product.name } : {}),
+        },
+      });
+
+      // Same steps as createFromPhoto. Each catches its own errors.
+      const cutoutPng = await this.addCutout(item.id, key);
+      const aiImage = await this.loadAiImage(item.id, key, cutoutPng);
+      if (aiImage) {
+        await Promise.all([
+          this.addEmbedding(item.id, aiImage),
+          // Keep the store's product name rather than the AI's guess.
+          this.addAttributes(item.id, aiImage, { keepName: !!product.name }),
+        ]);
+      }
+      return { itemId: item.id };
+    } catch (err) {
+      if (err instanceof LinkFetchError) throw new BadRequestException({ message: err.message });
+      throw err;
+    }
   }
 
   // The item, but only if it belongs to this user. 404 otherwise, so ids can't be probed.
@@ -211,8 +270,9 @@ export class ItemsService {
   // AI (Gemini tagging): reads the photo and fills in name, type, category, colors,
   // pattern, material, season, formality and fit via
   // ImageProcessingService.extractImageAttributes. If anything fails, the item keeps
-  // its defaults and the user (or a backfill) fills them in.
-  private async addAttributes(itemId: Item['id'], { image, mimeType }: AiImage) {
+  // its defaults and the user (or a backfill) fills them in. keepName: leave the
+  // item's current name (e.g. a store's product name from a link import).
+  private async addAttributes(itemId: Item['id'], { image, mimeType }: AiImage, { keepName = false } = {}) {
     // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
     const debugStartedAt = Date.now();
     this.logger.log(`[DEBUG AI] tagging start item=${itemId} mimeType=${mimeType} size=${Math.round(image.length / 1024)}KB`);
@@ -230,7 +290,7 @@ export class ItemsService {
       await this.prisma.item.update({
         where: { id: itemId },
         data: {
-          ...(name ? { name } : {}), // empty name keeps the "New item" default
+          ...(name && !keepName ? { name } : {}), // empty name keeps the "New item" default
           type: attrs.type,
           category: attrs.category,
           colorHex: attrs.colorHex.slice(0, 3),
@@ -238,7 +298,8 @@ export class ItemsService {
           material,
           season: attrs.season ?? null,
           formality: attrs.formality ?? null,
-          fit: fitFromAi(attrs.fit),        },
+          fit: fitFromAi(attrs.fit),
+        },
       });
     } catch (err) {
       this.logger.warn(`Tagging failed for item ${itemId}: ${(err as Error).message}`);
@@ -262,6 +323,18 @@ export class ItemsService {
 
   // Matches the app's ClothingItemDetails type. To add a field, add one line here.
   private async toItemDetails(item: Item) {
+    // The user's outfits that include this item, newest first. Each outfit
+    // appears once, even if the item is in it twice.
+    const outfits = await this.prisma.outfit.findMany({
+      where: { userId: item.userId, items: { some: { itemId: item.id } } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, name: true },
+    });
+
+    // If the 30-day period ran out and the hourly job hasn't reset it yet,
+    // the stored count is from an old period, so send 0 instead.
+    const periodIsCurrent = Date.now() - item.wearPeriodStart.getTime() < WEAR_PERIOD_MS;
+
     return {
       ...(await this.toClosetItem(item)),
       type: item.type,
@@ -274,6 +347,10 @@ export class ItemsService {
       fit: item.fit ? FIT_TO_CLIENT[item.fit] : null,
       sourceURL: item.sourceURL,
       createdAt: item.createdAt,
+      timesWorn: item.timesWorn,
+      timesWornThisMonth: periodIsCurrent ? item.timesWornThisMonth : 0,
+      excludeFromSuggestions: item.excludeFromSuggestions,
+      outfits,
     };
   }
 
@@ -312,4 +389,20 @@ export class ItemsService {
     this.logger.error(lines.join('\n'), e?.stack);
   }
   // ==================== END TEST / DEBUG ====================
+}
+
+// Any image format (WebP, AVIF, GIF...) -> a JPEG of at most 2000px, which the
+// cutout and Gemini both accept. A LinkFetchError (so a 400) if it isn't a
+// readable image.
+async function toJpeg(image: Buffer): Promise<Buffer> {
+  try {
+    return await sharp(image, { animated: false })
+      .rotate()
+      .resize(2000, 2000, { fit: 'inside', withoutEnlargement: true })
+      .flatten({ background: '#ffffff' })
+      .jpeg({ quality: 90 })
+      .toBuffer();
+  } catch {
+    throw new LinkFetchError("That product's photo couldn't be read. Try adding a photo instead.");
+  }
 }

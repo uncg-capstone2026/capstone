@@ -6,6 +6,7 @@ import type { SavedOutfit } from '@/services/outfits';
 
 type OutfitTileProps = {
   outfit: SavedOutfit;
+  backgroundColor: string; // the outfit's own background (see getOutfitColors)
   onPress?: () => void; // opens the outfit; not used in edit mode
   onRemove?: () => void; // shows the "−" badge (edit mode)
   isSelected?: boolean; // the "Add outfits" picker: a ring and a check
@@ -13,7 +14,7 @@ type OutfitTileProps = {
 };
 
 // Square tile with the outfit as a flat-lay.
-export function OutfitTile({ outfit, onPress, onRemove, isSelected, disabled }: OutfitTileProps) {
+export function OutfitTile({ outfit, backgroundColor, onPress, onRemove, isSelected, disabled }: OutfitTileProps) {
   const isPicker = isSelected !== undefined;
 
   return (
@@ -24,7 +25,8 @@ export function OutfitTile({ outfit, onPress, onRemove, isSelected, disabled }: 
         accessibilityRole={isPicker ? 'checkbox' : 'button'}
         accessibilityLabel={outfit.name}
         accessibilityState={isPicker ? { checked: isSelected, disabled } : undefined}
-        className={`flex-1 overflow-hidden rounded-2xl border-2 bg-cream-50 p-3 active:opacity-80 ${
+        style={{ backgroundColor }}
+        className={`flex-1 overflow-hidden rounded-2xl border-2 p-3 active:opacity-80 ${
           isSelected ? 'border-sage-500' : 'border-transparent'
         } ${disabled ? 'opacity-50' : ''}`}>
         <OutfitCover items={outfit.items} />

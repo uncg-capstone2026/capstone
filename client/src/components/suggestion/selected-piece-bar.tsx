@@ -6,10 +6,11 @@ import type { SuggestedPiece } from '@/services/stylist';
 type SelectedPieceBarProps = {
   piece: SuggestedPiece;
   onViewItem: () => void;
+  onSwap?: () => void; // shows a Swap button (the outfit details screen)
 };
 
 // Shown in single-piece view: what the piece is, and a way to open its details.
-export function SelectedPieceBar({ piece, onViewItem }: SelectedPieceBarProps) {
+export function SelectedPieceBar({ piece, onViewItem, onSwap }: SelectedPieceBarProps) {
   const category = CATEGORY_OPTIONS.find((option) => option.key === piece.category)?.label;
 
   return (
@@ -20,6 +21,15 @@ export function SelectedPieceBar({ piece, onViewItem }: SelectedPieceBarProps) {
         </Text>
         {category ? <Text className="font-body text-sm text-sage-500">{category}</Text> : null}
       </View>
+      {onSwap ? (
+        <Pressable
+          onPress={onSwap}
+          accessibilityRole="button"
+          accessibilityLabel={`Swap ${piece.name}`}
+          className="rounded-full border border-sage-500 px-4 py-2">
+          <Text className="font-label text-sm text-sage-700">Swap</Text>
+        </Pressable>
+      ) : null}
       <Pressable
         onPress={onViewItem}
         accessibilityRole="button"

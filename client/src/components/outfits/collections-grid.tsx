@@ -6,6 +6,7 @@ import type { OutfitCollection } from '@/services/outfits';
 
 type CollectionsGridProps = {
   collections: OutfitCollection[];
+  coverColorFor: (collection: OutfitCollection) => string;
   isEditing: boolean;
   onNewPress: () => void;
   onCollectionPress: (collection: OutfitCollection) => void;
@@ -15,6 +16,7 @@ type CollectionsGridProps = {
 // Two-column grid of square cards, with the New collection card always first.
 export function CollectionsGrid({
   collections,
+  coverColorFor,
   isEditing,
   onNewPress,
   onCollectionPress,
@@ -29,6 +31,7 @@ export function CollectionsGrid({
         <View key={collection.id} className="w-[48%]">
           <CollectionCard
             collection={collection}
+            coverColor={coverColorFor(collection)}
             isEditing={isEditing}
             onPress={() => onCollectionPress(collection)}
             onDelete={() => onCollectionDelete(collection)}

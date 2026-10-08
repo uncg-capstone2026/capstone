@@ -10,6 +10,11 @@ import { GeminiModule } from './gemini/gemini.module';
 import { WeatherModule } from './weather/weather.module';
 import { PhotosModule } from './photos/photos.module';
 import { StylistModule } from './stylist/stylist.module';
+import { OutfitsModule } from './outfits/outfits.module';
+import { CollectionsModule } from './collections/collections.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { WearTrackingModule } from './wear-tracking/wear-tracking.module';
+
 
 @Module({
   imports: [
@@ -22,7 +27,12 @@ import { StylistModule } from './stylist/stylist.module';
     WeatherModule,
     PhotosModule,
     StylistModule,
+    OutfitsModule,
+    CollectionsModule,
+    ScheduleModule.forRoot(),
+    WearTrackingModule,
   ],
+
   controllers: [AppController],
   providers: [AppService],
 })

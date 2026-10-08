@@ -20,6 +20,7 @@ import { SelectField } from '@/components/item-details/select-field';
 import { MascotMessage } from '@/components/mascot-message';
 import { SessionExpiredError } from '@/services/api';
 import {
+  AI_HINT,
   CATEGORY_BY_TYPE,
   CATEGORY_OPTIONS,
   CLOTHING_TYPE_OPTIONS,
@@ -30,6 +31,7 @@ import {
   MATERIAL_OPTIONS,
   PATTERN_OPTIONS,
   SEASON_OPTIONS,
+  stylistHint,
   updateItem,
   type ClothingItemChanges,
   type ClothingItemDetails,
@@ -38,7 +40,6 @@ import {
 
 const MAX_NAME_LENGTH = 60;
 const MAX_TEXT_LENGTH = 50;
-const AI_HINT = 'Filled in by StyleMe';
 
 // Every cut from every category, for items that don't have a category yet.
 const ALL_CUTS = [...new Set(Object.values(COMMON_CUTS).flat())].sort();
@@ -153,7 +154,6 @@ export default function ConfirmItemScreen() {
 
   const isBusy = busy !== null;
   const isTagged = Boolean(item?.type || item?.category);
-  const hint = (value: unknown) => (item && value !== null && value !== '' ? AI_HINT : undefined);
 
   return (
     <SafeAreaView className="flex-1 bg-cream-100">
@@ -207,7 +207,7 @@ export default function ConfirmItemScreen() {
             </MascotMessage>
 
             <View className="gap-2">
-              <GarmentCard itemId={item.id} imageUrl={item.imageUrl} name={draft.name} />
+              <GarmentCard itemId={item.id} imageUrl={item.imageUrl} name={draft.name} colorHex={draft.colorHex} />
               <Pressable
                 onPress={() => confirmDiscard('retake')}
                 disabled={isBusy}
@@ -240,7 +240,7 @@ export default function ConfirmItemScreen() {
               value={draft.type}
               options={[...CLOTHING_TYPE_OPTIONS]}
               onChange={changeType}
-              aiHint="AI tag · the stylist uses this to pick outfits"
+              aiHint={stylistHint(item.type)}
             />
 
             <SelectField
@@ -248,7 +248,7 @@ export default function ConfirmItemScreen() {
               value={draft.category}
               options={CATEGORY_OPTIONS.map(({ key, label }) => ({ value: key, label }))}
               onChange={(category) => edit({ category })}
-              aiHint={hint(item.category)}
+              aiHint={stylistHint(item.category)}
             />
 
             <View className="h-px bg-sage-200" />
@@ -256,7 +256,7 @@ export default function ConfirmItemScreen() {
             <ColorEditor
               colors={draft.colorHex}
               onChange={(colorHex) => edit({ colorHex })}
-              aiHint={item.colorHex.length > 0 ? AI_HINT : undefined}
+              aiHint={stylistHint(item.colorHex)}
             />
 
             <SelectField
@@ -264,7 +264,7 @@ export default function ConfirmItemScreen() {
               value={draft.pattern}
               options={PATTERN_OPTIONS}
               onChange={(pattern) => edit({ pattern })}
-              aiHint={hint(item.pattern)}
+              aiHint={stylistHint(item.pattern)}
             />
 
             <SelectField
@@ -273,7 +273,7 @@ export default function ConfirmItemScreen() {
               options={MATERIAL_OPTIONS}
               onChange={(material) => edit({ material })}
               allowCustom={{ label: 'Add a custom material…', maxLength: MAX_TEXT_LENGTH }}
-              aiHint={hint(item.material)}
+              aiHint={stylistHint(item.material)}
             />
 
             <View className="h-px bg-sage-200" />
@@ -283,7 +283,7 @@ export default function ConfirmItemScreen() {
               value={draft.season}
               options={SEASON_OPTIONS}
               onChange={(season) => edit({ season })}
-              aiHint={hint(item.season)}
+              aiHint={stylistHint(item.season)}
             />
 
             <SelectField
@@ -291,10 +291,10 @@ export default function ConfirmItemScreen() {
               value={draft.formality}
               options={FORMALITY_OPTIONS}
               onChange={(formality) => edit({ formality })}
-              aiHint={hint(item.formality)}
+              aiHint={stylistHint(item.formality)}
             />
 
-            <FitSlider value={draft.fit} onChange={(fit) => edit({ fit })} />
+            <FitSlider value={draft.fit} onChange={(fit) => edit({ fit })} aiHint={stylistHint(item.fit)} />
 
             <SelectField
               label="Cut"
@@ -305,6 +305,7 @@ export default function ConfirmItemScreen() {
               }))}
               onChange={(cut) => edit({ cut })}
               allowCustom={{ label: 'Add a custom cut…', maxLength: MAX_TEXT_LENGTH }}
+              aiHint={item.cut ? AI_HINT : undefined}
             />
 
             <Pressable
