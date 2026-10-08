@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { GoogleGenAI, Schema } from '@google/genai';
 import type { Weather } from '../weather/weather.service';
-import { EMBEDDABLE_IMAGE_TYPES } from './constants';
+import { EMBEDDABLE_IMAGE_TYPES, MAIN_MODEL } from './constants';
 
 // Formats a list for a prompt: ['a', 'b'] -> '"a", "b"'.
 export const quoteList = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(', ');
@@ -31,7 +31,7 @@ export function mimeTypeForKey(key: string): string | null
 export class GeminiHelpers {
   readonly ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-  async generateJson(prompt: string, responseSchema: Schema, model = 'gemini-flash-latest'): Promise<string>
+  async generateJson(prompt: string, responseSchema: Schema, model = MAIN_MODEL): Promise<string>
   {
     const response = await this.ai.models.generateContent({
       model,
