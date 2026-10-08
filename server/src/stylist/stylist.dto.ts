@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize, IsArray, IsLatitude, IsLongitude, IsOptional, IsString, Length, Matches, MaxLength,
+  ArrayMaxSize, IsArray, IsLatitude, IsLongitude, IsOptional, IsString, IsUUID, Length, Matches, MaxLength,
 } from 'class-validator';
 
 export class StyleOutfitDto {
@@ -29,4 +29,17 @@ export class StyleOutfitDto {
   @IsString({ each: true })
   @MaxLength(400, { each: true })
   excludeSuggestionIds?: string[];
+}
+
+export class RepromptDto {
+  // From the first response (or the last reprompt).
+  @IsUUID()
+  sessionId!: string;
+
+  // The user's feedback, e.g. "different shoes". Empty or left out for
+  // "Try another".
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  message?: string;
 }

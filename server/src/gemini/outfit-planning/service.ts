@@ -1,12 +1,24 @@
-import { Injectable, UnprocessableEntityException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { Part } from '@google/genai';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Weather } from '../../weather/weather.service';
 import { S3Service } from '../../s3/s3.service';
-import { CANDIDATES_PER_TYPE, MAX_OUTFIT_CANDIDATES } from '../constants';
+import { CANDIDATES_STORED_PER_TYPE, MAIN_MODEL } from '../constants';
 import { GeminiHelpers, describeWeather, mimeTypeForKey } from '../helpers';
-import { QueryExpansionService } from '../query-expansion/service';
-import { OUTFIT_SELECTION_PROMPT } from './prompt';
+import {
+  comboKey,
+  validateOutfits,
+  type CandidateLists,
+  type RawOutfit,
+  type ValidOutfit,
+} from './candidates';
+import {
+  CANDIDATES_HEADER,
+  FIXED_PIECES_HEADER,
+  OUTFIT_SELECTION_PROMPT,
+  neverRepeatText,
+  shownBeforeText,
+} from './prompt';
 import { buildOutfitSelectionSchema } from './schema';
 
 // A closet item ready to send to Gemini: its details plus its photo in memory.
@@ -26,13 +38,19 @@ export type OutfitCandidate = {
   photoKey: string; // S3 key of the photo above (cutout or original); never sent to Gemini or the app
 };
 
-// What the stylist returns: the chosen items and why they were picked.
-export type PlannedOutfit = {
-  items: { itemId: string; type: string | null; imageUrl: string }[];
-  reason: string;
-};
+// One checked outfit: fixed pieces first, then the ones Gemini chose.
+export type SelectedOutfit = ValidOutfit<OutfitCandidate>;
 
-const NOT_ENOUGH_ITEMS = 'Not enough matching items in your closet to build an outfit';
+export type SelectionInput = {
+  request: string; // the user's request (with the date line, if any)
+  weather?: Weather | null;
+  candidates: OutfitCandidate[]; // what Gemini may choose from
+  fixed?: OutfitCandidate[]; // pieces every outfit keeps (swap / refine)
+  history?: string | null; // the conversation so far, already formatted
+  shownOutfits?: string[][]; // outfits shown before, as item ids; never repeated
+  softAvoidIds?: string[]; // items shown before; allowed but not preferred
+  banned?: Set<string>; // items the user asked to replace; never used
+};
 
 // Stylist: find matching clothes in the closet, then pick outfits from them.
 @Injectable()
@@ -41,42 +59,37 @@ export class OutfitPlanningService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     private readonly helpers: GeminiHelpers,
-    private readonly queryExpansion: QueryExpansionService,
   )
   {}
 
-  // The whole flow: expand the request, find matching closet items, then let
-  // Gemini pick one complete outfit from them. Throws 422 when the closet
-  // doesn't have enough to work with.
-  async planOutfit(userId: string, userRequest: string): Promise<PlannedOutfit>
+  // The user's closest closet items for each expanded item, grouped by type,
+  // closest first. One query per item, all sent at once. excludeIds skips
+  // items (e.g. ones already found) so a second search reaches further.
+  async findCandidates(
+    userId: string,
+    expandedItems: { type: string; embedding: number[] }[],
+    opts: { limit?: number; excludeIds?: string[] } = {},
+  ): Promise<CandidateLists>
   {
-    const expanded = await this.queryExpansion.expandAndEmbedQuery(userRequest);
-
-    const ids = await this.findCandidates(userId, expanded.items);
-    if (ids.length === 0) throw new UnprocessableEntityException(NOT_ENOUGH_ITEMS);
-
-    const candidates = await this.loadCandidates(userId, ids);
-    if (candidates.length === 0) throw new UnprocessableEntityException(NOT_ENOUGH_ITEMS);
-
-    const { outfit, reason } = await this.selectOutfit(userRequest, candidates);
-    if (!outfit) throw new UnprocessableEntityException(reason || NOT_ENOUGH_ITEMS);
-    return outfit;
-  }
-
-  // Returns the ids of the user's closest closet items for each expanded item.
-  // Runs one query per item, all sent at once. An empty array means nothing
-  // in the closet matched.
-  async findCandidates(userId: string, expandedItems: { type: string; semantic_query: string; embedding: number[] }[]): Promise<string[]>
-  {
+    const limit = opts.limit ?? CANDIDATES_STORED_PER_TYPE;
     const results = await Promise.all(
       expandedItems.map((item) =>
-        this.findClosestItems(userId, item.type, item.embedding),
+        this.findClosestItems(userId, item.type, item.embedding, limit, opts.excludeIds ?? []),
       ),
     );
 
-    // The same type can be expanded twice, so an item could match twice.
-    // A Set keeps each id once, in the order it was first seen.
-    return [...new Set(results.flat().map((row) => row.id))];
+    // The same type can be expanded twice; merge its lists, keeping each
+    // item once with its best score.
+    const lists: CandidateLists = {};
+    expandedItems.forEach((item, i) => {
+      const merged = new Map((lists[item.type] ?? []).map((c) => [c.itemId, c]));
+      for (const row of results[i]) {
+        const existing = merged.get(row.id);
+        if (!existing || row.score < existing.score) merged.set(row.id, { itemId: row.id, score: row.score });
+      }
+      lists[item.type] = [...merged.values()].sort((a, b) => a.score - b.score).slice(0, limit);
+    });
+    return lists;
   }
 
   // Loads each candidate's details and photo into memory, in the order of ids.
@@ -85,9 +98,8 @@ export class OutfitPlanningService {
   // only the returned ids should be offered to Gemini.
   async loadCandidates(userId: string, ids: string[]): Promise<OutfitCandidate[]>
   {
-    const limitedIds = ids.slice(0, MAX_OUTFIT_CANDIDATES);
     const items = await this.prisma.item.findMany({
-      where: { id: { in: limitedIds }, userId },
+      where: { id: { in: ids }, userId },
       select: {
         id: true,
         name: true,
@@ -105,7 +117,7 @@ export class OutfitPlanningService {
     });
 
     // findMany doesn't keep the order of ids, which is closest match first.
-    const position = new Map(limitedIds.map((id, i) => [id, i]));
+    const position = new Map(ids.map((id, i) => [id, i]));
     items.sort((a, b) => position.get(a.id)! - position.get(b.id)!);
 
     const loaded = await Promise.allSettled(
@@ -121,93 +133,103 @@ export class OutfitPlanningService {
       .map((result) => result.value);
   }
 
-  // Builds the request for Gemini: the prompt and the day's weather (when
-  // known), then for each candidate a details line starting with its id,
-  // followed by its photo.
-  buildSelectionParts(userRequest: string, candidates: OutfitCandidate[], weather?: Weather | null): Part[]
-  {
-    let header = `${OUTFIT_SELECTION_PROMPT}\n\nUser request: ${userRequest}`;
-    if (weather) header += `\n${describeWeather(weather)}`;
-    const parts: Part[] = [{ text: header }];
-    for (const candidate of candidates) {
-      parts.push(
-        { text: this.describeCandidate(candidate) },
-        {
-          inlineData: {
-            mimeType: candidate.mimeType,
-            data: candidate.image.toString('base64'),
-          },
-        },
-      );
-    }
-    return parts;
-  }
-
-  // Asks Gemini to pick one outfit from the candidates. outfit is null when it
-  // couldn't build a complete one (reason then says why). Completeness is
-  // checked here too, since the schema can't express it.
-  async selectOutfit(userRequest: string, candidates: OutfitCandidate[]): Promise<{ outfit: PlannedOutfit | null; reason: string }>
+  // Asks Gemini for up to OUTFITS_PER_SELECTION outfits, best first, each with
+  // a name and reasons. Every outfit returned is complete, new, and free of
+  // banned items (checked here, since the schema can't express that). An
+  // empty list means none could be built; missing then says why, if Gemini
+  // gave a reason.
+  async selectOutfits(input: SelectionInput): Promise<{ outfits: SelectedOutfit[]; missing: string | null }>
   {
     const response = await this.helpers.ai.models.generateContent({
-      model: 'gemini-flash-latest',
-      contents: [{ role: 'user', parts: this.buildSelectionParts(userRequest, candidates) }],
+      model: MAIN_MODEL,
+      contents: [{ role: 'user', parts: this.buildSelectionParts(input) }],
       config: {
         responseMimeType: 'application/json',
-        responseSchema: buildOutfitSelectionSchema(candidates.map((c) => c.id)),
+        responseSchema: buildOutfitSelectionSchema(input.candidates.map((c) => c.id)),
       },
     });
     const text = response.text ?? '';
 
-    let selection: { outfit: string[]; reason: string };
+    let selection: { outfits?: RawOutfit[]; missing?: string | null };
     try {
       selection = JSON.parse(text);
     } catch {
       throw new Error(`Gemini returned invalid JSON: ${text || '(empty)'}`);
     }
 
-    const byId = new Map(candidates.map((c) => [c.id, c]));
-    const chosen = [...new Set(selection.outfit ?? [])]
-      .map((id) => byId.get(id))
-      .filter((c): c is OutfitCandidate => c !== undefined);
-    const reason = selection.reason?.trim() ?? '';
-
-    if (!this.isCompleteOutfit(chosen)) return { outfit: null, reason };
-
-    // Signed URL per item (same image Gemini saw) so the app can show it.
-    const items = await Promise.all(
-      chosen.map(async (c) => ({
-        itemId: c.id,
-        type: c.type,
-        imageUrl: await this.s3.getDownloadUrl(c.photoKey),
-      })),
-    );
-    return { outfit: { items, reason }, reason };
+    const outfits = validateOutfits(selection.outfits ?? [], {
+      candidates: input.candidates,
+      fixed: input.fixed,
+      shownKeys: new Set((input.shownOutfits ?? []).map(comboKey)),
+      banned: input.banned,
+    });
+    return { outfits, missing: selection.missing?.trim() || null };
   }
 
   // ---- Helpers ----
 
-  // Complete means a OnePiece, or a Top and Bottoms. Everything else is optional.
-  private isCompleteOutfit(items: OutfitCandidate[]): boolean
+  // The request for Gemini: the prompt, request and weather; then whichever
+  // of history, outfits not to repeat and items shown before apply; then the
+  // fixed pieces and the candidates, each a details line followed by its photo.
+  private buildSelectionParts(input: SelectionInput): Part[]
   {
-    const categories = new Set(items.map((item) => item.category));
-    return categories.has('OnePiece') || (categories.has('Top') && categories.has('Bottoms'));
+    const fixed = input.fixed ?? [];
+    let header = `${OUTFIT_SELECTION_PROMPT}\n\nUser request: ${input.request}`;
+    if (input.weather) header += `\n${describeWeather(input.weather)}`;
+    const parts: Part[] = [{ text: header }];
+
+    if (input.history) parts.push({ text: input.history });
+
+    // Only outfits Gemini could actually rebuild from what it's sent matter.
+    const available = new Set([...input.candidates, ...fixed].map((c) => c.id));
+    const repeats = (input.shownOutfits ?? [])
+      .filter((ids) => ids.length > 0 && ids.every((id) => available.has(id)));
+    if (repeats.length > 0) parts.push({ text: neverRepeatText(repeats) });
+
+    const candidateIds = new Set(input.candidates.map((c) => c.id));
+    const softAvoid = (input.softAvoidIds ?? []).filter((id) => candidateIds.has(id));
+    if (softAvoid.length > 0) parts.push({ text: shownBeforeText(softAvoid) });
+
+    if (fixed.length > 0) {
+      parts.push({ text: FIXED_PIECES_HEADER });
+      for (const piece of fixed) parts.push(...this.itemParts(piece));
+    }
+    parts.push({ text: CANDIDATES_HEADER });
+    for (const candidate of input.candidates) parts.push(...this.itemParts(candidate));
+    return parts;
   }
 
-  // The user's items of this type, closest to the embedding first. Prisma can't
-  // send the vector type, so it goes in as '[0.1,...]' text and is cast in SQL.
+  // A details line, then the photo it describes.
+  private itemParts(item: OutfitCandidate): Part[]
+  {
+    return [
+      { text: this.describeCandidate(item) },
+      { inlineData: { mimeType: item.mimeType, data: item.image.toString('base64') } },
+    ];
+  }
+
+  // The user's items of this type, closest to the embedding first, with their
+  // cosine distance (<=>: 0 is identical). Prisma can't send the vector type,
+  // so it goes in as '[0.1,...]' text and is cast in SQL.
   // Later: also skip items with excludeFromSuggestions once that column exists.
-  private findClosestItems(userId: string, type: string, embedding: number[]): Promise<{ id: string }[]>
+  private findClosestItems(
+    userId: string,
+    type: string,
+    embedding: number[],
+    limit: number,
+    excludeIds: string[],
+  ): Promise<{ id: string; score: number }[]>
   {
     const vector = `[${embedding.join(',')}]`;
-    // <=> is cosine distance: 0 is identical, so ascending is closest first.
-    return this.prisma.$queryRaw<{ id: string }[]>`
-      SELECT id
+    return this.prisma.$queryRaw<{ id: string; score: number }[]>`
+      SELECT id, (embedding <=> ${vector}::vector)::float8 AS score
       FROM "Item"
       WHERE "userId" = ${userId}
         AND type = ${type}
         AND embedding IS NOT NULL
-      ORDER BY embedding <=> ${vector}::vector
-      LIMIT ${CANDIDATES_PER_TYPE}
+        AND NOT (id = ANY(${excludeIds}::text[]))
+      ORDER BY score
+      LIMIT ${limit}
     `;
   }
 

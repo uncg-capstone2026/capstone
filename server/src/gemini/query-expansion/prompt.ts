@@ -22,7 +22,8 @@ Extract:
   reasonably be part of an outfit matching this request. EXCLUDE types
   that are clearly wrong for the weather, season, or formality implied
   (e.g. do not include "shorts" or "tank-top" for a cold-weather
-  request). Always return at least one item. If the request is broad
+  request). Always return at least one item, and list only the types
+  one outfit would draw from (usually 4-7). If the request is broad
   (e.g. "something to wear to class"), choose the types a typical
   outfit for that context would include (e.g. t-shirt, jeans,
   sneakers). Each entry has:
