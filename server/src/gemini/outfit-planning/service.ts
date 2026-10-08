@@ -3,7 +3,7 @@ import type { Part } from '@google/genai';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Weather } from '../../weather/weather.service';
 import { S3Service } from '../../s3/s3.service';
-import { CANDIDATES_PER_TYPE, MAX_OUTFIT_CANDIDATES } from '../constants';
+import { CANDIDATES_PER_TYPE, CATEGORY_BY_TYPE, MAX_OUTFIT_CANDIDATES, type ClothingType } from '../constants';
 import { GeminiHelpers, describeWeather, mimeTypeForKey } from '../helpers';
 import { QueryExpansionService } from '../query-expansion/service';
 import { OUTFIT_SELECTION_PROMPT } from './prompt';
@@ -193,18 +193,23 @@ export class OutfitPlanningService {
     return categories.has('OnePiece') || (categories.has('Top') && categories.has('Bottoms'));
   }
 
-  // The user's items of this type, closest to the embedding first. Prisma can't
-  // send the vector type, so it goes in as '[0.1,...]' text and is cast in SQL.
+  // The user's items in this type's category, closest to the embedding first.
+  // Searches the category, not the exact type: "shirt" may expand to
+  // button-up-shirt while the closet has a t-shirt, and the embedding still
+  // ranks the right one first. Prisma can't send the vector type, so it goes in
+  // as '[0.1,...]' text and is cast in SQL.
   // Later: also skip items with excludeFromSuggestions once that column exists.
-  private findClosestItems(userId: string, type: string, embedding: number[]): Promise<{ id: string }[]>
+  private async findClosestItems(userId: string, type: string, embedding: number[]): Promise<{ id: string }[]>
   {
+    const category = CATEGORY_BY_TYPE[type as ClothingType];
+    if (!category) return [];
     const vector = `[${embedding.join(',')}]`;
     // <=> is cosine distance: 0 is identical, so ascending is closest first.
     return this.prisma.$queryRaw<{ id: string }[]>`
       SELECT id
       FROM "Item"
       WHERE "userId" = ${userId}
-        AND type = ${type}
+        AND category = ${category}::"Category"
         AND embedding IS NOT NULL
       ORDER BY embedding <=> ${vector}::vector
       LIMIT ${CANDIDATES_PER_TYPE}
