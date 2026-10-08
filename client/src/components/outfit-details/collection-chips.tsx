@@ -2,13 +2,11 @@ import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 type CollectionChipsProps = {
-  collections: { id: string; name: string }[] | null; // null while loading
+  collections: { id: string; name: string }[];
 };
 
 // "In collections": a chip for each collection the outfit is in. Tapping one opens it.
 export function CollectionChips({ collections }: CollectionChipsProps) {
-  if (!collections) return null;
-
   return (
     <View className="gap-2">
       <Text className="font-label text-xs uppercase tracking-widest text-sage-500">In collections</Text>

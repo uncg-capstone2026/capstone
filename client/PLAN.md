@@ -23,15 +23,14 @@ All done.
 
 Clothing photos live in AWS S3. The client uploads the original photo, and the server cuts the piece out and stores the cutout in S3 as well (`Item.imageKey` for the original, `Item.cutoutKey` for the cutout).
 
-- [ ] Adding items from a link (the client calls `importItemFromLink`, currently a "coming soon" stub): a route that fetches the product page, saves the product image to S3 and returns details for the user to confirm.
-- [ ] Client: once `importItemFromLink` returns an item id, open the confirm screen (`src/app/confirm-item/[id].tsx`) for it, as adding from a photo does.
+- [ ] Server: `POST /api/items/link` returns the existing item when the same link is pasted again, and the app can't tell. It opens the confirm screen for that item, where Discard or Retake deletes it from the closet. Return `{ itemId, isNew }` (or 409 with the item id) so the app can open the item details screen instead.
 - [ ] If the app is closed on the confirm screen, the item stays in the closet unchecked (and untagged until tagging is wired in). Later, an `isConfirmed` flag on `Item` (hidden from `GET /api/items` until Save) would stop that.
 
 ### Item details screen
 
 Tapping an item in the closet opens `src/app/item/[id].tsx`. The screen is built. The server now sends everything it shows: wear stats, "Saved in outfits", the exclude toggle, the Fitted and Loose fit steps and the color dropper.
 
-- [ ] Seed a few tagged items for the test account. Items added from a photo have no tags yet, so the closet filters and details screen need seeded data to test against.
+All done.
 
 ### Wear tracking and excluding items from suggestions
 
@@ -112,19 +111,19 @@ The Outfits tab (`src/app/(tabs)/outfits.tsx`) is built: the "All saved outfits"
 Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where `id` is `all`, `favorites` or a collection id): the title, the outfit count and a grid of outfits, each opening `src/app/outfit/[id].tsx`. In edit mode, a user collection can be renamed and have outfits added ("Add from all saved outfits") or removed. Favorites can have outfits added (favorited) or removed (unfavorited). All saved outfits can only delete outfits, after a confirmation.
 
 ### Server
-- [ ] The outfit details screen (`src/app/outfit/[id].tsx`) can edit an outfit's pieces and plan it for dates. Until these routes exist, `USE_OUTFIT_EDITS_FIXTURE` in `src/services/outfits.ts` keeps those changes in memory for the session:
-  - `PATCH /api/outfits/:id { itemIds }` → 204. Replaces the outfit's pieces (add, remove or swap) and works out each piece's `slot` and `zIndex` again, like `OutfitsService.create`. 1–8 ids, every item the user's (404 otherwise), and the result must still be complete (a OnePiece, or a Top and Bottoms; 400 otherwise). Keep accepting `{ isFavorite }` on the same route.
-  - `scheduled: { id, date, eventName }[]` on `GET /api/outfits/:id`: its `CalendarEntry` rows, past and upcoming, with `date` as `YYYY-MM-DD` and `eventName` or `null`. (Entries from Stylist "Looks right" should show up here too.)
-  - `POST /api/outfits/:id/schedule { date: 'YYYY-MM-DD', eventName?: string }` → the new entry, in the same shape. Always creates a new `CalendarEntry`: an outfit can be planned for any number of events, including two on the same day. `eventName` up to 100 characters; 404 if the outfit isn't the user's.
-  - `DELETE /api/outfits/:id/schedule/:entryId` → 204. Removes that one entry; 404 if it isn't one of this user's outfit's entries. An entry that was already counted as worn keeps its wear counts.
-- [ ] Add `collections: { id, name }[]` to `GET /api/outfits/:id`: the user's collections that include the outfit. Until then, `listOutfitCollections` in `src/services/outfits.ts` loads every collection to work it out.
-- [ ] `GET /api/photos/body` → `{ photoId, imageUrl }` for the user's primary body photo (signed URL), or 404 if they haven't added one. Try on needs it to show outfits on the user's photo.
+- [ ] `GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for the Calendar tab. Both dates are required and inclusive; 400 if either is missing or invalid. Behind `AuthGuard`. Returns the user's calendar entries in that range, earliest first, as `{ id, date, eventName, outfit: SavedOutfit }[]` (`date` as `YYYY-MM-DD` like `toScheduledDay`, `outfit` loaded with `WITH_PIECES` and shaped like `GET /api/outfits`). The app asks for one month at a time (`src/services/calendar.ts`). Right now no route lists calendar entries: `GET /api/outfits` has no `scheduled`, and only `GET /api/outfits/:id` does.
+- [ ] Notifications: the Settings switch is only saved on the device (`src/hooks/use-notifications-enabled.ts`). Add a place to store it per user (e.g. `notificationsEnabled` on `User`, set with `PATCH /api/auth/me`), and a route to save the device's Expo push token (e.g. `POST /api/auth/me/push-token { token }`), so the server can send outfit reminders and respect the switch.
+- [ ] Profile: `PATCH /api/auth/me` only accepts `timeZone`. Accept `name`, `displayName` and `phone` too (400 if invalid, 409 if the phone is taken), for the Profile screen.
 - [ ] Later: let the user say they didn't wear a planned outfit (e.g. "Didn't wear it" on a past calendar day). That would undo the counts for that entry, rolling `lastWorn` back to the outfit's previous worn entry.
 
 ### Client
-- [ ] Switch `USE_OUTFIT_EDITS_FIXTURE` off in `src/services/outfits.ts` once the pieces and schedule routes above are live.
-- [ ] Once `GET /api/outfits/:id` sends `collections`, use it in `src/app/outfit/[id].tsx` instead of `listOutfitCollections`.
-- [ ] Try on (`src/app/try-on.tsx`) is still "coming soon". It needs a way to get the user's body photo back from the server (there's only upload and save today).
+The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45).
+
+- [ ] The Calendar tab (`src/app/(tabs)/calendar.tsx`) is built: a month grid with green dots on upcoming planned days and gold on past ones, the weather card for the selected day, and its planned outfits. It shows a load error until the server has `GET /api/calendar` (see Server above). Test it on a device once that's live.
+- [ ] Notifications: add `expo-notifications` (needs a new dev build), ask for permission when the Settings switch is turned on, register the push token and send the switch to the server once the routes above exist.
+- [ ] Profile (`src/app/profile.tsx`, opened from the Settings profile card) is "coming soon". Build it once `PATCH /api/auth/me` accepts name, display name and phone.
+- [ ] Try on (`src/app/try-on.tsx`) is still "coming soon". Load the user's body photo with `GET /api/photos/body` → `{ photoId, imageUrl }`. On a 404, send them to add a body photo.
+- [ ] Test the outfit details screen against the seeded test account (`seed.tester@example.com` / `TestPass123!`, created by `server/prisma/seed.ts`): edit pieces, plan and unplan days, and check collections.
 
 ## Suggested order
 
@@ -144,7 +143,8 @@ What the client needs, split by whether it can be done now.
 
 ### Can do now
 - [ ] Test the Outfits tab and the collection screen on a device: accept a Stylist suggestion, then create a collection, add and remove outfits, rename it, favorite and unfavorite, and delete an outfit (section 9).
+- [ ] Build try on with `GET /api/photos/body` (section 9).
 
 ### Needs a server decision first
-- [ ] The link-import route (section 4), so `importItemFromLink` can go live.
-- [ ] The outfit pieces and schedule routes, and `collections` on `GET /api/outfits/:id` (section 9), so `USE_OUTFIT_EDITS_FIXTURE` can be switched off.
+
+Nothing right now.

@@ -68,7 +68,12 @@ export default function AddItemScreen() {
     }
     setIsImporting(true);
     try {
-      await importItemFromLink(link.trim());
+      const itemId = await importItemFromLink(link.trim());
+      if (isBackendConfigured) {
+        router.push({ pathname: '/confirm-item/[id]', params: { id: itemId } });
+      } else {
+        router.back(); // nothing was saved, so there's nothing to check
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {

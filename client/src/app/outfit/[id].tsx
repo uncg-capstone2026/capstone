@@ -19,12 +19,11 @@ import {
   deleteOutfit,
   getOutfit,
   isCompleteOutfit,
-  listOutfitCollections,
   scheduleOutfit,
   setOutfitFavorite,
   unscheduleOutfit,
   updateOutfitItems,
-  type SavedOutfit,
+  type OutfitDetails,
   type ScheduledDate,
 } from '@/services/outfits';
 import { DEFAULT_STAGE_COLOR, getOutfitColors, setOutfitColor } from '@/services/preferences';
@@ -40,10 +39,9 @@ export default function OutfitDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
 
-  const [outfit, setOutfit] = useState<SavedOutfit | null>(null);
+  const [outfit, setOutfit] = useState<OutfitDetails | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [collections, setCollections] = useState<{ id: string; name: string }[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null); // null = whole outfit
   const [color, setColor] = useState(DEFAULT_STAGE_COLOR);
   const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
@@ -65,13 +63,6 @@ export default function OutfitDetailsScreen() {
         .catch((e) => {
           if (cancelled || e instanceof SessionExpiredError) return;
           setLoadError(e instanceof Error ? e.message : 'Something went wrong. Please try again.');
-        });
-      listOutfitCollections(id)
-        .then((next) => {
-          if (!cancelled) setCollections(next);
-        })
-        .catch(() => {
-          // The section just stays hidden.
         });
       getOutfitColors().then((colors) => {
         if (!cancelled && colors[id]) setColor(colors[id]);
@@ -121,7 +112,6 @@ export default function OutfitDetailsScreen() {
   const pieces = outfit.items;
   const selectedPiece = pieces.find((piece) => piece.id === selectedId) ?? null;
   const flatLayPieces = pieces.filter((piece) => !addedIds.includes(piece.id));
-  const scheduled = outfit.scheduled ?? [];
 
   // Shows the change straight away, then saves it. Reverts and shows the error if it fails.
   async function toggleFavorite() {
@@ -137,9 +127,9 @@ export default function OutfitDetailsScreen() {
     }
   }
 
+  // Shows the outfit the server sends back, since it lays the pieces out again.
   async function savePieces(next: SuggestedPiece[]) {
-    await updateOutfitItems(id, next);
-    setOutfit((current) => (current ? { ...current, items: next } : current));
+    setOutfit(await updateOutfitItems(id, next));
   }
 
   // A piece can go as long as the outfit is still complete (a one-piece, or a top and bottoms).
@@ -210,7 +200,7 @@ export default function OutfitDetailsScreen() {
 
   async function schedule(entry: { date: string; eventName: string | null }) {
     const created = await scheduleOutfit(id, entry);
-    setOutfit((current) => (current ? { ...current, scheduled: [...(current.scheduled ?? []), created] } : current));
+    setOutfit((current) => (current ? { ...current, scheduled: [...current.scheduled, created] } : current));
     setIsScheduling(false);
   }
 
@@ -220,7 +210,7 @@ export default function OutfitDetailsScreen() {
     try {
       await unscheduleOutfit(id, entry.id);
       setOutfit((current) =>
-        current ? { ...current, scheduled: (current.scheduled ?? []).filter((e) => e.id !== entry.id) } : current,
+        current ? { ...current, scheduled: current.scheduled.filter((e) => e.id !== entry.id) } : current,
       );
     } catch (e) {
       showError(e);
@@ -346,13 +336,13 @@ export default function OutfitDetailsScreen() {
           </Pressable>
 
           <ScheduledList
-            scheduled={scheduled}
+            scheduled={outfit.scheduled}
             removingId={removingEntryId}
             onAdd={() => setIsScheduling(true)}
             onRemove={unschedule}
           />
 
-          <CollectionChips collections={collections} />
+          <CollectionChips collections={outfit.collections} />
 
           <Pressable
             onPress={confirmDelete}
