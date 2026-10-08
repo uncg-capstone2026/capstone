@@ -111,11 +111,17 @@ The Outfits tab (`src/app/(tabs)/outfits.tsx`) is built: the "All saved outfits"
 Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where `id` is `all`, `favorites` or a collection id): the title, the outfit count and a grid of outfits, each opening `src/app/outfit/[id].tsx`. In edit mode, a user collection can be renamed and have outfits added ("Add from all saved outfits") or removed. Favorites can have outfits added (favorited) or removed (unfavorited). All saved outfits can only delete outfits, after a confirmation.
 
 ### Server
+- [ ] `GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for the Calendar tab. Both dates are required and inclusive; 400 if either is missing or invalid. Behind `AuthGuard`. Returns the user's calendar entries in that range, earliest first, as `{ id, date, eventName, outfit: SavedOutfit }[]` (`date` as `YYYY-MM-DD` like `toScheduledDay`, `outfit` loaded with `WITH_PIECES` and shaped like `GET /api/outfits`). The app asks for one month at a time (`src/services/calendar.ts`). Right now no route lists calendar entries: `GET /api/outfits` has no `scheduled`, and only `GET /api/outfits/:id` does.
+- [ ] Notifications: the Settings switch is only saved on the device (`src/hooks/use-notifications-enabled.ts`). Add a place to store it per user (e.g. `notificationsEnabled` on `User`, set with `PATCH /api/auth/me`), and a route to save the device's Expo push token (e.g. `POST /api/auth/me/push-token { token }`), so the server can send outfit reminders and respect the switch.
+- [ ] Profile: `PATCH /api/auth/me` only accepts `timeZone`. Accept `name`, `displayName` and `phone` too (400 if invalid, 409 if the phone is taken), for the Profile screen.
 - [ ] Later: let the user say they didn't wear a planned outfit (e.g. "Didn't wear it" on a past calendar day). That would undo the counts for that entry, rolling `lastWorn` back to the outfit's previous worn entry.
 
 ### Client
 The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45).
 
+- [ ] The Calendar tab (`src/app/(tabs)/calendar.tsx`) is built: a month grid with green dots on upcoming planned days and gold on past ones, the weather card for the selected day, and its planned outfits. It shows a load error until the server has `GET /api/calendar` (see Server above). Test it on a device once that's live.
+- [ ] Notifications: add `expo-notifications` (needs a new dev build), ask for permission when the Settings switch is turned on, register the push token and send the switch to the server once the routes above exist.
+- [ ] Profile (`src/app/profile.tsx`, opened from the Settings profile card) is "coming soon". Build it once `PATCH /api/auth/me` accepts name, display name and phone.
 - [ ] Try on (`src/app/try-on.tsx`) is still "coming soon". Load the user's body photo with `GET /api/photos/body` → `{ photoId, imageUrl }`. On a 404, send them to add a body photo.
 - [ ] Test the outfit details screen against the seeded test account (`seed.tester@example.com` / `TestPass123!`, created by `server/prisma/seed.ts`): edit pieces, plan and unplan days, and check collections.
 
