@@ -8,25 +8,41 @@ What the server does today for these two features. Build the client against this
 - Items whose tagging or embedding failed never show up in outfits.
 
 ## Outfit planning
-`POST /api/stylist/outfit`
-```ts
-type StyleOutfitRequest = { occasion: string /* 1–300 chars */; date?: string /* 'YYYY-MM-DD' */ };
+Design: `ai/repromptimplementation.md`. Every outfit shown is saved as a turn in a session (`OutfitSession` / `OutfitTurn`).
 
-type PlannedOutfit = {
-  items: { itemId: string; type: string | null; imageUrl: string }[]; // 1–5 items
-  reason: string;                                                     // written to the user; show as-is
+`POST /api/stylist/outfit` starts a session.
+```ts
+type StyleOutfitRequest = {
+  occasion: string /* 1–300 chars */; date?: string /* 'YYYY-MM-DD' */;
+  lat?: number; lon?: number;        // optional; enables weather-aware picks
+  excludeSuggestionIds?: string[];   // old "Try another"; remove once the app uses /reprompt
+};
+
+type OutfitSuggestion = {
+  sessionId: string;     // send back with /reprompt
+  turnId: string;        // this outfit, e.g. for accepting it
+  suggestionId: string;  // the outfit's items, encoded
+  name: string;          // e.g. "Easy layers for class"
+  reasons: string[];     // 2–4, written to the user; show as-is
+  items: { id: string; name: string; category: string | null; type: string | null; imageUrl: string }[];
 };
 ```
-- Exactly **one** complete outfit: Top + Bottoms, or a OnePiece (dress). Shoes, outerwear and accessory are optional.
-- `type` is the garment type (`'t-shirt'`, `'jeans'`), not the app category.
+`POST /api/stylist/outfit/reprompt` `{ sessionId: string; message?: string /* ≤300 */ }` → `OutfitSuggestion`
+- No message is "Try another" (served from a queue of extra outfits when possible, with no AI call).
+- With a message, a router picks `reroll`, `swap` ("different shoes"), `refine` ("add a jacket", "more formal") or `restart` ("actually it's for a wedding").
+
+Both routes:
+- One complete outfit: Top + Bottoms, or a OnePiece (dress). Shoes, outerwear and accessory are optional.
+- `type` is the garment type (`'t-shirt'`, `'jeans'`); `category` is the app's name (`'tops'`).
 - `imageUrl` is a signed URL to the cutout (or original), valid for **5 minutes**.
-- 422 means not enough matching items; show `serverMessage`. 400 means invalid body. 500 means show a retry.
-- Name and category aren't included. Use `GET /api/items/:id` if needed.
-- Replace the `styleOutfit` stub in `client/src/services/stylist.ts`.
+- With `lat`/`lon` on the first request, the day's forecast is fetched first, stored on the session, and given to every prompt.
+- Errors: 400 invalid body; 404 session not found; 409 session finished or another reprompt in progress; 422 not enough items / nothing new / 20-turn limit (show `serverMessage`); 503 AI unavailable (show `serverMessage`).
+
+Accept: `StylistSessionsService.acceptTurn(userId, sessionId, turnId, tx?)` marks the turn accepted and the session completed; the accept route (not built yet) calls it inside its Outfit + CalendarEntry transaction.
 
 ## Not implemented
-- Weather in outfit planning
-- Multiple outfits, saving outfits
+- Saving outfits (the accept route)
+- Memory from past sessions
 - Excluding items from suggestions
 - New garment types (romper, etc.)
 - Try on feature
