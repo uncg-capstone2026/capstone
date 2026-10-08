@@ -38,6 +38,27 @@ enum Fit {
   Oversized
 }
 
+enum OutfitSessionStatus {
+  active
+  completed
+  abandoned
+}
+
+enum OutfitTurnRoute {
+  initial
+  reroll
+  swap
+  refine
+  restart
+}
+
+enum OutfitTurnStatus {
+  pending
+  rejected
+  accepted
+  failed
+}
+
 enum OutfitSlot {
   top
   bottom
@@ -53,21 +74,22 @@ enum StyleFeedbackKind {
 }
 
 model User {
-  id             String         @id @default(uuid())
+  id             String          @id @default(uuid())
   name           String
-  email          String         @unique
+  email          String          @unique
   passwordHash   String
   displayName    String?
-  phone          String?        @unique
-  marketingOptIn Boolean        @default(false)
-  timeZone       String         @default("America/New_York") // IANA name, for "today" and wear periods
-  createdAt      DateTime       @default(now())
+  phone          String?         @unique
+  marketingOptIn Boolean         @default(false)
+  timeZone       String          @default("America/New_York") // IANA name, for "today" and wear periods
+  createdAt      DateTime        @default(now())
   items          Item[]
   photos         TryOnPhoto[]
   collections    Collection[]
   outfits        Outfit[]
   notifications  Notification[]
   styleFeedback  StyleFeedback[]
+  outfitSessions OutfitSession[]
 }
 
 model TryOnPhoto {
@@ -201,4 +223,50 @@ model StyleFeedback {
   createdAt    DateTime          @default(now())
 
   @@index([userId, createdAt])
+}
+
+// One Stylist conversation: the first request and every outfit shown after it.
+// See ai/repromptimplementation.md.
+model OutfitSession {
+  id                    String              @id @default(uuid())
+  userId                String
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalPrompt        String
+  date                  String? // 'YYYY-MM-DD' the outfit is for
+  weather               Json? // forecast snapshot from turn 1
+  status                OutfitSessionStatus @default(active)
+  acceptedTurnId        String?             @unique
+  acceptedTurn          OutfitTurn?         @relation("AcceptedTurn", fields: [acceptedTurnId], references: [id])
+  queuedOutfits         Json                @default("[]") // [{ itemIds, name, reasons }] extras for reroll
+  bannedItemIds         String[] // items the user asked to replace; never suggested again in this session
+  historySummary        String? // turns older than the last 5, compressed
+  summarizedThroughTurn Int                 @default(0)
+  memoryProcessed       Boolean             @default(false) // for the later memory job
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  turns                 OutfitTurn[]        @relation("SessionTurns")
+
+  @@index([userId, updatedAt])
+}
+
+// One outfit shown in a session (or a failed attempt at one).
+model OutfitTurn {
+  id            String           @id @default(uuid())
+  sessionId     String
+  session       OutfitSession    @relation("SessionTurns", fields: [sessionId], references: [id], onDelete: Cascade)
+  turnNumber    Int
+  userMessage   String // the original prompt (turn 1), the feedback, or '' for a plain reroll
+  route         OutfitTurnRoute
+  requirements  Json // { items: [{ type, semantic_query }] }
+  candidates    Json // { [type]: [{ itemId, score }] }, closest first, up to 10 per type
+  sentItemIds   String[]
+  chosenItemIds String[]
+  name          String?
+  reasons       String[]
+  status        OutfitTurnStatus @default(pending)
+  error         String? // why a failed turn failed
+  createdAt     DateTime         @default(now())
+  acceptedIn    OutfitSession?   @relation("AcceptedTurn")
+
+  @@unique([sessionId, turnNumber])
 }
