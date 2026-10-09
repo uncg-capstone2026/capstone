@@ -14,7 +14,11 @@ export class LoginDto {
   password!: string;
 }
 
-// PATCH /api/auth/me. The app sends the device's time zone when it changes.
+// PATCH /api/auth/me. Every field is optional, but at least one must be sent.
+// Checked and cleaned by parseProfileChanges (profile-changes.ts).
 export class UpdateMeDto {
-  timeZone?: string;
+  name?: string;
+  displayName?: string | null; // null or "" clears it
+  phone?: string | null; // any US format; saved as E.164. null or "" removes it
+  timeZone?: string; // IANA name, e.g. "America/Chicago"
 }

@@ -28,10 +28,11 @@ export class AuthController {
     return this.auth.me(userId);
   }
 
-  // PATCH /api/auth/me { timeZone }  (needs Authorization: Bearer <token>) -> 204
+  // PATCH /api/auth/me { name?, displayName?, phone?, timeZone? }  (needs Authorization)
+  //   -> 200, the updated user (same shape as GET /api/auth/me)
+  // 400 for an empty body or invalid values, 409 if the phone number is taken.
   @Patch('me')
   @UseGuards(AuthGuard)
-  @HttpCode(204)
   updateMe(@CurrentUserId() userId: User['id'], @Body() body: UpdateMeDto) {
     return this.auth.updateMe(userId, body);
   }
