@@ -142,10 +142,12 @@ export class ItemsService {
     return { itemId: item.id };
   }
 
-  // POST /api/items/link { url } -> { itemId }. Reads the store's product page,
-  // saves its photo to S3, then runs the same cutout and AI steps as adding from
-  // a photo. Problems the user can act on (bad link, blocked site, no photo) are
-  // 400s with a message the app shows.
+  // POST /api/items/link { url } -> { itemId, isNew }. Reads the store's product
+  // page, saves its photo to S3, then runs the same cutout and AI steps as adding
+  // from a photo. isNew is false when this link was already imported, so the app
+  // doesn't treat (and discard) an item the user already had as a new one.
+  // Problems the user can act on (bad link, blocked site, no photo) are 400s with
+  // a message the app shows.
   async createFromLink(userId: User['id'], rawUrl: string) {
     try {
       const pageUrl = checkUrl(rawUrl.trim());
@@ -155,7 +157,7 @@ export class ItemsService {
         where: { userId, sourceURL: pageUrl.href },
         select: { id: true },
       });
-      if (existing) return { itemId: existing.id };
+      if (existing) return { itemId: existing.id, isNew: false };
 
       const page = await safeFetch(pageUrl, { maxBytes: 3_000_000, accept: 'text/html,application/xhtml+xml' });
       const product = findProduct(page.body.toString('utf8'), page.finalUrl);
@@ -188,7 +190,7 @@ export class ItemsService {
           this.addAttributes(item.id, aiImage, { keepName: !!product.name }),
         ]);
       }
-      return { itemId: item.id };
+      return { itemId: item.id, isNew: true };
     } catch (err) {
       if (err instanceof LinkFetchError) throw new BadRequestException({ message: err.message });
       throw err;
