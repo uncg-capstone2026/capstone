@@ -225,7 +225,7 @@ function ProgressBar({ percent }: { percent: number }) {
             source={require('@/assets/images/styleme-mascot-thinking.png')}
             contentFit="contain"
             accessibilityIgnoresInvertColors
-            style={{ width: MASCOT_SIZE, height: MASCOT_SIZE, transform: [{ translateY: -8 }] }}
+            style={{ width: MASCOT_SIZE, height: MASCOT_SIZE, transform: [{ translateY: -6 }] }}
           />
         </Animated.View>
       </View>
@@ -237,7 +237,7 @@ function ProgressBar({ percent }: { percent: number }) {
 function Title() {
   return (
     <View className="flex-row items-end justify-center">
-      <Text accessibilityRole="header" className="shrink text-center font-heading text-[22px] leading-[30px] text-sage-800">
+      <Text accessibilityRole="header" className="shrink text-center font-heading text-lg leading-[26px] text-sage-800" numberOfLines={1} adjustsFontSizeToFit>
         Putting your outfit together
       </Text>
       {[0, 1, 2].map((i) => (
