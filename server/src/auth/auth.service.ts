@@ -16,6 +16,7 @@ import {
   normalizeEmail,
   normalizePhone,
 } from './auth.utils';
+import { isValidTimeZone, parseProfileChanges } from './profile-changes';
 
 @Injectable()
 export class AuthService {
@@ -93,14 +94,22 @@ export class AuthService {
     return this.toPublicUser(user);
   }
 
-  // PATCH /api/auth/me { timeZone } -> 204. 400 if it isn't a real IANA time zone.
+  // PATCH /api/auth/me { name?, displayName?, phone?, timeZone? } -> the updated
+  // user (same shape as GET /api/auth/me). 400 for an empty body, unknown fields
+  // or invalid values; 409 if another account already has the phone number.
   async updateMe(userId: User['id'], body: UpdateMeDto) {
-    const timeZone = body?.timeZone;
-    if (timeZone === undefined) throw new BadRequestException('Nothing to update');
-    if (!isValidTimeZone(timeZone)) throw new BadRequestException('Unknown time zone');
-
-    const { count } = await this.prisma.user.updateMany({ where: { id: userId }, data: { timeZone } });
-    if (count === 0) throw new UnauthorizedException();
+    const changes = parseProfileChanges(body);
+    try {
+      const user = await this.prisma.user.update({ where: { id: userId }, data: changes });
+      return this.toPublicUser(user);
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        // Phone is the only unique field this route can change.
+        if (e.code === 'P2002') throw new ConflictException('Phone number already in use');
+        if (e.code === 'P2025') throw new UnauthorizedException(); // the account no longer exists
+      }
+      throw e;
+    }
   }
 
   private async buildAuthResponse(user: User) {
@@ -117,19 +126,5 @@ export class AuthService {
       email: user.email,
       phone: user.phone,
     };
-  }
-}
-
-// An IANA name like "America/Chicago" that Intl recognizes. Raw offsets like
-// "+05:00" are rejected: Postgres reads their sign the opposite way.
-const TIME_ZONE_NAME = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+)*$/;
-
-function isValidTimeZone(value: unknown): value is string {
-  if (typeof value !== 'string' || value.length > 100 || !TIME_ZONE_NAME.test(value)) return false;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: value }); // throws RangeError if unknown
-    return true;
-  } catch {
-    return false;
   }
 }
