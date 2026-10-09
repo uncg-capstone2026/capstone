@@ -9,9 +9,10 @@ export type ProfileChanges = {
   displayName?: string | null;
   phone?: string | null; // E.164, e.g. +13365550123
   timeZone?: string;
+  notificationsEnabled?: boolean;
 };
 
-const EDITABLE = ['name', 'displayName', 'phone', 'timeZone'];
+const EDITABLE = ['name', 'displayName', 'phone', 'timeZone', 'notificationsEnabled'];
 const NAME_MAX_LENGTH = 50;
 
 export function parseProfileChanges(body: unknown): ProfileChanges {
@@ -29,6 +30,10 @@ export function parseProfileChanges(body: unknown): ProfileChanges {
   if (input.timeZone !== undefined) {
     if (!isValidTimeZone(input.timeZone)) throw bad('Unknown time zone');
     changes.timeZone = input.timeZone;
+  }
+  if (input.notificationsEnabled !== undefined) {
+    if (typeof input.notificationsEnabled !== 'boolean') throw bad('notificationsEnabled must be true or false');
+    changes.notificationsEnabled = input.notificationsEnabled;
   }
 
   if (Object.keys(changes).length === 0) throw bad('Nothing to update');
@@ -67,6 +72,17 @@ export function isValidTimeZone(value: unknown): value is string {
   } catch {
     return false;
   }
+}
+
+// An Expo push token, e.g. ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]. 400 otherwise.
+const EXPO_PUSH_TOKEN = /^Expo(nent)?PushToken\[[A-Za-z0-9_-]{10,100}\]$/;
+
+export function readPushToken(body: unknown): string {
+  const token = (body as { token?: unknown } | null)?.token;
+  if (typeof token !== 'string' || !EXPO_PUSH_TOKEN.test(token.trim())) {
+    throw bad('Expected an Expo push token');
+  }
+  return token.trim();
 }
 
 function bad(message: string) {
