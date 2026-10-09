@@ -21,4 +21,10 @@ export class UpdateMeDto {
   displayName?: string | null; // null or "" clears it
   phone?: string | null; // any US format; saved as E.164. null or "" removes it
   timeZone?: string; // IANA name, e.g. "America/Chicago"
+  notificationsEnabled?: boolean; // the in-app switch for reminders
+}
+
+// POST /api/auth/me/push-token. Checked by readPushToken (profile-changes.ts).
+export class PushTokenDto {
+  token!: string; // ExponentPushToken[...]
 }

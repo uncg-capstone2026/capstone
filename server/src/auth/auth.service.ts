@@ -9,14 +9,14 @@ import { Prisma } from '@prisma/client';
 import type { User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { LoginDto, SignupDto, UpdateMeDto } from './auth.dto';
+import { LoginDto, PushTokenDto, SignupDto, UpdateMeDto } from './auth.dto';
 import {
   assertStrongPassword,
   isValidEmail,
   normalizeEmail,
   normalizePhone,
 } from './auth.utils';
-import { isValidTimeZone, parseProfileChanges } from './profile-changes';
+import { isValidTimeZone, parseProfileChanges, readPushToken } from './profile-changes';
 
 @Injectable()
 export class AuthService {
@@ -94,7 +94,7 @@ export class AuthService {
     return this.toPublicUser(user);
   }
 
-  // PATCH /api/auth/me { name?, displayName?, phone?, timeZone? } -> the updated
+  // PATCH /api/auth/me { name?, displayName?, phone?, timeZone?, notificationsEnabled? } -> the updated
   // user (same shape as GET /api/auth/me). 400 for an empty body, unknown fields
   // or invalid values; 409 if another account already has the phone number.
   async updateMe(userId: User['id'], body: UpdateMeDto) {
@@ -112,6 +112,19 @@ export class AuthService {
     }
   }
 
+  // POST /api/auth/me/push-token { token } -> 204. Saves this device's Expo push
+  // token. A user can have several devices. If the token was saved for another
+  // account (the phone signed in as someone else), it moves to this one, so the
+  // previous account stops getting reminders on that phone.
+  async registerPushToken(userId: User['id'], body: PushTokenDto) {
+    const token = readPushToken(body);
+    await this.prisma.pushToken.upsert({
+      where: { token },
+      create: { userId, token },
+      update: { userId },
+    });
+  }
+
   private async buildAuthResponse(user: User) {
     const token = await this.jwt.signAsync({ sub: user.id });
     return { token, user: this.toPublicUser(user) };
@@ -125,6 +138,7 @@ export class AuthService {
       displayName: user.displayName,
       email: user.email,
       phone: user.phone,
+      notificationsEnabled: user.notificationsEnabled,
     };
   }
 }

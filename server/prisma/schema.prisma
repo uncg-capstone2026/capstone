@@ -61,6 +61,7 @@ model User {
   phone          String?        @unique
   marketingOptIn Boolean        @default(false)
   timeZone       String         @default("America/New_York") // IANA name, for "today" and wear periods
+  notificationsEnabled Boolean  @default(true) // the in-app switch for reminders
   createdAt      DateTime       @default(now())
   items          Item[]
   photos         TryOnPhoto[]
@@ -68,6 +69,7 @@ model User {
   outfits        Outfit[]
   notifications  Notification[]
   styleFeedback  StyleFeedback[]
+  pushTokens     PushToken[]
 }
 
 model TryOnPhoto {
@@ -201,4 +203,15 @@ model StyleFeedback {
   createdAt    DateTime          @default(now())
 
   @@index([userId, createdAt])
+}
+
+// One Expo push token per device. A user can have several devices.
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique // ExponentPushToken[...]
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
