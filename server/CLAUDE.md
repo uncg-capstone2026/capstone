@@ -51,6 +51,3 @@ Accept: `StylistSessionsService.acceptTurn(userId, sessionId, turnId, tx?)` mark
 - Memory from past sessions
 - Excluding items from suggestions
 - New garment types (romper, etc.)
-
-## Temporary, ignore
-`/api/gemini/*` and `GET /api/items/:id/embedding` are test routes that will be removed.
