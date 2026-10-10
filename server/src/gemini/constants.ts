@@ -50,6 +50,12 @@ export const MAIN_MODEL = 'gemini-flash-latest';
 // router and the history summary.
 export const FAST_MODEL = 'gemini-flash-lite-latest';
 
+// Try-on: generates the photo of the user wearing an outfit.
+export const IMAGE_MODEL = 'gemini-nano-banana-2.1';
+
+// Most clothing items sent in one try-on.
+export const MAX_TRY_ON_ITEMS = 8;
+
 export const EMBEDDING_MODEL = 'gemini-embedding-2';
 
 export const EMBEDDING_DIMENSIONS = 768;

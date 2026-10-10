@@ -1,7 +1,8 @@
 import { Type } from 'class-transformer';
 import {
-  ArrayMaxSize, IsArray, IsLatitude, IsLongitude, IsOptional, IsString, IsUUID, Length, Matches, MaxLength,
+  ArrayMaxSize, ArrayMinSize, IsArray, IsLatitude, IsLongitude, IsOptional, IsString, IsUUID, Length, Matches, MaxLength,
 } from 'class-validator';
+import { MAX_TRY_ON_ITEMS } from '../gemini/constants';
 
 export class StyleOutfitDto {
   // Where they're headed or what they're going for.
@@ -42,4 +43,14 @@ export class RepromptDto {
   @IsString()
   @MaxLength(300)
   message?: string;
+}
+
+export class TryOnDto {
+  // The pieces of the outfit on screen, including any the user swapped in.
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_TRY_ON_ITEMS)
+  @IsString({ each: true })
+  @MaxLength(100, { each: true })
+  itemIds!: string[];
 }

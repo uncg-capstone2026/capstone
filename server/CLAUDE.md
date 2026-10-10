@@ -40,12 +40,17 @@ Both routes:
 
 Accept: `StylistSessionsService.acceptTurn(userId, sessionId, turnId, tx?)` marks the turn accepted and the session completed; the accept route (not built yet) calls it inside its Outfit + CalendarEntry transaction.
 
+## Try-on
+`POST /api/stylist/try-on` `{ itemIds: string[] /* 1–8 */ }` → `{ imageUrl: string }`
+- A photo of the user wearing those items, generated from their primary try-on photo. Send the pieces **on screen**, including swapped ones.
+- Takes about 10–30s. `imageUrl` is a signed URL to a JPEG, valid for **24 hours**. Nothing is saved to the database, and the file is deleted by an S3 lifecycle rule (`tryon/` prefix), so it can't be fetched again later.
+- Errors: 400 invalid body; 404 no try-on photo yet, or an item isn't in the closet (show `serverMessage`); 422 the photo couldn't be used, e.g. it doesn't show one person (show `serverMessage`); 503 AI unavailable (show `serverMessage`).
+
 ## Not implemented
 - Saving outfits (the accept route)
 - Memory from past sessions
 - Excluding items from suggestions
 - New garment types (romper, etc.)
-- Try on feature
 
 ## Temporary, ignore
 `/api/gemini/*` and `GET /api/items/:id/embedding` are test routes that will be removed.

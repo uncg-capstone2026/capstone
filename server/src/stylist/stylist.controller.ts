@@ -3,7 +3,7 @@ import type { User } from '@prisma/client';
 import { AuthGuard, CurrentUserId } from '../auth/auth.guard';
 import { AcceptOutfitDto, OutfitFeedbackDto } from './outfit-feedback.dto';
 import { OutfitFeedbackService } from './outfit-feedback.service';
-import { RepromptDto, StyleOutfitDto } from './stylist.dto';
+import { RepromptDto, StyleOutfitDto, TryOnDto } from './stylist.dto';
 import { StylistService } from './stylist.service';
 
 // whitelist + forbidNonWhitelisted: unknown fields (e.g. userId) are rejected.
@@ -66,5 +66,16 @@ export class StylistController {
     @Body(new ValidationPipe()) body: RepromptDto,
   ) {
     return this.stylist.reprompt(userId, body.sessionId, body.message ?? '');
+  }
+
+  // POST /api/stylist/try-on { itemIds } -> { imageUrl }
+  // A photo of the user wearing the outfit on screen, from their try-on photo.
+  // imageUrl is a signed URL valid for 24 hours. 404 when they haven't
+  // uploaded a try-on photo, or an item isn't in their closet (show message).
+  // 422 when the photo can't be used (show message). 503 when the AI is unavailable.
+  @Post('try-on')
+  @HttpCode(200)
+  tryOn(@CurrentUserId() userId: User['id'], @Body(validate) body: TryOnDto) {
+    return this.stylist.tryOn(userId, body.itemIds);
   }
 }

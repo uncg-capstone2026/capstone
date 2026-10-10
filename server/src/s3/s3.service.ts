@@ -36,6 +36,13 @@ export class S3Service {
     return `users/${userId}/${kind}/${randomUUID()}.${extension}`;
   }
 
+  // Try-on results live under their own top-level folder, not users/, so one
+  // S3 lifecycle rule (prefix "tryon/") can delete them after a few days.
+  // Lifecycle prefixes can't have a wildcard, so users/*/tryon/ wouldn't work.
+  buildTryOnKey(userId: string): string {
+    return `tryon/${userId}/${randomUUID()}.jpg`;
+  }
+
   // Returns a short-lived URL the client can PUT the file to directly.
   async getUploadUrl(key: string, contentType: string): Promise<string> {
     const command = new PutObjectCommand({

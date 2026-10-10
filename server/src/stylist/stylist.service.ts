@@ -21,6 +21,7 @@ import { OutfitPlanningService, type OutfitCandidate, type SelectedOutfit } from
 import { QueryExpansionService } from '../gemini/query-expansion/service';
 import type { RefineEdits, RouteDecision, SearchItem } from '../gemini/reprompt-router/sanitize';
 import { RepromptRouterService } from '../gemini/reprompt-router/service';
+import { TryOnService } from '../gemini/try-on/service';
 import { AI_LOG_CONTEXT } from '../logger.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
@@ -38,6 +39,7 @@ const NOT_ENOUGH_ITEMS = 'Not enough matching items in your closet to build an o
 const NO_NEW_OUTFITS = "That's every outfit StyleMe can find for this. Try describing the occasion differently.";
 const NO_COMPLETE_OUTFIT = "Your closet doesn't have a top and bottoms, or a dress, that match this request.";
 const AI_UNAVAILABLE = 'StyleMe could not put an outfit together right now. Please try again.';
+const TRY_ON_UNAVAILABLE = "StyleMe couldn't create your try-on right now. Please try again.";
 const TOO_MANY_TURNS = "That's a lot of suggestions for one request. Start a new request to keep going.";
 
 type Location = { lat: number; lon: number } | null;
@@ -84,6 +86,7 @@ export class StylistService {
     private readonly outfitPlanning: OutfitPlanningService,
     private readonly router: RepromptRouterService,
     private readonly historySummary: HistorySummaryService,
+    private readonly tryOnService: TryOnService,
     private readonly sessions: StylistSessionsService,
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
@@ -151,6 +154,20 @@ export class StylistService {
       });
       return suggestion;
     });
+  }
+
+  // POST /try-on: a photo of the user wearing the outfit on screen. Nest
+  // errors (404 no try-on photo or missing item, 422 Gemini declined) pass
+  // through; anything else is a 503 { message }. The failure itself is logged
+  // by TryOnService.
+  async tryOn(userId: string, itemIds: string[]): Promise<{ imageUrl: string }> {
+    try {
+      return await this.tryOnService.generate(userId, itemIds);
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      this.logger.error(`Try-on failed: ${(err as Error).message}`, (err as Error).stack);
+      throw new ServiceUnavailableException({ message: TRY_ON_UNAVAILABLE });
+    }
   }
 
   // POST /outfit/reprompt: the user's reaction to the outfit on screen. An
