@@ -1,119 +1,142 @@
-# Frontend handoff: Stylist sessions, reprompting and weather
+# Frontend handoff: outfit conversations, weather and try-on
 
 **From:** Javier (AI / server). **For:** whoever owns `client/`.
 
-The Stylist now remembers a conversation. The first request starts a **session**, and every outfit shown after it is a **turn**. The user can react to an outfit and get a better next one.
-- Design: `ai/repromptimplementation.md`
-- API: `server/CLAUDE.md`
+> **Breaking:** "Looks right" returns **400** until the app sends `sessionId` and `turnId` (section 4).
 
-**Each response is still one outfit** (name, 2–4 reasons, items), in the same shape as today, plus two ids. The extra outfits the AI picks stay queued on the server.
+API reference: `server/CLAUDE.md`. Design: `ai/repromptimplementation.md`.
 
-Files:
-- `client/src/services/stylist.ts`
-- `client/src/app/suggestion.tsx`
-- `client/src/hooks/use-weather.ts`
+## 1. Outfit suggestions are now a conversation
+- **Before:** every "Try another" started over from scratch, and "Not for me" saved the comment somewhere nothing read it.
+- **Now:** the first request starts a **session**. Every outfit after that is a **turn** in it. The AI remembers what it already showed and what the user said.
 
-## 1. Keep `sessionId` and `turnId`
-`POST /api/stylist/outfit` now returns two more fields:
-```ts
-export type OutfitSuggestion = {
-  sessionId: string; // the conversation; send it with every reprompt
-  turnId: string;    // this outfit; changes on every response
-  suggestionId: string;
-  name: string;
-  reasons: string[];
-  items: SuggestedPiece[];
-};
+## 2. First outfit
+`POST /api/stylist/outfit`
+
+**Send:**
+```json
+{ "occasion": "class", "date": "2026-10-11", "lat": 36.07, "lon": -79.79 }
 ```
-Reprompts return the same shape, with the **same** `sessionId` and a **new** `turnId`. Keep the latest response in state, as `suggestion` already does.
+- `lat`/`lon` are optional. Stop sending `excludeSuggestionIds`.
 
-## 2. Send the location with the first request
-**Why:** the stylist uses the forecast for the outfit's day.
-- The query expansion picks the right kinds of clothes: a coat and boots when it's cold, no shorts, rain-friendly shoes.
-- The outfit picker uses it for outerwear and layers.
+**Weather:**
+- With `lat`/`lon`, the server fetches that day's forecast once and uses it for the whole session. For example: a coat when it's cold, no shorts, rain-friendly shoes.
+- If they're missing, or the weather can't be fetched (location denied, more than 7 days out, weather service down), there's **no error**. The outfit is just picked without weather.
+- Only the first request sends the location. Reprompts reuse the forecast saved on the session.
 
-The server fetches the forecast itself, with the same `WeatherService` as `GET /api/weather` (cached for 10 minutes). It only needs coordinates, which the request doesn't send yet.
-
-**What to change:** add optional `lat` and `lon` to `OutfitRequest` and send them in `styleOutfit`'s body:
-```ts
-export type OutfitRequest = {
-  date: Date;
-  occasion: string;
-  lat?: number;
-  lon?: number;
-};
-
-return await apiPost<OutfitSuggestion>('/api/stylist/outfit', {
-  date: toDateKey(request.date),
-  occasion: request.occasion,
-  lat: request.lat,
-  lon: request.lon,
-});
-```
-
-**Where to get the coordinates:** `suggestion.tsx` already calls `useWeather(date)`, and `use-weather.ts` already reads the position (`getPosition()` → `position.coords.latitude/longitude`). Either:
-- expose `lat`/`lon` from `useWeather` and pass them to `styleOutfit(...)`, or
-- call `getPosition()` (after the permission check) right before `styleOutfit`.
-
-Wait for the coordinates, or for location to be denied, before sending the first request.
-
-**Behavior:**
-- **The forecast is saved on the session**, and every reprompt reuses it. Only the first request sends `lat`/`lon`, and if that one has no location, the whole session runs without weather.
-- Both fields are optional. If location is denied or unavailable, leave them out, and the outfit is picked without weather.
-- Weather problems never cause an error: no API key, a date past the 7-day forecast, or WeatherAPI being down. The server just skips the weather.
-
-## 3. Add `repromptOutfit`
-```ts
-// POST /api/stylist/outfit/reprompt -> the next outfit in the same session.
-export async function repromptOutfit(request: { sessionId: string; message?: string }): Promise<OutfitSuggestion> {
-  try {
-    return await apiPost<OutfitSuggestion>('/api/stylist/outfit/reprompt', request);
-  } catch (e) {
-    throw stylistError(e, 'StyleMe could not put an outfit together. Please try again.');
-  }
+**Receive:**
+```jsonc
+{
+  "sessionId": "...",   // NEW: same for every outfit in this conversation. Keep it.
+  "turnId": "...",      // NEW: this outfit. Changes every time. Keep it.
+  "suggestionId": "...",
+  "name": "Easy layers for class",
+  "reasons": ["..."],
+  "items": [{ "id": "...", "name": "...", "category": "tops", "type": "t-shirt", "imageUrl": "..." }]
 }
 ```
-- Leave out `message` (or send `''`) for "Try another".
-- `message` is at most 300 characters. Anything longer returns 400.
 
-## 4. "Try another suggestion"
-Today `tryAnother()` adds the `suggestionId` to `excludeIds`, which runs `styleOutfit` again with `excludeSuggestionIds`. Instead, call:
-```ts
-repromptOutfit({ sessionId: suggestion.sessionId })
+## 3. "Not for me" / "Try another"
+`POST /api/stylist/outfit/reprompt`
+
+**Send:**
+```json
+{ "sessionId": "...", "message": "different shoes" }
 ```
-- This is often instant, because it's served from the queue with no AI call.
-- Stop sending `excludeSuggestionIds` and drop `excludeIds`. The server still accepts the field so the current app keeps working, but it will be removed.
-- Only the **first** load should call `styleOutfit`. Every later outfit comes from `repromptOutfit`.
+- `message` is optional, up to 300 characters.
 
-## 5. "Not for me"
-Today `reject(feedback)` calls `rejectOutfit` and shows the "rejected" result. Keep that call: Taylor's `/outfit/feedback` stays for now. Then also get the next outfit from the feedback:
-```ts
-await rejectOutfit({ suggestionId: suggestion.suggestionId, itemIds, feedback });
-const next = await repromptOutfit({ sessionId: suggestion.sessionId, message: feedback });
+**Receive:** the same shape as section 2, with a new `turnId`.
+
+**What happens:**
+- **No message** (or `""`): plain "Try another". Often instant.
+- **With a message:** the AI adjusts the outfit:
+  - "different shoes" swaps only the shoes.
+  - "add a jacket" or "more formal" changes the outfit to match.
+  - "actually it's for a wedding" starts over.
+- The screen goes **straight to the next outfit**. There's no "rejected" result card anymore.
+- Stop calling `/outfit/feedback`.
+- The sheet's text promises answers are saved to Style Preferences, which isn't true anymore. Suggested copy:
+  - subtitle: "StyleMe uses your answer to pick the next outfit."
+  - button: "Show me another"
+
+## 4. "Looks right" (breaking)
+`POST /api/stylist/outfit/accept`
+
+**Send:** the same body as today, plus `sessionId` and `turnId` from the outfit being accepted:
+```json
+{ "sessionId": "...", "turnId": "...", "suggestionId": "...", "itemIds": ["..."], "name": "...", "eventName": "...", "date": "2026-10-11" }
 ```
-Show `next` like any other outfit, with the same loader. The server works out what to change:
-- "different shoes" keeps the rest and swaps the shoes.
-- "add a jacket" or "more formal" changes the outfit to match.
-- "actually it's for a wedding" starts over.
 
-An empty `feedback` behaves like "Try another". Whether the "rejected" result screen still shows up is a design call.
+**Receive:** `{ "outfitId": "..." }` (unchanged).
 
-## 6. "Looks right": no change yet
-**Don't add `sessionId` or `turnId` to the accept body yet.** The accept route rejects unknown fields with **400**.
+- This saves the outfit and the calendar entry, and **closes the session**.
+- "Try another suggestion" on the accepted result card must call `/outfit` again to start a **new** session. Reprompting a closed session returns 409.
 
-Once the backend handoff (`ai/backend-handoff.md`) is done, add them:
-```ts
-{ sessionId, turnId, suggestionId, itemIds, name, eventName, date }
-```
-Accepting will then also close the session.
+## 5. Try-on (new)
+`POST /api/stylist/try-on`
 
-## 7. Errors
+**Send:** `{ "itemIds": ["..."] }`, the pieces on screen, 1–8 of them.
+
+**Receive:** `{ "imageUrl": "..." }`, a photo of the user wearing them.
+- It takes 10–30 seconds.
+- The link works for 24 hours.
+
+Full details: `ai/try-on-handoff.md`.
+
+## 6. Errors
 | Status | Meaning | Show |
 |---|---|---|
-| 400 | Bad body (e.g. message over 300 chars) | generic retry |
-| 404 | Session not found or not this user's | start over from the Stylist tab |
-| 409 | Session finished, or another reprompt still running | ignore the double tap, or start over |
-| 422 | Nothing new left, not enough items, or 20 outfits in one session | `serverMessage` |
+| 400 | Bad body (message too long, missing `sessionId`/`turnId` on accept) | generic retry |
+| 404 | Session not found, item not in closet, or no try-on photo yet | `serverMessage` |
+| 409 | Session already finished, another reprompt still running, or accepting an outfit that isn't the latest | `serverMessage` |
+| 422 | Nothing new left, not enough items, 20-outfit limit, or the try-on photo couldn't be used | `serverMessage` |
 | 503 | AI unavailable | `serverMessage`, with retry |
 
-`stylistError` already shows `serverMessage` for 422 and 503.
+`stylistError` only shows `serverMessage` for 422 and 503 today. **Add 404 and 409.** Those messages are written for users.
+
+## 7. What to change in the app
+
+### `client/src/services/stylist.ts`
+- `OutfitSuggestion`: add `sessionId: string` and `turnId: string`.
+- `OutfitRequest`: remove `excludeSuggestionIds` and add `lat?: number; lon?: number`. `styleOutfit` sends `{ date, occasion, lat, lon }`.
+- `AcceptOutfitRequest`: add `sessionId` and `turnId`. `acceptOutfit` already spreads the request.
+- Remove `rejectOutfit` and `RejectOutfitRequest`.
+- Add:
+  ```ts
+  export async function repromptOutfit(request: { sessionId: string; message?: string }): Promise<OutfitSuggestion> {
+    try {
+      return await apiPost<OutfitSuggestion>('/api/stylist/outfit/reprompt', request);
+    } catch (e) {
+      throw stylistError(e, 'StyleMe could not put an outfit together. Please try again.');
+    }
+  }
+  ```
+- Fixture mode:
+  - `fixtureSuggestion` returns `sessionId: 'fixture'` and a `turnId`.
+  - `repromptOutfit` returns the next round using a module-level counter.
+
+### `client/src/hooks/use-weather.ts`
+Also return `coords: { lat, lon } | null` from the position it already reads. It stays `null` when there's no location.
+
+### `client/src/app/suggestion.tsx`
+- Replace `excludeIds` with the next request to make:
+  ```ts
+  type NextRequest = { kind: 'start' } | { kind: 'reprompt'; sessionId: string; message?: string };
+  ```
+  - `start`: wait for `useWeather` to finish loading, then call `styleOutfit` with `coords` if there are any.
+  - `reprompt`: call `repromptOutfit`.
+  - Retry repeats the same request.
+  - Use a counter in place of `excludeIds.length` for the `StylingLoader` key.
+- Pull the resets in `tryAnother` into a `resetForNext()`.
+- "Not for me":
+  ```ts
+  function reject(feedback: string) {
+    if (!suggestion) return;
+    setSheet(null);
+    resetForNext();
+    setRequest({ kind: 'reprompt', sessionId: suggestion.sessionId, message: feedback });
+  }
+  ```
+- "Looks right": pass `suggestion.sessionId` and `suggestion.turnId` to `acceptOutfit`.
+- "Try another suggestion" after accepting: `setRequest({ kind: 'start' })`.
+- `openResult` only needs the accepted branch.

@@ -266,7 +266,7 @@ Each phase compiles, keeps the app working, and can be committed and tested on i
   - Turn → accepted. Session → completed, with `acceptedTurnId` set and the queue cleared.
   - Takes an optional Prisma transaction client.
   - Export `StylistSessionsService` from `StylistModule`.
-- **Handoffs (now `ai/frontend-handoff.md` and `ai/backend-handoff.md`):**
+- **Handoffs (client side now in `ai/frontend-handoff.md`):**
   - **Client:**
     - Keep `sessionId` and `turnId` from responses.
     - "Try another" → reprompt with `{ sessionId }`.
@@ -275,7 +275,7 @@ Each phase compiles, keeps the app working, and can be committed and tested on i
     - Stop sending `excludeSuggestionIds`.
     - List the error codes.
     - This replaces the planned `/outfit/feedback` route; turns store the feedback for the memory job.
-  - **Accept route owner (Taylor):** call `acceptTurn` inside the Outfit + CalendarEntry transaction.
+  - **Accept route:** calls `acceptTurn` inside the Outfit + CalendarEntry transaction (done; `sessionId` and `turnId` are required).
 - Update `server/CLAUDE.md`: endpoints and response shape. This also replaces its out-of-date `PlannedOutfit` section.
 - Add `[DEBUG AI]` logs (in "DELETE LATER" blocks) for the route chosen, queue pops and AI calls made.
 
