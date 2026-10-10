@@ -15,7 +15,9 @@ const config: Config = {
   rootDir: '.',
   testRegex: '.*\\.spec\\.ts$',
   transform: {
-    '^.+\\.(t|j)s$': 'ts-jest',
+    // TS5011: TypeScript 6 wants an explicit rootDir, which only matters for
+    // emitting files; ts-jest compiles in memory, so it's safe to ignore.
+    '^.+\\.(t|j)s$': ['ts-jest', { diagnostics: { ignoreCodes: ['TS5011'] } }],
   },
   moduleNameMapper: pathsToModuleNameMapper(paths, { prefix: '<rootDir>/' }),
   collectCoverageFrom: [

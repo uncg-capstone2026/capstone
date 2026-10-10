@@ -1,9 +1,17 @@
 import {
-  ArrayMaxSize, ArrayMinSize, IsArray, IsNotEmpty, IsString, Matches, MaxLength,
+  ArrayMaxSize, ArrayMinSize, IsArray, IsNotEmpty, IsString, IsUUID, Matches, MaxLength,
 } from 'class-validator';
 
 // POST /api/stylist/outfit/accept. Matches AcceptOutfitRequest in client/src/services/stylist.ts.
 export class AcceptOutfitDto {
+  // From the suggestion being accepted (POST /outfit or /outfit/reprompt).
+  // Accepting closes that session.
+  @IsUUID()
+  sessionId!: string;
+
+  @IsUUID()
+  turnId!: string;
+
   @IsString()
   @IsNotEmpty()
   @MaxLength(400)

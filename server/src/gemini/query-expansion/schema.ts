@@ -1,10 +1,9 @@
 import { Type, type Schema } from '@google/genai';
-import {
-  CLOTHING_TYPES,
-  FORMALITY_LEVELS,
-  SEASONS,
-} from '../constants';
+import { CLOTHING_TYPES } from '../constants';
 
+// Only items is returned: each type and semantic_query drives one pgvector
+// search. Season, formality and colors are left to the outfit selection step,
+// which sees the request, the weather and the photos.
 export const QUERY_EXPANSION_RESPONSE_SCHEMA: Schema = {
   type: Type.OBJECT,
   properties: {
@@ -24,31 +23,7 @@ export const QUERY_EXPANSION_RESPONSE_SCHEMA: Schema = {
         propertyOrdering: ['type', 'semantic_query'],
       },
     },
-    season: {
-      type: Type.STRING,
-      nullable: true,
-      enum: [...SEASONS],
-    },
-    formality: {
-      type: Type.STRING,
-      nullable: true,
-      enum: [...FORMALITY_LEVELS],
-    },
-    preferred_colors: { type: Type.ARRAY, items: { type: Type.STRING } },
-    exclude_colors: { type: Type.ARRAY, items: { type: Type.STRING } },
   },
-  required: [
-    'items',
-    'season',
-    'formality',
-    'preferred_colors',
-    'exclude_colors',
-  ],
-  propertyOrdering: [
-    'items',
-    'season',
-    'formality',
-    'preferred_colors',
-    'exclude_colors',
-  ],
+  required: ['items'],
+  propertyOrdering: ['items'],
 };
