@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,7 +9,11 @@ import { MascotMessage } from '@/components/mascot-message';
 import { choosePhotoSource, pickPhoto } from '@/components/photo-picker';
 import { uploadBodyPhoto, type PickedPhoto } from '@/services/photos';
 
+// Shown once during onboarding, and again from Settings → Try-On Photo (`?from=settings`),
+// where it has a back button instead of "Skip for now" and goes back to Settings after Submit.
 export default function BodyPhotoScreen() {
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const fromSettings = from === 'settings';
   const [photo, setPhoto] = useState<PickedPhoto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +40,8 @@ export default function BodyPhotoScreen() {
     setIsSubmitting(true);
     try {
       await uploadBodyPhoto(photo);
-      router.replace('/closet');
+      if (fromSettings) router.back();
+      else router.replace('/closet');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
@@ -49,6 +54,16 @@ export default function BodyPhotoScreen() {
       <ScrollView contentContainerClassName="flex-grow items-center px-6 py-4">
         <View className="w-full max-w-sm flex-1 gap-4">
           <View className="items-center gap-1">
+            {fromSettings ? (
+              <Pressable
+                onPress={() => router.back()}
+                disabled={isSubmitting}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+                className="absolute -left-2 top-0 h-10 w-10 items-center justify-center">
+                <Ionicons name="chevron-back" size={26} color="#4d5d3f" />
+              </Pressable>
+            ) : null}
             <Text className="font-heading text-lg tracking-wide text-sage-600">StyleMe</Text>
             <Text className="text-center font-heading text-2xl text-sage-700">Add a full-body photo</Text>
           </View>
@@ -103,13 +118,15 @@ export default function BodyPhotoScreen() {
               )}
             </Pressable>
 
-            <Pressable
-              onPress={() => router.replace('/closet')}
-              disabled={isSubmitting}
-              accessibilityRole="button"
-              className="items-center py-1.5 disabled:opacity-60">
-              <Text className="font-label text-base text-sage-600 underline">Skip for now</Text>
-            </Pressable>
+            {fromSettings ? null : (
+              <Pressable
+                onPress={() => router.replace('/closet')}
+                disabled={isSubmitting}
+                accessibilityRole="button"
+                className="items-center py-1.5 disabled:opacity-60">
+                <Text className="font-label text-base text-sage-600 underline">Skip for now</Text>
+              </Pressable>
+            )}
           </View>
 
           <View className="flex-row items-start justify-center gap-2 px-2">

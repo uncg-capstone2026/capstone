@@ -14,6 +14,7 @@ import { OutfitsModule } from './outfits/outfits.module';
 import { CollectionsModule } from './collections/collections.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { WearTrackingModule } from './wear-tracking/wear-tracking.module';
+import { CalendarModule } from './calendar/calendar.module';
 
 
 @Module({
@@ -31,6 +32,7 @@ import { WearTrackingModule } from './wear-tracking/wear-tracking.module';
     CollectionsModule,
     ScheduleModule.forRoot(),
     WearTrackingModule,
+    CalendarModule,
   ],
 
   controllers: [AppController],

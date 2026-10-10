@@ -1,5 +1,5 @@
 import { isBackendConfigured } from '@/config/api';
-import { ApiError, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
+import { ApiError, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
 import { getSentTimeZone, setSentTimeZone } from '@/services/preferences';
 import { clearToken, getToken, saveToken } from '@/services/session';
 
@@ -19,9 +19,12 @@ export type SignUpInput = {
   marketingOptIn: boolean;
 };
 
+// GET /api/auth/me, and `user` in the login and sign-up responses.
+export type PublicUser = { id: string; name: string; displayName: string | null; email: string; phone: string | null };
+
 type AuthResponse = {
   token: string;
-  user: { id: string; name: string; displayName: string | null; email: string; phone: string | null };
+  user: PublicUser;
 };
 
 // Thrown when sign-up hits an email or phone that already has an account (409),
@@ -44,6 +47,11 @@ export async function isSignedIn(): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// GET /api/auth/me: the signed-in user, for the Settings profile card.
+export function getMe(): Promise<PublicUser> {
+  return apiGet<PublicUser>('/api/auth/me');
 }
 
 export async function signOut(): Promise<void> {

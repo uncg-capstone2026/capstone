@@ -65,7 +65,7 @@ export class ItemsController {
     return this.items.createFromPhoto(userId, body.key);
   }
 
-  // POST /api/items/link { url } -> { itemId }. 400 with a message if it can't be imported.
+  // POST /api/items/link { url } -> { itemId, isNew }. 400 with a message if it can't be imported.  
   @Post('link')
   importLink(
     @CurrentUserId() userId: User['id'],

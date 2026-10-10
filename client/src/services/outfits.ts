@@ -6,10 +6,9 @@ import type { SuggestedPiece } from '@/services/stylist';
 // USE_ACCEPT_FEEDBACK_FIXTURE in services/stylist.ts is on.
 const USE_COLLECTIONS_FIXTURE = false;
 
-// Changing an outfit's pieces and its scheduled dates aren't on the server yet (see PLAN.md
-// section 9). While this is on, those changes are kept in memory for the session and shown on
-// top of what the server sends.
-const USE_OUTFIT_EDITS_FIXTURE = true;
+// The routes for changing an outfit's pieces and scheduled dates are live. Set this to true to
+// keep those changes in memory for the session instead, shown on top of what the server sends.
+const USE_OUTFIT_EDITS_FIXTURE = false;
 
 export const COLLECTION_NAME_MAX_LENGTH = 40;
 
@@ -40,8 +39,13 @@ export type SavedOutfit = {
   timesWorn?: number;
   lastWorn?: string | null; // ISO date of the most recent day it was worn; null if never
   createdAt?: string;
-  scheduled?: ScheduledDate[]; // not sent by the server yet (see USE_OUTFIT_EDITS_FIXTURE)
   items: OutfitPreview;
+};
+
+// GET and PATCH /api/outfits/:id: one outfit plus its planned days and collections.
+export type OutfitDetails = SavedOutfit & {
+  scheduled: ScheduledDate[]; // past and upcoming, earliest first
+  collections: { id: string; name: string }[]; // the user's collections it's in, most recently added first
 };
 
 export type OutfitCollection = {
@@ -92,15 +96,15 @@ export async function listOutfits(): Promise<SavedOutfit[]> {
 }
 
 // GET /api/outfits/:id, for the outfit details screen.
-export async function getOutfit(id: string): Promise<SavedOutfit> {
+export async function getOutfit(id: string): Promise<OutfitDetails> {
   if (USE_COLLECTIONS_FIXTURE) {
     await wait(300);
     const outfit = fixtureOutfits.find((o) => o.id === id);
     if (!outfit) throw new Error('This outfit no longer exists.');
-    return withEdits(outfit);
+    return detailsWithEdits(toFixtureDetails(outfit));
   }
   try {
-    return withEdits(await apiGet<SavedOutfit>(`/api/outfits/${encodeURIComponent(id)}`));
+    return detailsWithEdits(await apiGet<OutfitDetails>(`/api/outfits/${encodeURIComponent(id)}`));
   } catch (e) {
     if (e instanceof ApiError && e.status === 404) throw new Error('This outfit no longer exists.');
     throw collectionsError(e, 'Could not load this outfit. Please try again.');
@@ -255,17 +259,6 @@ export async function setOutfitFavorite(outfitId: string, isFavorite: boolean): 
   }
 }
 
-// The user's collections that include this outfit. GET /api/outfits/:id doesn't list them yet
-// (see PLAN.md), so this loads each collection that has outfits.
-export async function listOutfitCollections(outfitId: string): Promise<{ id: string; name: string }[]> {
-  const overview = await getOutfitsOverview();
-  const withOutfits = overview.collections.filter((collection) => collection.outfitCount > 0);
-  const details = await Promise.all(withOutfits.map((collection) => getCollection(collection.id)));
-  return details
-    .filter((collection) => collection.outfits.some((outfit) => outfit.id === outfitId))
-    .map(({ id, name }) => ({ id, name }));
-}
-
 // Complete means a one-piece (or set), or a top and bottoms. Pieces can't be removed past this.
 export function isCompleteOutfit(pieces: OutfitPreview): boolean {
   const categories = new Set(pieces.map((piece) => piece.category));
@@ -274,15 +267,15 @@ export function isCompleteOutfit(pieces: OutfitPreview): boolean {
   );
 }
 
-// PATCH /api/outfits/:id { itemIds }: replaces the outfit's pieces (add, remove or swap).
-export async function updateOutfitItems(outfitId: string, pieces: OutfitPreview): Promise<void> {
+// PATCH /api/outfits/:id { itemIds } -> the updated outfit. Replaces the outfit's pieces
+// (add, remove or swap); the server lays them out again, so use the pieces it sends back.
+export async function updateOutfitItems(outfitId: string, pieces: OutfitPreview): Promise<OutfitDetails> {
   if (USE_OUTFIT_EDITS_FIXTURE) {
-    await wait(300);
     fixturePieces[outfitId] = pieces;
-    return;
+    return getOutfit(outfitId);
   }
   try {
-    await apiPatch(`/api/outfits/${outfitId}`, { itemIds: pieces.map((piece) => piece.id) });
+    return await apiPatch<OutfitDetails>(`/api/outfits/${outfitId}`, { itemIds: pieces.map((piece) => piece.id) });
   } catch (e) {
     throw collectionsError(e, 'Could not update this outfit. Please try again.');
   }
@@ -343,10 +336,15 @@ const fixtureSchedules: Record<string, ScheduledDate[]> = {};
 
 function withEdits(outfit: SavedOutfit): SavedOutfit {
   if (!USE_OUTFIT_EDITS_FIXTURE) return outfit;
+  return { ...outfit, items: fixturePieces[outfit.id] ?? outfit.items };
+}
+
+function detailsWithEdits(outfit: OutfitDetails): OutfitDetails {
+  if (!USE_OUTFIT_EDITS_FIXTURE) return outfit;
   return {
     ...outfit,
     items: fixturePieces[outfit.id] ?? outfit.items,
-    scheduled: fixtureSchedules[outfit.id] ?? outfit.scheduled ?? [],
+    scheduled: fixtureSchedules[outfit.id] ?? outfit.scheduled,
   };
 }
 
@@ -379,6 +377,13 @@ function fixtureCollection(id: string): CollectionDetails {
   const collection = fixtureCollections.find((c) => c.id === id);
   if (!collection) throw new Error('This collection no longer exists.');
   return { ...collection, outfits: fixtureMemberOutfits(id) };
+}
+
+function toFixtureDetails(outfit: SavedOutfit): OutfitDetails {
+  const collections = fixtureCollections
+    .filter((collection) => (fixtureMembers[collection.id] ?? []).includes(outfit.id))
+    .map(({ id, name }) => ({ id, name }));
+  return { ...outfit, scheduled: [], collections };
 }
 
 function toFixtureCollection(collection: { id: string; name: string }): OutfitCollection {

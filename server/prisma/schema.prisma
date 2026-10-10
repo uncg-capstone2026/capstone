@@ -74,22 +74,24 @@ enum StyleFeedbackKind {
 }
 
 model User {
-  id             String          @id @default(uuid())
-  name           String
-  email          String          @unique
-  passwordHash   String
-  displayName    String?
-  phone          String?         @unique
-  marketingOptIn Boolean         @default(false)
-  timeZone       String          @default("America/New_York") // IANA name, for "today" and wear periods
-  createdAt      DateTime        @default(now())
-  items          Item[]
-  photos         TryOnPhoto[]
-  collections    Collection[]
-  outfits        Outfit[]
-  notifications  Notification[]
-  styleFeedback  StyleFeedback[]
-  outfitSessions OutfitSession[]
+  id                   String          @id @default(uuid())
+  name                 String
+  email                String          @unique
+  passwordHash         String
+  displayName          String?
+  phone                String?         @unique
+  marketingOptIn       Boolean         @default(false)
+  timeZone             String          @default("America/New_York") // IANA name, for "today" and wear periods
+  notificationsEnabled Boolean         @default(true) // the in-app switch for reminders
+  createdAt            DateTime        @default(now())
+  items                Item[]
+  photos               TryOnPhoto[]
+  collections          Collection[]
+  outfits              Outfit[]
+  notifications        Notification[]
+  styleFeedback        StyleFeedback[]
+  outfitSessions       OutfitSession[]
+  pushTokens           PushToken[]
 }
 
 model TryOnPhoto {
@@ -269,4 +271,15 @@ model OutfitTurn {
   acceptedIn    OutfitSession?   @relation("AcceptedTurn")
 
   @@unique([sessionId, turnNumber])
+}
+
+// One Expo push token per device. A user can have several devices.
+model PushToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique // ExponentPushToken[...]
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

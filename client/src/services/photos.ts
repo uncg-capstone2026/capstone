@@ -1,5 +1,5 @@
 import { isBackendConfigured } from '@/config/api';
-import { apiPost } from '@/services/api';
+import { ApiError, apiGet, apiPost } from '@/services/api';
 
 export type PickedPhoto = {
   uri: string;
@@ -55,4 +55,15 @@ export async function uploadToS3(uploadUrl: string, photo: PickedPhoto): Promise
 export async function confirmBodyPhotoUpload(key: string): Promise<string> {
   const result = await apiPost<{ photoId: string }>('/api/photos/body', { key });
   return result.photoId;
+}
+
+// GET /api/photos/body: whether the user has a try-on photo (404 when they don't).
+export async function hasBodyPhoto(): Promise<boolean> {
+  try {
+    await apiGet<{ photoId: string; imageUrl: string }>('/api/photos/body');
+    return true;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) return false;
+    throw e;
+  }
 }

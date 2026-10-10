@@ -22,6 +22,25 @@ export async function setTemperatureUnit(unit: TemperatureUnit): Promise<void> {
   await AsyncStorage.setItem(TEMPERATURE_UNIT_KEY, unit);
 }
 
+// The Notifications switch in Settings. Only kept on this device for now; nothing sends
+// notifications yet (see PLAN.md).
+export const DEFAULT_NOTIFICATIONS_ENABLED = true;
+
+const NOTIFICATIONS_ENABLED_KEY = 'styleme.notifications-enabled';
+
+export async function getNotificationsEnabled(): Promise<boolean> {
+  try {
+    const stored = await AsyncStorage.getItem(NOTIFICATIONS_ENABLED_KEY);
+    return stored === null ? DEFAULT_NOTIFICATIONS_ENABLED : stored === 'true';
+  } catch {
+    return DEFAULT_NOTIFICATIONS_ENABLED;
+  }
+}
+
+export async function setNotificationsEnabled(enabled: boolean): Promise<void> {
+  await AsyncStorage.setItem(NOTIFICATIONS_ENABLED_KEY, String(enabled));
+}
+
 // The outfit stage's background on the suggestion screen, and each saved outfit's until the
 // user picks one.
 export const DEFAULT_STAGE_COLOR = '#DEE6D3';
