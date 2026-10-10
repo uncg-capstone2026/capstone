@@ -9,7 +9,7 @@ Files:
 - `client/src/services/stylist.ts`
 - `client/src/app/try-on.tsx` (currently a "coming soon" placeholder)
 - `client/src/app/suggestion.tsx` (button at ~line 192)
-- `client/src/app/outfit/[id].tsx` (button at ~line 315)
+- `client/src/app/outfit/[id].tsx` (button at ~line 305)
 
 ## 1. Add `tryOn` to the stylist service
 `POST /api/stylist/try-on` `{ itemIds }` → `{ imageUrl }`. Same pattern as `styleOutfit`:
@@ -28,7 +28,7 @@ export async function tryOn(itemIds: string[]): Promise<TryOnResult> {
 ## 2. Pass the item IDs from both buttons
 **Send the pieces that are on screen**, not the saved outfit. On `outfit/[id]` the user can add and remove pieces, so the saved version can be out of date.
 - `suggestion.tsx`: `suggestion.items` (there's already an `itemIds` at ~line 107).
-- `outfit/[id].tsx`: `pieces` (`outfit.items`) at ~line 121.
+- `outfit/[id].tsx`: `pieces` (`outfit.items`) at ~line 112.
 
 Route params are strings, so join them:
 ```ts
