@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { GoogleGenAI, Schema } from '@google/genai';
+import { GoogleGenAI, Schema, type GenerateContentResponseUsageMetadata } from '@google/genai';
 import type { Weather } from '../weather/weather.service';
 import { EMBEDDABLE_IMAGE_TYPES, MAIN_MODEL } from './constants';
 
@@ -25,13 +25,36 @@ export function mimeTypeForKey(key: string): string | null
   return null;
 }
 
+// Token counts from a Gemini response, for the AI log.
+export function tokenCounts(usage?: GenerateContentResponseUsageMetadata)
+{
+  return {
+    prompt: usage?.promptTokenCount,
+    output: usage?.candidatesTokenCount,
+    thinking: usage?.thoughtsTokenCount,
+    total: usage?.totalTokenCount,
+  };
+}
+
+// A duration for the AI log, easier to read than ms: 4213 -> '4.21s'.
+export function seconds(ms: number): string
+{
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
 // Shared by every Gemini feature service: the one Gemini client, plus the
 // helpers more than one feature needs.
 @Injectable()
 export class GeminiHelpers {
   readonly ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-  async generateJson(prompt: string, responseSchema: Schema, model = MAIN_MODEL): Promise<string>
+  // The JSON text, plus token counts (usage) and the model that actually
+  // answered (modelVersion; '-latest' names can change) for logging.
+  async generateJson(
+    prompt: string,
+    responseSchema: Schema,
+    model = MAIN_MODEL,
+  ): Promise<{ text: string; usage?: GenerateContentResponseUsageMetadata; modelVersion?: string }>
   {
     const response = await this.ai.models.generateContent({
       model,
@@ -41,7 +64,7 @@ export class GeminiHelpers {
         responseSchema,
       },
     });
-    return response.text ?? '';
+    return { text: response.text ?? '', usage: response.usageMetadata, modelVersion: response.modelVersion };
   }
 
   assertSupportedImage(mimeType: string)

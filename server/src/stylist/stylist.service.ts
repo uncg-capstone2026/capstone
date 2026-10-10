@@ -8,12 +8,14 @@ import {
 } from '@nestjs/common';
 import type { OutfitTurn } from '@prisma/client';
 import { CANDIDATES_SENT_PER_TYPE, MAX_TURNS_PER_SESSION } from '../gemini/constants';
+import { seconds } from '../gemini/helpers';
 import { HistorySummaryService } from '../gemini/history-summary/service';
 import { comboKey, pickToSend, type CandidateLists } from '../gemini/outfit-planning/candidates';
 import { OutfitPlanningService, type OutfitCandidate, type SelectedOutfit } from '../gemini/outfit-planning/service';
 import { QueryExpansionService } from '../gemini/query-expansion/service';
 import type { RefineEdits, RouteDecision, SearchItem } from '../gemini/reprompt-router/sanitize';
 import { RepromptRouterService } from '../gemini/reprompt-router/service';
+import { AI_LOG_CONTEXT } from '../logger.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 import { WeatherService, type Weather } from '../weather/weather.service';
@@ -67,6 +69,8 @@ type Selection = { outfits: SelectedOutfit[]; missing: string | null; sentIds: s
 @Injectable()
 export class StylistService {
   private readonly logger = new Logger(StylistService.name);
+  // Each request's total time, after the per-step lines from the gemini/ services.
+  private readonly aiLogger = new Logger(AI_LOG_CONTEXT);
 
   constructor(
     private readonly queryExpansion: QueryExpansionService,
@@ -86,7 +90,8 @@ export class StylistService {
     userId: string,
     input: { occasion: string; date?: string; location: Location; excludeSuggestionIds: string[] },
   ): Promise<OutfitSuggestion> {
-    return this.withAiErrors(async () => {
+    const started = Date.now();
+    return this.withAiErrors('start', started, async () => {
       const request = requestText(input.occasion, input.date);
       // Fetched first, so the expansion already picks clothes for the day.
       const weather = await this.dayWeather(input.location, input.date);
@@ -128,7 +133,16 @@ export class StylistService {
           reasons: first.reasons,
         },
       });
-      return toSuggestion(this.s3, first, { sessionId: session.id, turnId: turn.id });
+      const suggestion = await toSuggestion(this.s3, first, { sessionId: session.id, turnId: turn.id });
+      const durationMs = Date.now() - started;
+      this.aiLogger.log({
+        message: 'stylist start done',
+        sessionId: session.id,
+        durationMs,
+        seconds: seconds(durationMs),
+        outfits: selection.outfits.length,
+      });
+      return suggestion;
     });
   }
 
@@ -136,7 +150,8 @@ export class StylistService {
   // empty message ("Try another") is a reroll; anything else goes through the
   // router, which picks reroll, swap, refine or restart.
   async reprompt(userId: string, sessionId: string, rawMessage: string): Promise<OutfitSuggestion> {
-    return this.withAiErrors(async () => {
+    const started = Date.now();
+    return this.withAiErrors('reprompt', started, async () => {
       const message = rawMessage.trim();
       const session = await this.sessions.getActiveSession(userId, sessionId);
       const turnNumber = Math.max(...session.turns.map((turn) => turn.turnNumber)) + 1;
@@ -207,7 +222,17 @@ export class StylistService {
             summarizedThroughTurn: summary.through,
           },
         );
-        return toSuggestion(this.s3, result.outfit, { sessionId: session.id, turnId: turn.id });
+        const suggestion = await toSuggestion(this.s3, result.outfit, { sessionId: session.id, turnId: turn.id });
+        const durationMs = Date.now() - started;
+        this.aiLogger.log({
+          message: 'stylist reprompt done',
+          sessionId: session.id,
+          turn: turnNumber,
+          route: decision.route,
+          durationMs,
+          seconds: seconds(durationMs),
+        });
+        return suggestion;
       } catch (err) {
         // Keep the message for later, but never continue from this turn.
         // A turn-number clash means another reprompt already took this number.
@@ -370,10 +395,18 @@ export class StylistService {
 
   // Nest errors (404, 409, 422) pass through; anything else is a Gemini or
   // other unexpected failure, sent as 503 { message } like the weather route.
-  private async withAiErrors<T>(run: () => Promise<T>): Promise<T> {
+  // Either way the request's total time is logged; the failed step logs its own details.
+  private async withAiErrors<T>(label: 'start' | 'reprompt', started: number, run: () => Promise<T>): Promise<T> {
     try {
       return await run();
     } catch (err) {
+      const durationMs = Date.now() - started;
+      this.aiLogger.warn({
+        message: `stylist ${label} failed`,
+        durationMs,
+        seconds: seconds(durationMs),
+        error: (err as Error).message,
+      });
       if (err instanceof HttpException) throw err;
       this.logger.error(`Outfit suggestion failed: ${(err as Error).message}`, (err as Error).stack);
       throw new ServiceUnavailableException({ message: AI_UNAVAILABLE });
@@ -443,6 +476,7 @@ export class StylistService {
       alreadySent: input.alreadySent,
     });
     const fixed = input.fixed ?? [];
+
     const candidates = ids.length > 0 ? await this.outfitPlanning.loadCandidates(input.userId, ids) : [];
     if (candidates.length === 0 && fixed.length === 0) return { outfits: [], missing: null, sentIds: [] };
 

@@ -1,10 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { Part } from '@google/genai';
+import { AI_LOG_CONTEXT } from '../../logger.config';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Weather } from '../../weather/weather.service';
 import { S3Service } from '../../s3/s3.service';
 import { CANDIDATES_STORED_PER_TYPE, MAIN_MODEL } from '../constants';
-import { GeminiHelpers, describeWeather, mimeTypeForKey } from '../helpers';
+import { GeminiHelpers, describeWeather, mimeTypeForKey, seconds, tokenCounts } from '../helpers';
 import {
   comboKey,
   validateOutfits,
@@ -55,6 +56,9 @@ export type SelectionInput = {
 // Stylist: find matching clothes in the closet, then pick outfits from them.
 @Injectable()
 export class OutfitPlanningService {
+  // Summaries go to the terminal and logs/ai/; .debug (full output) to logs/ai/ only.
+  private readonly aiLogger = new Logger(AI_LOG_CONTEXT);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
@@ -140,30 +144,72 @@ export class OutfitPlanningService {
   // gave a reason.
   async selectOutfits(input: SelectionInput): Promise<{ outfits: SelectedOutfit[]; missing: string | null }>
   {
-    const response = await this.helpers.ai.models.generateContent({
-      model: MAIN_MODEL,
-      contents: [{ role: 'user', parts: this.buildSelectionParts(input) }],
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: buildOutfitSelectionSchema(input.candidates.map((c) => c.id)),
-      },
-    });
-    const text = response.text ?? '';
-
-    let selection: { outfits?: RawOutfit[]; missing?: string | null };
+    const parts = this.buildSelectionParts(input);
+    const started = Date.now();
+    let text = '';
     try {
-      selection = JSON.parse(text);
-    } catch {
-      throw new Error(`Gemini returned invalid JSON: ${text || '(empty)'}`);
-    }
+      const response = await this.helpers.ai.models.generateContent({
+        model: MAIN_MODEL,
+        contents: [{ role: 'user', parts }],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: buildOutfitSelectionSchema(input.candidates.map((c) => c.id)),
+        },
+      });
+      const durationMs = Date.now() - started;
+      text = response.text ?? '';
 
-    const outfits = validateOutfits(selection.outfits ?? [], {
-      candidates: input.candidates,
-      fixed: input.fixed,
-      shownKeys: new Set((input.shownOutfits ?? []).map(comboKey)),
-      banned: input.banned,
-    });
-    return { outfits, missing: selection.missing?.trim() || null };
+      let selection: { outfits?: RawOutfit[]; missing?: string | null };
+      try {
+        selection = JSON.parse(text);
+      } catch {
+        throw new Error(`Gemini returned invalid JSON: ${text || '(empty)'}`);
+      }
+
+      const outfits = validateOutfits(selection.outfits ?? [], {
+        candidates: input.candidates,
+        fixed: input.fixed,
+        shownKeys: new Set((input.shownOutfits ?? []).map(comboKey)),
+        banned: input.banned,
+      });
+      const missing = selection.missing?.trim() || null;
+
+      this.aiLogger.log({
+        message: 'outfit selection',
+        model: MAIN_MODEL,
+        modelVersion: response.modelVersion,
+        durationMs,
+        seconds: seconds(durationMs),
+        tokens: tokenCounts(response.usageMetadata),
+        candidates: input.candidates.length,
+        fixed: input.fixed?.length ?? 0,
+        returned: selection.outfits?.length ?? 0,
+        kept: outfits.length,
+        names: outfits.map((outfit) => outfit.name),
+        missing,
+      });
+      // The prompt's text parts only; the photos are left out.
+      this.aiLogger.debug({
+        message: 'outfit selection output',
+        request: input.request,
+        history: input.history ?? null,
+        banned: input.banned?.size ?? 0,
+        shownOutfits: input.shownOutfits?.length ?? 0,
+        prompt: parts.flatMap((part) => (part.text ? [part.text] : [])).join('\n'),
+        output: selection,
+        kept: outfits.map((outfit) => ({
+          name: outfit.name,
+          items: outfit.items.map((item) => `${item.type ?? 'untagged'}: ${item.name}`),
+          reasons: outfit.reasons,
+        })),
+      });
+      return { outfits, missing };
+    } catch (err) {
+      this.aiLogger.error(`outfit selection failed: ${(err as Error).message}`, (err as Error).stack);
+      // The raw answer, when Gemini gave one, so a bad output can be inspected.
+      if (text) this.aiLogger.debug({ message: 'outfit selection failed output', request: input.request, output: text });
+      throw err;
+    }
   }
 
   // ---- Helpers ----
