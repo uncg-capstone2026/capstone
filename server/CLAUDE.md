@@ -38,7 +38,10 @@ Both routes:
 - With `lat`/`lon` on the first request, the day's forecast is fetched first, stored on the session, and given to every prompt.
 - Errors: 400 invalid body; 404 session not found; 409 session finished or another reprompt in progress; 422 not enough items / nothing new / 20-turn limit (show `serverMessage`); 503 AI unavailable (show `serverMessage`).
 
-Accept: `StylistSessionsService.acceptTurn(userId, sessionId, turnId, tx?)` marks the turn accepted and the session completed; the accept route (not built yet) calls it inside its Outfit + CalendarEntry transaction.
+`POST /api/stylist/outfit/accept` `{ sessionId, turnId, suggestionId, itemIds, name, eventName, date }` → `{ outfitId }`
+- "Looks right": saves the Outfit and a CalendarEntry for `date`, and closes the session (the turn becomes `accepted`, the session `completed`), all in one transaction.
+- `sessionId` and `turnId` are required, from the suggestion being accepted.
+- Errors: 400 invalid body; 404 session or an item isn't the user's; 409 session already finished, or `turnId` isn't its latest outfit.
 
 ## Try-on
 `POST /api/stylist/try-on` `{ itemIds: string[] /* 1–8 */ }` → `{ imageUrl: string }`
@@ -47,7 +50,6 @@ Accept: `StylistSessionsService.acceptTurn(userId, sessionId, turnId, tx?)` mark
 - Errors: 400 invalid body; 404 no try-on photo yet, or an item isn't in the closet (show `serverMessage`); 422 the photo couldn't be used, e.g. it doesn't show one person (show `serverMessage`); 503 AI unavailable (show `serverMessage`).
 
 ## Not implemented
-- Saving outfits (the accept route)
 - Memory from past sessions
 - Excluding items from suggestions
 - New garment types (romper, etc.)
