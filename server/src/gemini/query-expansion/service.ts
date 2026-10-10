@@ -3,7 +3,7 @@ import {
   CLOTHING_TYPES,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
-  MAIN_MODEL,
+  FAST_MODEL,
 } from '../constants';
 import type { Weather } from '../../weather/weather.service';
 import { AI_LOG_CONTEXT } from '../../logger.config';
@@ -40,7 +40,7 @@ export class QueryExpansionService {
       const result = await this.helpers.generateJson(
         fullPrompt,
         QUERY_EXPANSION_RESPONSE_SCHEMA,
-        MAIN_MODEL,
+        FAST_MODEL,
       );
       const durationMs = Date.now() - started;
       text = result.text;
@@ -48,7 +48,7 @@ export class QueryExpansionService {
 
       this.aiLogger.log({
         message: 'query expansion',
-        model: MAIN_MODEL,
+        model: FAST_MODEL,
         modelVersion: result.modelVersion,
         durationMs,
         seconds: seconds(durationMs),

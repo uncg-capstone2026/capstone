@@ -43,11 +43,11 @@ export type Season = (typeof SEASONS)[number];
 
 export type FormalityLevel = (typeof FORMALITY_LEVELS)[number];
 
-// Tagging, query expansion and outfit selection.
+// Tagging and outfit selection.
 export const MAIN_MODEL = 'gemini-flash-latest';
 
-// Small, fast calls that don't look at photos: the reprompt router and the
-// history summary.
+// Small, fast calls that don't look at photos: query expansion, the reprompt
+// router and the history summary.
 export const FAST_MODEL = 'gemini-flash-lite-latest';
 
 export const EMBEDDING_MODEL = 'gemini-embedding-2';
