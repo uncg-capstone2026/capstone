@@ -10,7 +10,13 @@ import type { OutfitTurn } from '@prisma/client';
 import { CANDIDATES_SENT_PER_TYPE, MAX_TURNS_PER_SESSION } from '../gemini/constants';
 import { seconds } from '../gemini/helpers';
 import { HistorySummaryService } from '../gemini/history-summary/service';
-import { comboKey, pickToSend, type CandidateLists } from '../gemini/outfit-planning/candidates';
+import {
+  canBuildNewOutfit,
+  comboKey,
+  isCompleteOutfit,
+  pickToSend,
+  type CandidateLists,
+} from '../gemini/outfit-planning/candidates';
 import { OutfitPlanningService, type OutfitCandidate, type SelectedOutfit } from '../gemini/outfit-planning/service';
 import { QueryExpansionService } from '../gemini/query-expansion/service';
 import type { RefineEdits, RouteDecision, SearchItem } from '../gemini/reprompt-router/sanitize';
@@ -30,6 +36,7 @@ import { formatHistory, historyWindow, replyTo } from './turn-history';
 
 const NOT_ENOUGH_ITEMS = 'Not enough matching items in your closet to build an outfit';
 const NO_NEW_OUTFITS = "That's every outfit StyleMe can find for this. Try describing the occasion differently.";
+const NO_COMPLETE_OUTFIT = "Your closet doesn't have a top and bottoms, or a dress, that match this request.";
 const AI_UNAVAILABLE = 'StyleMe could not put an outfit together right now. Please try again.';
 const TOO_MANY_TURNS = "That's a lot of suggestions for one request. Start a new request to keep going.";
 
@@ -290,10 +297,14 @@ export class StylistService {
 
     // Favor candidates that haven't been sent yet.
     const alreadySent = new Set(ctx.turns.flatMap((turn) => turn.sentItemIds));
-    let selection = await this.selectFor(ctx, { lists, alreadySent });
+    let selection = await this.selectFor(ctx, { lists, alreadySent, requireNewOutfit: true });
     if (selection.outfits.length === 0) {
+      const before = Object.values(lists).flat().length;
       lists = await this.searchFurther(ctx.userId, requirements.items, lists);
-      selection = await this.selectFor(ctx, { lists, alreadySent });
+      // Nothing new found: the same request would get the same answer.
+      if (Object.values(lists).flat().length > before) {
+        selection = await this.selectFor(ctx, { lists, alreadySent, requireNewOutfit: true });
+      }
     }
     return fromSelection(selection, { requirements, candidates: lists, banned: ctx.banned });
   }
@@ -469,6 +480,7 @@ export class StylistService {
     shownOutfits?: string[][];
     softAvoidIds?: string[];
     history?: string | null;
+    requireNewOutfit?: boolean; // reroll: skip if every top + bottoms or one-piece was shown
   }): Promise<Selection> {
     const ids = pickToSend(input.lists, {
       perType: CANDIDATES_SENT_PER_TYPE,
@@ -476,6 +488,17 @@ export class StylistService {
       alreadySent: input.alreadySent,
     });
     const fixed = input.fixed ?? [];
+
+    // Checked on categories alone, before downloading photos or calling Gemini.
+    const pieces = ids.length > 0 ? await this.outfitPlanning.loadCategories(input.userId, ids) : [];
+    const skip = (reason: string, missing: string | null): Selection => {
+      this.aiLogger.warn({ message: 'outfit selection skipped', reason, categories: countCategories(pieces) });
+      return { outfits: [], missing, sentIds: [] };
+    };
+    if (!isCompleteOutfit([...pieces, ...fixed])) return skip('no complete outfit', NO_COMPLETE_OUTFIT);
+    if (input.requireNewOutfit && fixed.length === 0 && !canBuildNewOutfit(pieces, input.shownOutfits ?? [])) {
+      return skip('nothing new', null);
+    }
 
     const candidates = ids.length > 0 ? await this.outfitPlanning.loadCandidates(input.userId, ids) : [];
     if (candidates.length === 0 && fixed.length === 0) return { outfits: [], missing: null, sentIds: [] };
@@ -499,7 +522,14 @@ export class StylistService {
   // select() with this reprompt's request, weather, history and what's been shown.
   private selectFor(
     ctx: RepromptContext,
-    opts: { lists: CandidateLists; fixed?: OutfitCandidate[]; alreadySent?: Set<string>; banned?: Set<string>; request?: string },
+    opts: {
+      lists: CandidateLists;
+      fixed?: OutfitCandidate[];
+      alreadySent?: Set<string>;
+      banned?: Set<string>;
+      request?: string;
+      requireNewOutfit?: boolean;
+    },
   ): Promise<Selection> {
     return this.select({
       userId: ctx.userId,
@@ -512,6 +542,7 @@ export class StylistService {
       shownOutfits: ctx.shownOutfits,
       softAvoidIds: ctx.shownItemIds,
       history: ctx.history,
+      requireNewOutfit: opts.requireNewOutfit,
     });
   }
 
@@ -587,6 +618,13 @@ function fromSelection(
 // Just these types' candidate lists.
 function onlyTypes(lists: CandidateLists, types: string[]): CandidateLists {
   return Object.fromEntries(types.filter((type) => lists[type]).map((type) => [type, lists[type]]));
+}
+
+// e.g. { Top: 2, Bottoms: 1, Shoes: 1 }, for the skipped-selection log.
+function countCategories(pieces: { category: string | null }[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const { category } of pieces) counts[category ?? 'none'] = (counts[category ?? 'none'] ?? 0) + 1;
+  return counts;
 }
 
 function hasChoices(lists: CandidateLists, banned: Set<string>): boolean {

@@ -96,6 +96,16 @@ export class OutfitPlanningService {
     return lists;
   }
 
+  // Just each item's category, with no photo downloads: enough to check an
+  // outfit can be built before loading candidates and calling Gemini.
+  loadCategories(userId: string, ids: string[]): Promise<{ id: string; category: string | null }[]>
+  {
+    return this.prisma.item.findMany({
+      where: { id: { in: ids }, userId },
+      select: { id: true, category: true },
+    });
+  }
+
   // Loads each candidate's details and photo into memory, in the order of ids.
   // Uses the cutout when there is one so Gemini sees only the garment. Items
   // whose photo is an unsupported type or fails to download are left out, so

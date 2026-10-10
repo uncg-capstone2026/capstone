@@ -1,4 +1,5 @@
 import {
+  canBuildNewOutfit,
   comboKey,
   isCompleteOutfit,
   pickToSend,
@@ -36,6 +37,32 @@ describe('isCompleteOutfit', () => {
   it('rejects anything else', () => {
     expect(isCompleteOutfit([top, shoes])).toBe(false);
     expect(isCompleteOutfit([])).toBe(false);
+  });
+});
+
+describe('canBuildNewOutfit', () => {
+  it('matches isCompleteOutfit when nothing was shown', () => {
+    expect(canBuildNewOutfit([top, jeans], [])).toBe(true);
+    expect(canBuildNewOutfit([dress], [])).toBe(true);
+    expect(canBuildNewOutfit([top, shoes], [])).toBe(false);
+  });
+
+  it('finds a top and bottoms pair not shown yet', () => {
+    expect(canBuildNewOutfit([top, top2, jeans], [['top1', 'jeans1']])).toBe(true);
+  });
+
+  it('counts a shown pair with different shoes as shown', () => {
+    const shown = [['top1', 'jeans1', 'shoes1'], ['top2', 'jeans1', 'shoes1']];
+    expect(canBuildNewOutfit([top, top2, jeans, shoes, shoes2], shown)).toBe(false);
+  });
+
+  it('finds a one-piece not shown yet', () => {
+    expect(canBuildNewOutfit([top, jeans, dress], [['top1', 'jeans1']])).toBe(true);
+    expect(canBuildNewOutfit([dress, shoes2], [['dress1', 'shoes1']])).toBe(false);
+  });
+
+  it('needs both a top and bottoms', () => {
+    expect(canBuildNewOutfit([jeans, jeans2, shoes], [])).toBe(false);
   });
 });
 

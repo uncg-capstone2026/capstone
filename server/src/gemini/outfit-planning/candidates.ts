@@ -31,6 +31,22 @@ export function isCompleteOutfit(items: OutfitPiece[]): boolean
   return categories.has('OnePiece') || (categories.has('Top') && categories.has('Bottoms'));
 }
 
+// Whether these pieces can make a top + bottoms pair, or a one-piece, that
+// isn't already in a shown outfit. Optional pieces (shoes, outerwear,
+// accessory) don't count: the same core with new shoes is a near-copy.
+// A shown outfit holding both ids of a pair was built on that pair, so the
+// shown items' categories aren't needed.
+export function canBuildNewOutfit(pieces: OutfitPiece[], shownOutfits: string[][]): boolean
+{
+  const shown = shownOutfits.map((ids) => new Set(ids));
+  const wasShown = (core: string[]) => shown.some((ids) => core.every((id) => ids.has(id)));
+  const ofCategory = (category: string) => pieces.filter((piece) => piece.category === category);
+
+  if (ofCategory('OnePiece').some((piece) => !wasShown([piece.id]))) return true;
+  const bottoms = ofCategory('Bottoms');
+  return ofCategory('Top').some((top) => bottoms.some((bottom) => !wasShown([top.id, bottom.id])));
+}
+
 // The candidate ids to send to Gemini: up to perType per type, never banned.
 // Items already sent in an earlier selection are mostly skipped so new pieces
 // get a chance, but up to keepSent of the best ones stay so good pieces can be
