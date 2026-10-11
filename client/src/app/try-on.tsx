@@ -118,7 +118,7 @@ export default function TryOnScreen() {
           className="h-11 w-11 items-center justify-center">
           <Ionicons name="arrow-back" size={24} color="#4d5d3f" />
         </Pressable>
-        <Text accessibilityRole="header" className="font-label text-xs uppercase tracking-widest text-sage-500">
+        <Text accessibilityRole="header" className="font-label text-[11px] uppercase tracking-[0.14em] text-sage-800">
           Try on
         </Text>
         <View className="h-11 w-11" />

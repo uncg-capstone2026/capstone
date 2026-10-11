@@ -70,7 +70,7 @@ export default function ProfileScreen() {
           className="h-10 w-10 items-center justify-center">
           <Ionicons name="chevron-back" size={26} color={ICON_COLOR} />
         </Pressable>
-        <Text accessibilityRole="header" className="font-heading text-lg text-sage-800">
+        <Text accessibilityRole="header" className="font-label text-[11px] uppercase tracking-[0.14em] text-sage-800">
           Account
         </Text>
         <View className="h-10 w-10" />

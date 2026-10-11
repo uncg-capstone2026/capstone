@@ -54,19 +54,31 @@ export default function BodyPhotoScreen() {
     <SafeAreaView className="flex-1 bg-cream-100">
       <ScrollView contentContainerClassName="flex-grow items-center px-6 py-4">
         <View className="w-full max-w-sm flex-1 gap-4">
-          <View className="items-center gap-1">
+          <View className="gap-1">
             {fromApp ? (
-              <Pressable
-                onPress={() => router.back()}
-                disabled={isSubmitting}
-                accessibilityRole="button"
-                accessibilityLabel="Back"
-                className="absolute -left-2 top-0 h-10 w-10 items-center justify-center">
-                <Ionicons name="chevron-back" size={26} color="#4d5d3f" />
-              </Pressable>
+              <View className="flex-row items-center">
+                <Pressable
+                  onPress={() => router.back()}
+                  disabled={isSubmitting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back"
+                  className="-ml-2 h-10 w-10 items-center justify-center">
+                  <Ionicons name="chevron-back" size={26} color="#4d5d3f" />
+                </Pressable>
+                <Text className="flex-1 text-center font-label text-[11px] uppercase tracking-[0.14em] text-sage-800">
+                  Try-on photo
+                </Text>
+                <View className="w-10" />
+              </View>
             ) : null}
-            <Text className="font-heading text-lg tracking-wide text-sage-600">StyleMe</Text>
-            <Text className="text-center font-heading text-2xl text-sage-700">Add a full-body photo</Text>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              adjustsFontSizeToFit // shrinks to fit one line on narrow phones
+              minimumFontScale={0.6}
+              className="text-center font-heading text-4xl text-sage-800">
+              Add a full-body photo
+            </Text>
           </View>
 
           <MascotMessage>
