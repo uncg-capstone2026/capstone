@@ -26,7 +26,7 @@ import { AI_LOG_CONTEXT } from '../logger.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 import { WeatherService, type Weather } from '../weather/weather.service';
-import { fromSuggestionId, toSuggestion, type OutfitSuggestion, type SuggestionPiece } from './outfit-suggestion';
+import { toSuggestion, type OutfitSuggestion, type SuggestionPiece } from './outfit-suggestion';
 import {
   StylistSessionsService,
   type QueuedOutfit,
@@ -98,7 +98,7 @@ export class StylistService {
   // are queued for "Try another". 422 when there isn't a complete outfit.
   async startSession(
     userId: string,
-    input: { occasion: string; date?: string; location: Location; excludeSuggestionIds: string[] },
+    input: { occasion: string; date?: string; location: Location },
   ): Promise<OutfitSuggestion> {
     const started = Date.now();
     return this.withAiErrors('start', started, async () => {
@@ -112,17 +112,11 @@ export class StylistService {
       const expanded = await this.queryExpansion.expandAndEmbedQuery(request, weather);
       const lists = await this.outfitPlanning.findCandidates(userId, expanded.items);
 
-      // The app's old "Try another": outfits already shown, sent back as
-      // suggestionIds. Remove once the app uses the reprompt route.
-      const shownOutfits = input.excludeSuggestionIds
-        .map(fromSuggestionId)
-        .filter((ids): ids is string[] => ids !== null);
-
-      const selection = await this.select({ userId, request, weather, lists, shownOutfits });
+      // "Try another" goes through the reprompt route, which knows every outfit
+      // shown in the session, so the first request starts with nothing shown.
+      const selection = await this.select({ userId, request, weather, lists });
       if (selection.outfits.length === 0) {
-        throw new UnprocessableEntityException(
-          selection.missing ?? (shownOutfits.length > 0 ? NO_NEW_OUTFITS : NOT_ENOUGH_ITEMS),
-        );
+        throw new UnprocessableEntityException(selection.missing ?? NOT_ENOUGH_ITEMS);
       }
 
       const [first, ...rest] = selection.outfits;

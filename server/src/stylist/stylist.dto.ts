@@ -22,14 +22,6 @@ export class StyleOutfitDto {
 
   @IsOptional() @Type(() => Number) @IsLongitude()
   lon?: number;
-
-  // suggestionIds the user has already seen, for "Try another suggestion".
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(20)
-  @IsString({ each: true })
-  @MaxLength(400, { each: true })
-  excludeSuggestionIds?: string[];
 }
 
 export class RepromptDto {

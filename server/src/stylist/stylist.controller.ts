@@ -17,12 +17,12 @@ export class StylistController {
     private readonly feedback: OutfitFeedbackService,
   ) {}
 
-  // POST /api/stylist/outfit { occasion, date?, lat?, lon?, excludeSuggestionIds? }
+  // POST /api/stylist/outfit { occasion, date?, lat?, lon? }
   //   -> { sessionId, turnId, suggestionId, name, reasons, items: [{ id, name, category, type, imageUrl }] }
-  // Starts a session. Matches OutfitSuggestion in client/src/services/stylist.ts
-  // (plus sessionId and turnId). 422 when the closet doesn't have enough
-  // matching items for a complete outfit, or every outfit it can find has
-  // already been shown. 503 when the AI is unavailable.
+  // Starts a session; "Try another" and other feedback go to /outfit/reprompt.
+  // Matches OutfitSuggestion in client/src/services/stylist.ts (plus sessionId
+  // and turnId). 422 when the closet doesn't have enough matching items for a
+  // complete outfit. 503 when the AI is unavailable.
   @Post('outfit')
   @HttpCode(200)
   outfit(
@@ -36,7 +36,6 @@ export class StylistController {
       occasion: body.occasion,
       date: body.date,
       location,
-      excludeSuggestionIds: body.excludeSuggestionIds ?? [],
     });
   }
 
