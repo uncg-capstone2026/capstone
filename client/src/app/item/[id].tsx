@@ -226,7 +226,7 @@ export default function ItemDetailsScreen() {
             onChange={(excludeFromSuggestions) => save({ excludeFromSuggestions })}
           />
 
-          <RemoveItem onRemove={remove} />
+          <RemoveItem outfits={item.outfits ?? []} onRemove={remove} />
         </ScrollView>
       )}
     </SafeAreaView>
