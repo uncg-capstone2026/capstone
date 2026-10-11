@@ -358,15 +358,6 @@ export class ItemsService {
 
   // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
 
-  // GET /api/items/:id/embedding — whether the item has an embedding saved.
-  // Prisma can't read the vector column, so this checks it with raw SQL.
-  async hasEmbedding(userId: User['id'], id: string) {
-    await this.findOwned(userId, id);
-    const [row] = await this.prisma.$queryRaw<{ hasEmbedding: boolean }[]>`
-      SELECT embedding IS NOT NULL AS "hasEmbedding" FROM "Item" WHERE id = ${id}`;
-    return { itemId: id, hasEmbedding: row.hasEmbedding };
-  }
-
   // Logs everything about a failed AI step: timing, HTTP status, the full
   // err.cause chain (where "fetch failed" hides ECONNRESET etc.) and the stack.
   // Never logs the image or request body.

@@ -3,6 +3,7 @@ import {
   CATEGORY_BY_TYPE,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
+  MAIN_MODEL,
   type Category,
   type ClothingType,
   type FitValue,
@@ -42,7 +43,7 @@ export class ImageProcessingService {
     this.helpers.assertSupportedImage(mimeType);
 
     const response = await this.helpers.ai.models.generateContent({
-      model: 'gemini-flash-latest',
+      model: MAIN_MODEL,
       contents: [
         { inlineData: { mimeType, data: image.toString('base64') } },
         { text: IMAGE_ATTRIBUTES_PROMPT },

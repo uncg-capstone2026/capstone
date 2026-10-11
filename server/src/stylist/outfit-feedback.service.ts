@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OutfitsService } from '../outfits/outfits.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { StylistSessionsService } from './stylist-sessions.service';
 import type { AcceptOutfitDto, OutfitFeedbackDto } from './outfit-feedback.dto';
 
 // "Looks right" and "Not for me" on the Stylist's suggestion screen. Both are
@@ -12,15 +13,19 @@ export class OutfitFeedbackService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly outfits: OutfitsService,
+    private readonly stylistSessions: StylistSessionsService,
   ) {}
 
   // POST /api/stylist/outfit/accept -> { outfitId }
-  // Saves the outfit and its CalendarEntry together: if either fails, neither
-  // is saved. 404 (from OutfitsService) if any item isn't the user's.
+  // Closes the Stylist session (the turn becomes accepted, the session
+  // completed) and saves the outfit and its CalendarEntry, all together: if
+  // any step fails, none is saved. 404 if the session or any item isn't the
+  // user's; 409 if the session is finished or turnId isn't its latest outfit.
   async accept(userId: string, dto: AcceptOutfitDto): Promise<{ outfitId: string }> {
     const eventName = dto.eventName.trim() || null;
 
     const outfitId = await this.prisma.$transaction(async (tx) => {
+      await this.stylistSessions.acceptTurn(userId, dto.sessionId, dto.turnId, tx);
       const { id } = await this.outfits.create(userId, { name: dto.name, itemIds: dto.itemIds }, tx);
       await tx.calendarEntry.create({
         data: { outfitId: id, date: dayToDate(dto.date), eventName },

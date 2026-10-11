@@ -43,18 +43,42 @@ export type Season = (typeof SEASONS)[number];
 
 export type FormalityLevel = (typeof FORMALITY_LEVELS)[number];
 
+// Tagging and outfit selection.
+export const MAIN_MODEL = 'gemini-flash-latest';
+
+// Small, fast calls that don't look at photos: query expansion, the reprompt
+// router and the history summary.
+export const FAST_MODEL = 'gemini-flash-lite-latest';
+
+// Try-on: generates the photo of the user wearing an outfit.
+export const IMAGE_MODEL = 'gemini-nano-banana-2.1';
+
+// Most clothing items sent in one try-on.
+export const MAX_TRY_ON_ITEMS = 8;
+
 export const EMBEDDING_MODEL = 'gemini-embedding-2';
 
 export const EMBEDDING_DIMENSIONS = 768;
 
 export const EMBEDDABLE_IMAGE_TYPES = ['image/png', 'image/jpeg'] as const;
 
-// How many closest closet items to keep for each expanded item.
-export const CANDIDATES_PER_TYPE = 5;
+// Closest closet items kept per expanded type (stored on the turn, so rerolls
+// can reach past the first few without searching again).
+export const CANDIDATES_STORED_PER_TYPE = 10;
 
-// Most candidate items (and so photos) sent to Gemini in one outfit request.
-// Keeps memory use and the inline request size bounded.
-export const MAX_OUTFIT_CANDIDATES = 25;
+// Of those, how many per type are sent to Gemini (with their photos) in one
+// selection. There's no total cap; the expansion keeps the type list short.
+export const CANDIDATES_SENT_PER_TYPE = 4;
+
+// Outfits asked for in one selection call. The first is shown; the rest are
+// queued on the session so a reroll needs no AI call.
+export const OUTFITS_PER_SELECTION = 3;
+
+// Turns included in full in the selection prompt; older ones are summarized.
+export const RECENT_TURNS_IN_FULL = 5;
+
+// Turns allowed in one session before the user has to start a new request.
+export const MAX_TURNS_PER_SESSION = 20;
 
 export const PATTERNS = [
   'solid',
