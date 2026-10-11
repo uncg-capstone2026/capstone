@@ -20,7 +20,7 @@ const SEPARATES_LAYOUT: Record<Slot, Frame> = {
   shoes: { left: 0.58, top: 0.6, width: 0.4, height: 0.4, zIndex: 2 },
 };
 
-// A one-piece (or set) takes the top's place and runs the full height. The bottoms slot is
+// A one-piece takes the top's place and runs the full height. The bottoms slot is
 // empty, so the shoes move up and the accessory takes the top right instead.
 const ONE_PIECE_LAYOUT: Record<Slot, Frame> = {
   accessory: { left: 0.62, top: 0.02, width: 0.3, height: 0.3, zIndex: 3 },
@@ -33,7 +33,6 @@ const ONE_PIECE_LAYOUT: Record<Slot, Frame> = {
 const SLOT_BY_CATEGORY: Record<ClothingCategory, Slot> = {
   tops: 'top',
   'one-piece': 'top',
-  sets: 'top',
   bottoms: 'bottoms',
   outerwear: 'outerwear',
   shoes: 'shoes',
@@ -49,7 +48,7 @@ type FlatLayProps = {
 // The outfit's cutouts placed freely in a box, like clothes laid out on a bed. Used full size
 // on the stage and as the mini tile in the piece thumbnails.
 export function FlatLay({ items, width, height }: FlatLayProps) {
-  const isOnePiece = items.some((item) => item.category === 'one-piece' || item.category === 'sets');
+  const isOnePiece = items.some((item) => item.category === 'one-piece');
   const layout = isOnePiece ? ONE_PIECE_LAYOUT : SEPARATES_LAYOUT;
 
   // One piece per slot. Any extra (e.g. a second accessory), or an untagged piece with no slot,

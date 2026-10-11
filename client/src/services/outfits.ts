@@ -261,12 +261,10 @@ export async function setOutfitFavorite(outfitId: string, isFavorite: boolean): 
   }
 }
 
-// Complete means a one-piece (or set), or a top and bottoms. Pieces can't be removed past this.
+// Complete means a one-piece, or a top and bottoms. Pieces can't be removed past this.
 export function isCompleteOutfit(pieces: OutfitPreview): boolean {
   const categories = new Set(pieces.map((piece) => piece.category));
-  return (
-    categories.has('one-piece') || categories.has('sets') || (categories.has('tops') && categories.has('bottoms'))
-  );
+  return categories.has('one-piece') || (categories.has('tops') && categories.has('bottoms'));
 }
 
 // PATCH /api/outfits/:id { itemIds } -> the updated outfit. Replaces the outfit's pieces
