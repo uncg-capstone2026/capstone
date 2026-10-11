@@ -32,12 +32,15 @@ function subscribe(listener: () => void) {
   };
 }
 
-function setEnabled(enabled: boolean) {
+// Updates the switch everywhere and saves it. Resolves once saved, so reminders can resync.
+export async function saveNotificationsEnabled(enabled: boolean): Promise<void> {
   hasUserChosen = true;
   update(enabled);
-  setNotificationsEnabled(enabled).catch(() => {
+  try {
+    await setNotificationsEnabled(enabled);
+  } catch {
     // Keeps working for this session; it just won't be remembered next launch.
-  });
+  }
 }
 
 export function useNotificationsEnabled() {
@@ -46,5 +49,5 @@ export function useNotificationsEnabled() {
     () => currentEnabled,
     () => DEFAULT_NOTIFICATIONS_ENABLED,
   );
-  return { enabled, setEnabled };
+  return { enabled, setEnabled: saveNotificationsEnabled };
 }

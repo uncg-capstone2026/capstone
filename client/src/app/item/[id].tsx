@@ -108,7 +108,11 @@ export default function ItemDetailsScreen() {
           className="h-10 w-10 items-center justify-center">
           <Ionicons name="chevron-back" size={26} color="#4d5d3f" />
         </Pressable>
-        <Text className="flex-1 text-center font-label text-lg text-sage-700">Item details</Text>
+        <Text
+          accessibilityRole="header"
+          className="flex-1 text-center font-label text-[11px] uppercase tracking-[0.14em] text-sage-800">
+          Item details
+        </Text>
         <Pressable
           onPress={() => item && save({ isFavorite: !item.isFavorite })}
           disabled={!item}

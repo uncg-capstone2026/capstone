@@ -1,6 +1,7 @@
 import { isBackendConfigured } from '@/config/api';
-import { ApiError, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
 import { getSentTimeZone, setSentTimeZone } from '@/services/preferences';
+import { cancelReminders } from '@/services/reminders';
 import { clearToken, getToken, saveToken } from '@/services/session';
 
 export type LoginMode = 'email' | 'phone';
@@ -16,7 +17,6 @@ export type SignUpInput = {
   email: string;
   phone?: string;
   password: string;
-  marketingOptIn: boolean;
 };
 
 // GET /api/auth/me, and `user` in the login and sign-up responses.
@@ -49,12 +49,69 @@ export async function isSignedIn(): Promise<boolean> {
   }
 }
 
-// GET /api/auth/me: the signed-in user, for the Settings profile card.
+// GET /api/auth/me: the signed-in user, for the Settings profile card and the Account screen.
 export function getMe(): Promise<PublicUser> {
   return apiGet<PublicUser>('/api/auth/me');
 }
 
+// Also clears outfit reminders, so this account's plans don't notify the next person to sign in.
 export async function signOut(): Promise<void> {
+  await cancelReminders();
+  await clearToken();
+}
+
+export type ProfileChanges = {
+  name?: string;
+  displayName?: string | null;
+  phone?: string | null; // E.164, e.g. +13365550123; null removes it
+};
+
+// PATCH /api/auth/me { name?, displayName?, phone? } -> the updated user. 409 means another
+// account has the phone number; 400 messages (e.g. an invalid phone) are written for the user.
+export async function updateProfile(changes: ProfileChanges): Promise<PublicUser> {
+  try {
+    return await apiPatch<PublicUser>('/api/auth/me', changes);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 409) throw new TakenFieldError('phone');
+    throw toAuthError(e);
+  }
+}
+
+// PATCH /api/auth/me { email }. The server doesn't accept email yet (400 "email can't be
+// changed here"); see PLAN.md section 9. 409 means another account has the email.
+export async function updateEmail(email: string): Promise<PublicUser> {
+  try {
+    return await apiPatch<PublicUser>('/api/auth/me', { email });
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 400 && e.serverMessage?.includes("can't be changed")) {
+      throw new Error("Changing your email isn't available yet.");
+    }
+    if (e instanceof ApiError && e.status === 409) throw new TakenFieldError('email');
+    throw toAuthError(e);
+  }
+}
+
+// POST /api/auth/me/password { currentPassword, newPassword } -> 204. Not on the server yet
+// (404); see PLAN.md section 9. A wrong current password must be a 400, not a 401, since
+// apiRequest treats any 401 as an expired session and signs the user out.
+export async function changePassword(input: { currentPassword: string; newPassword: string }): Promise<void> {
+  try {
+    await apiPost<void>('/api/auth/me/password', input);
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) throw new Error("Changing your password isn't available yet.");
+    throw toAuthError(e);
+  }
+}
+
+// DELETE /api/auth/me -> 204, then signs out. Not on the server yet (404); see PLAN.md section 9.
+export async function deleteAccount(): Promise<void> {
+  try {
+    await apiDelete('/api/auth/me');
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 404) throw new Error("Deleting your account isn't available yet.");
+    throw toAuthError(e);
+  }
+  await cancelReminders();
   await clearToken();
 }
 
@@ -117,6 +174,7 @@ function deviceTimeZone(): string | null {
 
 // The server's 400/401 messages are written for users ("Incorrect email/phone or password").
 function toAuthError(e: unknown): Error {
+  if (e instanceof SessionExpiredError) return e;
   if (e instanceof ApiError && (e.status === 400 || e.status === 401) && e.serverMessage) {
     return new Error(e.serverMessage);
   }

@@ -25,38 +25,29 @@ export function DecisionButtons({ onReject, onAccept }: DecisionButtonsProps) {
   );
 }
 
-export type DecisionResult = { kind: 'accepted'; eventName: string } | { kind: 'rejected' };
-
 type ResultNoteProps = {
-  result: DecisionResult;
+  eventName: string; // what the user called the occasion
   dayName: string; // e.g. "Saturday"
-  onPrimary: () => void; // open the outfit, or see what was remembered
+  onOpen: () => void;
   onTryAnother: () => void;
 };
 
-// Replaces the decision buttons once the user has chosen.
-export function ResultNote({ result, dayName, onPrimary, onTryAnother }: ResultNoteProps) {
-  const isAccepted = result.kind === 'accepted';
-  const message = isAccepted
-    ? `Saved as “${result.eventName}” for ${dayName}, and StyleMe noted what worked here.`
-    : 'StyleMe noted this in Style Preferences and will steer away from it next time.';
-
+// Replaces the decision buttons once the user has accepted the outfit.
+export function ResultNote({ eventName, dayName, onOpen, onTryAnother }: ResultNoteProps) {
   return (
     <View className="gap-3">
-      <View
-        accessibilityLiveRegion="polite"
-        className={`flex-row gap-3 rounded-2xl p-4 ${isAccepted ? 'bg-sage-100' : 'bg-cream-300/60'}`}>
-        <Ionicons name={isAccepted ? 'checkmark-circle' : 'bookmark'} size={20} color="#61754e" />
-        <Text className="flex-1 font-body text-sm text-sage-800">{message}</Text>
+      <View accessibilityLiveRegion="polite" className="flex-row gap-3 rounded-2xl bg-sage-100 p-4">
+        <Ionicons name="checkmark-circle" size={20} color="#61754e" />
+        <Text className="flex-1 font-body text-sm text-sage-800">
+          {`Saved as “${eventName}” for ${dayName}, and StyleMe noted what worked here.`}
+        </Text>
       </View>
       <Pressable
-        onPress={onPrimary}
+        onPress={onOpen}
         accessibilityRole="button"
         style={{ backgroundColor: INK }}
         className="items-center rounded-full py-3.5">
-        <Text className="font-label text-base text-cream-50">
-          {isAccepted ? 'Open the outfit' : 'See what was remembered'}
-        </Text>
+        <Text className="font-label text-base text-cream-50">Open the outfit</Text>
       </Pressable>
       <Pressable onPress={onTryAnother} accessibilityRole="button" className="items-center py-2">
         <Text className="font-body text-sm text-sage-500 underline">Try another suggestion</Text>

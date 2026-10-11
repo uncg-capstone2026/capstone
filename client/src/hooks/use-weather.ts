@@ -12,12 +12,14 @@ const LAST_KNOWN_MAX_AGE_MS = 10 * 60 * 1000;
 // Weather where the user is now, for today or the given day. Asks for foreground location
 // permission the first time. If it's denied, `permissionDenied` is true and `weather` stays
 // null, and the weather section should be hidden. Days past the forecast range also give
-// `weather: null` without a request (and without asking for location).
+// `weather: null` without a request (and without asking for location). `coords` is the
+// position the weather is for, set as soon as it's known (before the weather loads), or null.
 export function useWeather(date?: Date) {
   // Only sent for a future day, so today keeps using the server's current-weather cache.
   const dateKey = date && !isToday(date) ? toDateKey(date) : undefined;
   const hasForecast = !date || hasForecastFor(date);
   const [weather, setWeather] = useState<Weather | null>(null);
+  const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -49,6 +51,7 @@ export function useWeather(date?: Date) {
         }
 
         const { latitude: lat, longitude: lon } = position.coords;
+        setCoords({ lat, lon });
         const result = await getWeather({ lat, lon }, dateKey);
         if (!cancelled) setWeather(result);
       } catch (e) {
@@ -67,6 +70,7 @@ export function useWeather(date?: Date) {
 
   return {
     weather,
+    coords,
     loading,
     error,
     permissionDenied,

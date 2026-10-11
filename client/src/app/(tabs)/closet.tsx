@@ -34,9 +34,10 @@ export default function ClosetScreen() {
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-cream-100">
-      <View className="items-center gap-1 px-6 pb-4 pt-2">
-        <Text className="font-heading text-lg tracking-wide text-sage-600">StyleMe</Text>
-        <Text className="font-heading text-3xl text-sage-700">Your Closet</Text>
+      <View className="px-6 pb-4 pt-2">
+        <Text accessibilityRole="header" className="font-heading text-4xl text-sage-800">
+          Your Closet
+        </Text>
       </View>
 
       <View>

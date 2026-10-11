@@ -16,25 +16,41 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { listItems, type ClosetItem } from '@/services/items';
 
-const MIN_DURATION_MS = 15000; // progress takes at least this long, then holds at 99% until the outfit is ready
-const TICK_MS = 100;
-const FINISH_DELAY_MS = 400; // lets the bar visibly reach 100% before moving on
+const MIN_DURATION_MS = 1000; // so an instant result doesn't flash the loader
+const STATUS_INTERVAL_MS = 3500;
 const GARMENT_INTERVAL_MS = 1800;
 const CIRCLE_SIZE = 150;
-const BAR_WIDTH = 200;
-const MASCOT_SIZE = 28;
+const DEFAULT_TITLE = 'Putting your outfit together';
+const DEFAULT_STATUSES = [
+  'Checking the weather',
+  'Looking through your closet',
+  'Trying combinations',
+  'Adding the finishing touches',
+];
 
 type StylingLoaderProps = {
   ready: boolean; // the suggestion has loaded
   error: string | null;
   onRetry: () => void;
   onBack: () => void;
-  onFinish: () => void;
+  onFinish: () => void; // called once it's ready and has shown for at least MIN_DURATION_MS
+  title?: string;
+  statuses?: string[]; // shown in turn every few seconds, stopping on the last one
+  errorAction?: { label: string; onPress: () => void }; // replaces "Try again"
 };
 
 // Shown while StyleMe builds the outfit, or if it couldn't.
-export function StylingLoader({ ready, error, onRetry, onBack, onFinish }: StylingLoaderProps) {
-  const percent = useProgress(ready, !!error, onFinish);
+export function StylingLoader({
+  ready,
+  error,
+  onRetry,
+  onBack,
+  onFinish,
+  title = DEFAULT_TITLE,
+  statuses = DEFAULT_STATUSES,
+  errorAction,
+}: StylingLoaderProps) {
+  useFinishWhenReady(ready, onFinish);
 
   return (
     <SafeAreaView className="flex-1 bg-cream-100">
@@ -57,8 +73,11 @@ export function StylingLoader({ ready, error, onRetry, onBack, onFinish }: Styli
               {error}
             </Text>
             <View className="items-center gap-2">
-              <Pressable onPress={onRetry} accessibilityRole="button" className="rounded-full bg-sage-500 px-6 py-3">
-                <Text className="font-label text-base text-cream-50">Try again</Text>
+              <Pressable
+                onPress={errorAction?.onPress ?? onRetry}
+                accessibilityRole="button"
+                className="rounded-full bg-sage-500 px-6 py-3">
+                <Text className="font-label text-base text-cream-50">{errorAction?.label ?? 'Try again'}</Text>
               </Pressable>
               <Pressable onPress={onBack} accessibilityRole="button" className="px-4 py-2">
                 <Text className="font-label text-base text-sage-600">Back</Text>
@@ -67,9 +86,8 @@ export function StylingLoader({ ready, error, onRetry, onBack, onFinish }: Styli
           </View>
         ) : (
           <>
-            <StatusLine percent={percent} />
-            <ProgressBar percent={percent} />
-            <Title />
+            <StatusLine statuses={statuses} />
+            <Title text={title} />
           </>
         )}
       </View>
@@ -77,11 +95,9 @@ export function StylingLoader({ ready, error, onRetry, onBack, onFinish }: Styli
   );
 }
 
-// Eases up to 99% over MIN_DURATION_MS, then goes to 100% once the outfit is ready and calls onFinish.
-function useProgress(ready: boolean, paused: boolean, onFinish: () => void) {
-  const [percent, setPercent] = useState(0);
+// Calls onFinish once the result is ready, but not before MIN_DURATION_MS.
+function useFinishWhenReady(ready: boolean, onFinish: () => void) {
   const [startedAt] = useState(() => Date.now());
-  const finished = useRef(false);
   const onFinishRef = useRef(onFinish);
 
   useEffect(() => {
@@ -89,37 +105,13 @@ function useProgress(ready: boolean, paused: boolean, onFinish: () => void) {
   }, [onFinish]);
 
   useEffect(() => {
-    if (paused) return;
-    let finishTimer: ReturnType<typeof setTimeout> | undefined;
-
-    const tick = () => {
-      const elapsed = Date.now() - startedAt;
-      if (ready && elapsed >= MIN_DURATION_MS) {
-        setPercent(100);
-        if (!finished.current) {
-          finished.current = true;
-          finishTimer = setTimeout(() => onFinishRef.current(), FINISH_DELAY_MS);
-        }
-        return true;
-      }
-      const t = Math.min(1, elapsed / MIN_DURATION_MS);
-      const eased = 1 - (1 - t) * (1 - t) * 0.5 - (1 - t) * 0.5; // gentle ease-out
-      setPercent(Math.min(99, Math.floor(eased * 99)));
-      return false;
-    };
-
-    if (tick()) return () => clearTimeout(finishTimer);
-    const interval = setInterval(() => {
-      if (tick()) clearInterval(interval);
-    }, TICK_MS);
-
-    return () => {
-      clearInterval(interval);
-      clearTimeout(finishTimer);
-    };
-  }, [ready, paused, startedAt]);
-
-  return percent;
+    if (!ready) return;
+    const timer = setTimeout(
+      () => onFinishRef.current(),
+      Math.max(0, MIN_DURATION_MS - (Date.now() - startedAt)),
+    );
+    return () => clearTimeout(timer);
+  }, [ready, startedAt]);
 }
 
 // A stone circle that fades through the pieces in the user's closet.
@@ -177,68 +169,28 @@ function GarmentCircle() {
   );
 }
 
-function StatusLine({ percent }: { percent: number }) {
-  if (percent >= 95) {
-    return (
-      <Text accessibilityLiveRegion="polite" className="font-label text-sm text-sage-600">
-        Almost done
-      </Text>
-    );
-  }
-  const status =
-    percent < 25
-      ? 'Checking the weather'
-      : percent < 50
-        ? 'Looking through your closet'
-        : percent < 75
-          ? 'Trying combinations'
-          : 'Adding the finishing touches';
+function StatusLine({ statuses }: { statuses: string[] }) {
+  const [index, setIndex] = useState(0);
+  const last = statuses.length - 1;
+
+  useEffect(() => {
+    if (index >= last) return;
+    const timer = setTimeout(() => setIndex((i) => i + 1), STATUS_INTERVAL_MS);
+    return () => clearTimeout(timer);
+  }, [index, last]);
+
   return (
     <Text accessibilityLiveRegion="polite" className="font-body text-sm text-sage-500">
-      {status}
+      {statuses[Math.min(index, last)]}
     </Text>
   );
 }
 
-// A thin sage bar with the mascot riding the end of the fill.
-function ProgressBar({ percent }: { percent: number }) {
-  const fill = useSharedValue(0);
-
-  useEffect(() => {
-    fill.value = withTiming((percent / 100) * BAR_WIDTH, { duration: 250 });
-  }, [percent, fill]);
-
-  const fillStyle = useAnimatedStyle(() => ({ width: fill.value }));
-  const mascotStyle = useAnimatedStyle(() => ({ transform: [{ translateX: fill.value - MASCOT_SIZE / 2 }] }));
-
+function Title({ text }: { text: string }) {
   return (
-    <View
-      className="flex-row items-center gap-6"
-      accessibilityRole="progressbar"
-      accessibilityValue={{ min: 0, max: 100, now: percent }}>
-      <View className="justify-center" style={{ width: BAR_WIDTH, height: MASCOT_SIZE }}>
-        <View className="h-1.5 overflow-hidden rounded-full bg-sage-100">
-          <Animated.View className="h-full rounded-full bg-sage-500" style={fillStyle} />
-        </View>
-        <Animated.View className="absolute left-0 top-0" style={mascotStyle}>
-          <Image
-            source={require('@/assets/images/styleme-mascot-thinking.png')}
-            contentFit="contain"
-            accessibilityIgnoresInvertColors
-            style={{ width: MASCOT_SIZE, height: MASCOT_SIZE, transform: [{ translateY: -8 }] }}
-          />
-        </Animated.View>
-      </View>
-      <Text className="w-9 font-label text-xs text-sage-600">{percent}%</Text>
-    </View>
-  );
-}
-
-function Title() {
-  return (
-    <View className="flex-row items-end justify-center">
-      <Text accessibilityRole="header" className="shrink text-center font-heading text-[22px] leading-[30px] text-sage-800">
-        Putting your outfit together
+    <View className="-mt-2 flex-row items-end justify-center">
+      <Text accessibilityRole="header" className="shrink text-center font-heading text-lg leading-[26px] text-sage-800" numberOfLines={1} adjustsFontSizeToFit>
+        {text}
       </Text>
       {[0, 1, 2].map((i) => (
         <Dot key={i} delay={i * 200} />

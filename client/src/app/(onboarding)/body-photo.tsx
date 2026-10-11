@@ -9,11 +9,12 @@ import { MascotMessage } from '@/components/mascot-message';
 import { choosePhotoSource, pickPhoto } from '@/components/photo-picker';
 import { uploadBodyPhoto, type PickedPhoto } from '@/services/photos';
 
-// Shown once during onboarding, and again from Settings → Try-On Photo (`?from=settings`),
-// where it has a back button instead of "Skip for now" and goes back to Settings after Submit.
+// Shown once during onboarding, and again from Settings → Try-On Photo (`?from=settings`) or
+// the try-on screen (`?from=try-on`), where it has a back button instead of "Skip for now"
+// and goes back to that screen after Submit.
 export default function BodyPhotoScreen() {
   const { from } = useLocalSearchParams<{ from?: string }>();
-  const fromSettings = from === 'settings';
+  const fromApp = from === 'settings' || from === 'try-on';
   const [photo, setPhoto] = useState<PickedPhoto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export default function BodyPhotoScreen() {
     setIsSubmitting(true);
     try {
       await uploadBodyPhoto(photo);
-      if (fromSettings) router.back();
+      if (fromApp) router.back();
       else router.replace('/closet');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -53,19 +54,31 @@ export default function BodyPhotoScreen() {
     <SafeAreaView className="flex-1 bg-cream-100">
       <ScrollView contentContainerClassName="flex-grow items-center px-6 py-4">
         <View className="w-full max-w-sm flex-1 gap-4">
-          <View className="items-center gap-1">
-            {fromSettings ? (
-              <Pressable
-                onPress={() => router.back()}
-                disabled={isSubmitting}
-                accessibilityRole="button"
-                accessibilityLabel="Back"
-                className="absolute -left-2 top-0 h-10 w-10 items-center justify-center">
-                <Ionicons name="chevron-back" size={26} color="#4d5d3f" />
-              </Pressable>
+          <View className="gap-1">
+            {fromApp ? (
+              <View className="flex-row items-center">
+                <Pressable
+                  onPress={() => router.back()}
+                  disabled={isSubmitting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back"
+                  className="-ml-2 h-10 w-10 items-center justify-center">
+                  <Ionicons name="chevron-back" size={26} color="#4d5d3f" />
+                </Pressable>
+                <Text className="flex-1 text-center font-label text-[11px] uppercase tracking-[0.14em] text-sage-800">
+                  Try-on photo
+                </Text>
+                <View className="w-10" />
+              </View>
             ) : null}
-            <Text className="font-heading text-lg tracking-wide text-sage-600">StyleMe</Text>
-            <Text className="text-center font-heading text-2xl text-sage-700">Add a full-body photo</Text>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={1}
+              adjustsFontSizeToFit // shrinks to fit one line on narrow phones
+              minimumFontScale={0.6}
+              className="text-center font-heading text-4xl text-sage-800">
+              Add a full-body photo
+            </Text>
           </View>
 
           <MascotMessage>
@@ -118,7 +131,7 @@ export default function BodyPhotoScreen() {
               )}
             </Pressable>
 
-            {fromSettings ? null : (
+            {fromApp ? null : (
               <Pressable
                 onPress={() => router.replace('/closet')}
                 disabled={isSubmitting}

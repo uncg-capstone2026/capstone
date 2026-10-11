@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { DecisionButtons, INK, ResultNote, type DecisionResult } from '@/components/suggestion/decision-result';
+import { DecisionButtons, INK, ResultNote } from '@/components/suggestion/decision-result';
 import { OutfitStage, OVERLAY_BG, SHEET_OVERLAP } from '@/components/suggestion/outfit-stage';
 import { PieceThumbnails } from '@/components/suggestion/piece-thumbnails';
 import { PromptSheet } from '@/components/prompt-sheet';
@@ -14,11 +14,14 @@ import { useTemperatureUnit } from '@/hooks/use-temperature-unit';
 import { useWeather } from '@/hooks/use-weather';
 import { SessionExpiredError } from '@/services/api';
 import { DEFAULT_STAGE_COLOR, getStageColor, setStageColor as saveStageColor } from '@/services/preferences';
-import { acceptOutfit, rejectOutfit, styleOutfit, type OutfitSuggestion } from '@/services/stylist';
+import { acceptOutfit, repromptOutfit, styleOutfit, type OutfitSuggestion } from '@/services/stylist';
 import { temperaturesIn } from '@/services/weather';
 import { fromDateKey } from '@/utils/dates';
 
 const FEEDBACK_CHIPS = ['Something warmer', 'More casual', 'Dressier', 'Different colours', 'No cropped hems'];
+
+// The request that loads the outfit on screen: a new session, or the next turn in this one.
+type NextRequest = { kind: 'start' } | { kind: 'reprompt'; sessionId: string; message?: string };
 
 // The outfit StyleMe suggests for the day and occasion picked on the Stylist tab.
 export default function SuggestionScreen() {
@@ -30,22 +33,29 @@ export default function SuggestionScreen() {
 
   const [suggestion, setSuggestion] = useState<OutfitSuggestion | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [excludeIds, setExcludeIds] = useState<string[]>([]); // suggestions already shown
+  const [request, setRequest] = useState<NextRequest>({ kind: 'start' });
+  const [round, setRound] = useState(0); // bumped for each new outfit, restarts the loader
   const [attempt, setAttempt] = useState(0); // bumped by Retry
   const [selectedId, setSelectedId] = useState<string | null>(null); // null = whole outfit
   const [stageColor, setStageColor] = useState(DEFAULT_STAGE_COLOR);
   const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
   const [sheet, setSheet] = useState<'feedback' | 'occasion' | null>(null);
-  const [result, setResult] = useState<DecisionResult | null>(null);
-  const [outfitId, setOutfitId] = useState<string | null>(null);
-  const [isLoaderDone, setIsLoaderDone] = useState(false); // the loader has played through to 100%
+  const [accepted, setAccepted] = useState<{ eventName: string; outfitId: string } | null>(null);
+  const [isLoaderDone, setIsLoaderDone] = useState(false); // the loader has shown for its minimum time
 
-  const { weather } = useWeather(date);
+  const { weather, coords, loading: isWeatherLoading } = useWeather(date);
+  // A new session waits until the location is known (or can't be), so it can send it.
+  const isLocationSettled = !!coords || !isWeatherLoading;
   const { unit } = useTemperatureUnit();
 
   useEffect(() => {
+    if (request.kind === 'start' && !isLocationSettled) return;
     let cancelled = false;
-    styleOutfit({ date: fromDateKey(dateKey), occasion, excludeSuggestionIds: excludeIds })
+    const load =
+      request.kind === 'start'
+        ? styleOutfit({ date: fromDateKey(dateKey), occasion, coords })
+        : repromptOutfit({ sessionId: request.sessionId, message: request.message });
+    load
       .then((next) => {
         if (!cancelled) setSuggestion(next);
       })
@@ -56,7 +66,7 @@ export default function SuggestionScreen() {
     return () => {
       cancelled = true;
     };
-  }, [dateKey, occasion, excludeIds, attempt]);
+  }, [dateKey, occasion, request, attempt, isLocationSettled, coords]);
 
   useEffect(() => {
     getStageColor().then(setStageColor);
@@ -80,21 +90,27 @@ export default function SuggestionScreen() {
     setAttempt((n) => n + 1);
   }
 
-  function tryAnother() {
-    if (!suggestion) return;
-    setExcludeIds((ids) => [...ids, suggestion.suggestionId]);
+  // Clears the outfit on screen before loading the next one.
+  function resetForNext() {
     setSuggestion(null);
+    setLoadError(null);
     setIsLoaderDone(false);
     setSelectedId(null);
     setIsColorPopoverOpen(false);
-    setResult(null);
-    setOutfitId(null);
+    setAccepted(null);
+    setRound((n) => n + 1);
+  }
+
+  // After accepting, the session is closed, so "Try another suggestion" starts a new one.
+  function tryAnother() {
+    resetForNext();
+    setRequest({ kind: 'start' });
   }
 
   if (!suggestion || !isLoaderDone) {
     return (
       <StylingLoader
-        key={`${attempt}-${excludeIds.length}`}
+        key={`${attempt}-${round}`}
         ready={!!suggestion}
         error={loadError}
         onRetry={retry}
@@ -117,30 +133,29 @@ export default function SuggestionScreen() {
   async function accept(eventName: string) {
     if (!suggestion) return;
     const saved = await acceptOutfit({
+      sessionId: suggestion.sessionId,
+      turnId: suggestion.turnId,
       suggestionId: suggestion.suggestionId,
       itemIds,
       name: suggestion.name,
       eventName,
       date,
     });
-    setOutfitId(saved.outfitId);
-    setResult({ kind: 'accepted', eventName });
+    setAccepted({ eventName, outfitId: saved.outfitId });
     setSheet(null);
   }
 
+  // "Not for me": goes straight to the next outfit, adjusted to the user's answer.
   async function reject(feedback: string) {
     if (!suggestion) return;
-    await rejectOutfit({ suggestionId: suggestion.suggestionId, itemIds, feedback });
-    setResult({ kind: 'rejected' });
+    const sessionId = suggestion.sessionId;
     setSheet(null);
+    resetForNext();
+    setRequest({ kind: 'reprompt', sessionId, message: feedback });
   }
 
-  function openResult() {
-    if (result?.kind === 'accepted' && outfitId) {
-      router.push({ pathname: '/outfit/[id]', params: { id: outfitId } });
-    } else {
-      router.push('/style-preferences');
-    }
+  function openAccepted() {
+    if (accepted) router.push({ pathname: '/outfit/[id]', params: { id: accepted.outfitId } });
   }
 
   return (
@@ -189,7 +204,9 @@ export default function SuggestionScreen() {
           ) : null}
 
           <Pressable
-            onPress={() => router.push('/try-on')}
+            onPress={() =>
+              router.push({ pathname: '/try-on', params: { itemIds: itemIds.join(','), name: suggestion.name } })
+            }
             accessibilityRole="button"
             style={{ backgroundColor: INK }}
             className="items-center rounded-full py-3.5">
@@ -198,8 +215,13 @@ export default function SuggestionScreen() {
 
           <WhyPickedCard reasons={suggestion.reasons} />
 
-          {result ? (
-            <ResultNote result={result} dayName={dayName} onPrimary={openResult} onTryAnother={tryAnother} />
+          {accepted ? (
+            <ResultNote
+              eventName={accepted.eventName}
+              dayName={dayName}
+              onOpen={openAccepted}
+              onTryAnother={tryAnother}
+            />
           ) : (
             <DecisionButtons onReject={() => setSheet('feedback')} onAccept={() => setSheet('occasion')} />
           )}
@@ -209,9 +231,9 @@ export default function SuggestionScreen() {
       <PromptSheet
         visible={sheet === 'feedback'}
         title="What would you rather wear?"
-        subtitle="StyleMe saves your answer to Style Preferences and uses it for the next suggestion."
+        subtitle="StyleMe uses your answer to pick the next outfit."
         placeholder="e.g. Something warmer, and no cropped hems"
-        confirmLabel="Remember this"
+        confirmLabel="Show me another"
         chips={FEEDBACK_CHIPS}
         onCancel={() => setSheet(null)}
         onSubmit={reject}

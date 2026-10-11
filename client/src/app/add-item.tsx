@@ -68,11 +68,14 @@ export default function AddItemScreen() {
     }
     setIsImporting(true);
     try {
-      const itemId = await importItemFromLink(link.trim());
-      if (isBackendConfigured) {
+      const { itemId, isNew } = await importItemFromLink(link.trim());
+      if (!isBackendConfigured) {
+        router.back(); // nothing was saved, so there's nothing to check
+      } else if (isNew) {
         router.push({ pathname: '/confirm-item/[id]', params: { id: itemId } });
       } else {
-        router.back(); // nothing was saved, so there's nothing to check
+        // Already in the closet. The confirm screen's Discard would delete it, so open its details.
+        router.push({ pathname: '/item/[id]', params: { id: itemId } });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -96,11 +99,12 @@ export default function AddItemScreen() {
                 className="-ml-2 h-10 w-10 items-center justify-center">
                 <Ionicons name="chevron-back" size={26} color="#4d5d3f" />
               </Pressable>
-              <Text className="flex-1 text-center font-heading text-2xl text-sage-700">
-                Photograph the piece
+              <Text accessibilityRole="header" className="flex-1 text-center font-label text-[11px] uppercase tracking-[0.14em] text-sage-800">
+                Add item
               </Text>
               <View className="w-10" />
             </View>
+            <Text className="-mt-2 text-center font-heading text-2xl text-sage-700">Photograph the piece</Text>
 
             <MascotMessage>
               Lay it flat on a plain surface in good, even light. I will cut it out and fill in the
