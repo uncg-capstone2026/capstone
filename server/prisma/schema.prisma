@@ -20,7 +20,6 @@ enum Category {
   Shoes
   Accessory
   OnePiece
-  Sets
 }
 
 enum NotificationType {
