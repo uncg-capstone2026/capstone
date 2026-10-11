@@ -104,7 +104,10 @@ export default function SettingsScreen() {
           className="flex-row items-center gap-4 rounded-2xl bg-cream-50 p-4 active:opacity-80">
           <View className="h-14 w-14 items-center justify-center rounded-full bg-sage-500">
             {user ? (
-              <Text className="font-label text-lg text-cream-50">{initials(name)}</Text>
+              // Nudged down to center the capitals, like the Account screen's avatar.
+              <Text className="font-heading text-lg text-cream-50" style={{ transform: [{ translateY: 0.5 }] }}>
+                {initials(name)}
+              </Text>
             ) : (
               <Ionicons name="person" size={24} color="#fffdf9" />
             )}

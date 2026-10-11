@@ -8,7 +8,6 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
   type TextInputProps,
 } from 'react-native';
@@ -16,6 +15,7 @@ import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanim
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { PasswordStrength } from '@/components/auth/password-strength';
+import { TextField } from '@/components/text-field';
 import { SessionExpiredError } from '@/services/api';
 import {
   changePassword,
@@ -205,7 +205,11 @@ function AccountForm({ user, onUserChange }: { user: PublicUser; onUserChange: (
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           className="h-20 w-20 items-center justify-center self-center rounded-full bg-sage-500">
-          <Text className="font-heading text-3xl text-cream-50">{initial(saved.name)}</Text>
+          {/* Libre Baskerville is taller than text-3xl's line height, which pushed the letter up.
+              A taller line lets iOS center it, and 1pt down centers the capital itself. */}
+          <Text className="font-heading text-3xl leading-10 text-cream-50" style={{ transform: [{ translateY: 1 }] }}>
+            {initial(saved.name)}
+          </Text>
         </View>
 
         <View className="gap-2">
@@ -395,10 +399,11 @@ function FieldRow({ label, error, isLast, ...props }: FieldRowProps) {
   return (
     <View className={`gap-1 px-4 py-3 ${isLast ? '' : 'border-b border-sage-100'}`}>
       <Text className="font-label text-sm text-sage-500">{label}</Text>
-      <TextInput
+      <TextField
         accessibilityLabel={label}
         placeholderTextColor={PLACEHOLDER_COLOR}
-        className="py-0.5 font-body text-base text-sage-800"
+        className="h-6"
+        textClassName="font-body text-[16px] text-sage-800"
         {...props}
       />
       {error ? (
@@ -414,13 +419,14 @@ function PasswordInput({ label, ...props }: TextInputProps & { label: string }) 
   return (
     <View className="gap-1">
       <Text className="font-label text-sm text-sage-500">{label}</Text>
-      <TextInput
+      <TextField
         accessibilityLabel={label}
         secureTextEntry
         autoCapitalize="none"
         autoCorrect={false}
         placeholderTextColor={PLACEHOLDER_COLOR}
-        className="rounded-xl border border-sage-200 bg-cream-100 px-3 py-2.5 font-body text-base text-sage-800"
+        className="h-12 rounded-xl border border-sage-200 bg-cream-100"
+        textClassName="px-3 font-body text-[16px] text-sage-800"
         {...props}
       />
     </View>

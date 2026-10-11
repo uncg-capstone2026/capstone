@@ -6,10 +6,11 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { TextField } from '@/components/text-field';
 
 const DEFAULT_MAX_LENGTH = 200;
 
@@ -95,7 +96,7 @@ export function PromptSheet({
             <Text className="font-body text-sm text-sage-600">{subtitle}</Text>
           </View>
 
-          <TextInput
+          <TextField
             value={text}
             onChangeText={setText}
             placeholder={placeholder}
@@ -105,7 +106,8 @@ export function PromptSheet({
             maxLength={maxLength}
             returnKeyType={submitOnEnter ? 'done' : 'default'}
             onSubmitEditing={submitOnEnter ? submit : undefined}
-            className="rounded-xl border border-sage-200 bg-cream-100 px-4 py-3 font-body text-base text-sage-800"
+            className="h-12 rounded-xl border border-sage-200 bg-cream-100"
+            textClassName="px-4 font-body text-[16px] text-sage-800"
           />
 
           {chips ? (

@@ -1,5 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, Text, TextInput, View, type TextInputProps } from 'react-native';
+import { Pressable, Text, View, type TextInputProps } from 'react-native';
+
+import { TextField } from '@/components/text-field';
 
 type AuthTextInputProps = TextInputProps & {
   error?: string | null;
@@ -10,11 +12,10 @@ type AuthTextInputProps = TextInputProps & {
 export function AuthTextInput({ error, ...props }: AuthTextInputProps) {
   return (
     <View className="gap-1">
-      <TextInput
+      <TextField
         placeholderTextColor="#7a9264"
-        className={`rounded-xl border bg-cream-50 px-4 py-3 font-body text-sage-800 ${
-          error ? 'border-red-500' : 'border-sage-200'
-        }`}
+        className={`h-12 rounded-xl border bg-cream-50 ${error ? 'border-red-500' : 'border-sage-200'}`}
+        textClassName="px-4 font-body text-sage-800"
         {...props}
       />
       {error ? <Text className="px-1 font-body text-xs text-red-600">{error}</Text> : null}

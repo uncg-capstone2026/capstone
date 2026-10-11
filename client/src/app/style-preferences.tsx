@@ -8,11 +8,11 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { TextField } from '@/components/text-field';
 import { SessionExpiredError } from '@/services/api';
 import {
   addStyleNote,
@@ -131,7 +131,7 @@ export default function StylePreferencesScreen() {
 
             <View className="gap-1">
               <View className="flex-row items-center gap-2">
-                <TextInput
+                <TextField
                   value={draft}
                   onChangeText={(text) => {
                     setDraft(text);
@@ -144,7 +144,8 @@ export default function StylePreferencesScreen() {
                   placeholderTextColor={MUTED_COLOR}
                   maxLength={MAX_NOTE_LENGTH}
                   accessibilityLabel="New style note"
-                  className="flex-1 rounded-xl border border-sage-200 bg-cream-50 px-4 py-3 font-body text-base text-sage-800"
+                  className="h-12 flex-1 rounded-xl border border-sage-200 bg-cream-50"
+                  textClassName="px-4 font-body text-[16px] text-sage-800"
                 />
                 <Pressable
                   onPress={add}

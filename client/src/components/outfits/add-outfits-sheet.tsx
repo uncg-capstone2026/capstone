@@ -3,6 +3,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'rea
 
 import { OutfitGrid } from '@/components/outfits/outfit-grid';
 import { OutfitTile } from '@/components/outfits/outfit-tile';
+import { SheetHeader } from '@/components/sheet-header';
 import { useOutfitColors } from '@/hooks/use-outfit-colors';
 import { SessionExpiredError } from '@/services/api';
 import { listOutfits, type SavedOutfit } from '@/services/outfits';
@@ -68,29 +69,35 @@ export function AddOutfitsSheet({ visible, existingIds, onCancel, onAdd }: AddOu
       onShow={load}
       onRequestClose={cancel}>
       <View className="flex-1 bg-cream-100">
-        <View className="flex-row items-center justify-between border-b border-sage-200 px-4 py-3.5">
-          <Pressable onPress={cancel} accessibilityRole="button" hitSlop={8} className="min-w-[64px]">
-            <Text className="font-label text-base text-sage-700">Cancel</Text>
-          </Pressable>
-          <Text accessibilityRole="header" className="font-heading text-lg text-sage-800">
-            Add outfits
-          </Text>
-          <Pressable
-            onPress={add}
-            disabled={!canAdd}
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canAdd }}
-            hitSlop={8}
-            className="min-w-[64px] items-end disabled:opacity-40">
-            {isAdding ? (
-              <ActivityIndicator color="#4d5d3f" />
-            ) : (
-              <Text className="font-label text-base text-sage-700">
-                {selectedIds.length > 0 ? `Add (${selectedIds.length})` : 'Add'}
-              </Text>
-            )}
-          </Pressable>
-        </View>
+        <SheetHeader
+          left={
+            <Pressable onPress={cancel} accessibilityRole="button" hitSlop={8}>
+              <Text className="font-label text-base text-sage-700">Cancel</Text>
+            </Pressable>
+          }
+          title={
+            <Text accessibilityRole="header" className="font-heading text-lg text-sage-800">
+              Add outfits
+            </Text>
+          }
+          right={
+            <Pressable
+              onPress={add}
+              disabled={!canAdd}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canAdd }}
+              hitSlop={8}
+              className="disabled:opacity-40">
+              {isAdding ? (
+                <ActivityIndicator color="#4d5d3f" />
+              ) : (
+                <Text className="font-label text-base text-sage-700">
+                  {selectedIds.length > 0 ? `Add (${selectedIds.length})` : 'Add'}
+                </Text>
+              )}
+            </Pressable>
+          }
+        />
 
         <ScrollView contentContainerClassName="gap-4 px-6 pb-10 pt-4">
           {error ? <Text className="font-body text-sm text-red-700">{error}</Text> : null}
