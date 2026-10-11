@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import type { Item, Prisma, User } from '@prisma/client';
+import type { Item, OutfitSlot, Prisma, User } from '@prisma/client';
 import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
@@ -17,6 +17,11 @@ type AiImage = { image: Buffer; mimeType: string };
 
 // Each item's wear period is 30 days, counted from when it was added.
 const WEAR_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+
+// An outfit can't exist without the piece in one of these slots: without its
+// top or bottom (or its one-piece) it's no longer a complete outfit. Goes by
+// the slot the item fills in each outfit, not the item's current category.
+const REQUIRED_SLOTS: OutfitSlot[] = ['top', 'bottom', 'onepiece'];
 
 @Injectable()
 export class ItemsService {
@@ -78,15 +83,27 @@ export class ItemsService {
     return this.toItemDetails(item);
   }
 
-  // DELETE /api/items/:id — the item, every outfit entry pointing at it, and its photos.
+  // DELETE /api/items/:id — the item, every outfit that needs it, and its photos.
+  // An outfit where this item is the top, bottom or one-piece can't stand
+  // without it, so that outfit is deleted too (with its calendar days and
+  // collection entries, by the schema's cascades). In outfits where it's only
+  // shoes, outerwear or an accessory, just that piece is removed.
   async remove(userId: User['id'], id: string) {
     const item = await this.findOwned(userId, id);
 
-    // All or nothing: outfits never end up pointing at a deleted item.
-    await this.prisma.$transaction([
-      this.prisma.outfitItem.deleteMany({ where: { itemId: id } }),
-      this.prisma.item.delete({ where: { id } }),
-    ]);
+    // All or nothing: an outfit is never left missing its top or bottom.
+    await this.prisma.$transaction(async (tx) => {
+      const needed = await tx.outfitItem.findMany({
+        where: { itemId: id, slot: { in: REQUIRED_SLOTS }, outfit: { userId } },
+        select: { outfitId: true },
+      });
+      const outfitIds = [...new Set(needed.map((piece) => piece.outfitId))];
+      if (outfitIds.length > 0) {
+        await tx.outfit.deleteMany({ where: { id: { in: outfitIds }, userId } });
+      }
+      // Its pieces in the remaining outfits are removed with it (onDelete: Cascade).
+      await tx.item.delete({ where: { id } });
+    });
 
     // Photos go after the database succeeds. A failed S3 delete only leaves an unused file.
     for (const key of [item.imageKey, item.cutoutKey]) {
@@ -325,13 +342,24 @@ export class ItemsService {
 
   // Matches the app's ClothingItemDetails type. To add a field, add one line here.
   private async toItemDetails(item: Item) {
-    // The user's outfits that include this item, newest first. Each outfit
-    // appears once, even if the item is in it twice.
-    const outfits = await this.prisma.outfit.findMany({
-      where: { userId: item.userId, items: { some: { itemId: item.id } } },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, name: true },
+    // The user's outfits that include this item, newest first, with the slot it
+    // fills in each. Deleting the item also deletes the outfits where that slot
+    // is top, bottom or onepiece, so the app can say how many beforehand.
+    const pieces = await this.prisma.outfitItem.findMany({
+      where: { itemId: item.id, outfit: { userId: item.userId } },
+      orderBy: { outfit: { createdAt: 'desc' } },
+      select: { slot: true, outfit: { select: { id: true, name: true } } },
     });
+    // Each outfit once. If the item ever filled two slots in one outfit, a
+    // required slot wins, matching what deleting the item would do.
+    const slotByOutfit = new Map<string, { id: string; name: string; slot: OutfitSlot }>();
+    for (const { slot, outfit } of pieces) {
+      const seen = slotByOutfit.get(outfit.id);
+      if (!seen || (!REQUIRED_SLOTS.includes(seen.slot) && REQUIRED_SLOTS.includes(slot))) {
+        slotByOutfit.set(outfit.id, { ...outfit, slot });
+      }
+    }
+    const outfits = [...slotByOutfit.values()];
 
     // If the 30-day period ran out and the hourly job hasn't reset it yet,
     // the stored count is from an old period, so send 0 instead.
@@ -357,6 +385,15 @@ export class ItemsService {
   }
 
   // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+
+  // GET /api/items/:id/embedding — whether the item has an embedding saved.
+  // Prisma can't read the vector column, so this checks it with raw SQL.
+  async hasEmbedding(userId: User['id'], id: string) {
+    await this.findOwned(userId, id);
+    const [row] = await this.prisma.$queryRaw<{ hasEmbedding: boolean }[]>`
+      SELECT embedding IS NOT NULL AS "hasEmbedding" FROM "Item" WHERE id = ${id}`;
+    return { itemId: id, hasEmbedding: row.hasEmbedding };
+  }
 
   // Logs everything about a failed AI step: timing, HTTP status, the full
   // err.cause chain (where "fetch failed" hides ECONNRESET etc.) and the stack.
