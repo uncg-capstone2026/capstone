@@ -36,13 +36,12 @@ export type OutfitDetails = SavedOutfit & {
   collections: { id: string; name: string }[]; // most recently added first
 };
 
-// The slot each category goes in. Sets fill the whole outfit, like a one-piece.
+// The slot each category goes in.
 const SLOT_BY_CATEGORY: Record<Category, OutfitSlot> = {
   Top: 'top',
   Bottoms: 'bottom',
   Outerwear: 'outerwear',
   OnePiece: 'onepiece',
-  Sets: 'onepiece',
   Shoes: 'shoes',
   Accessory: 'accessory',
 };
@@ -249,10 +248,10 @@ function slotFor(category: Category | null): OutfitSlot {
   return category ? SLOT_BY_CATEGORY[category] : UNTAGGED_SLOT;
 }
 
-// Complete means a OnePiece (or Sets, which fill the same slot), or a Top and Bottoms.
+// Complete means a OnePiece, or a Top and Bottoms.
 function isComplete(categories: (Category | null)[]): boolean {
   const has = (c: Category) => categories.includes(c);
-  return has('OnePiece') || has('Sets') || (has('Top') && has('Bottoms'));
+  return has('OnePiece') || (has('Top') && has('Bottoms'));
 }
 
 function toScheduledDay(entry: { id: string; date: Date; eventName: string | null }): ScheduledDay {

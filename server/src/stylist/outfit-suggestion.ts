@@ -32,8 +32,7 @@ export type SuggestionPiece = {
 const FALLBACK_NAME = 'Your outfit';
 
 // Order pieces are listed in, top of the outfit to the bottom.
-const DISPLAY_ORDER: Category[] = ['Outerwear', 'Top', 'OnePiece', 'Sets', 'Bottoms', 'Shoes', 'Accessory'];
-
+const DISPLAY_ORDER: Category[] = ['Outerwear', 'Top', 'OnePiece', 'Bottoms', 'Shoes', 'Accessory'];
 // Builds the response: pieces in display order, each with a signed URL for
 // the same photo Gemini saw.
 export async function toSuggestion(

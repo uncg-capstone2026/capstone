@@ -9,7 +9,6 @@ export const CATEGORY_TO_CLIENT: Record<Category, string> = {
   Shoes: 'shoes',
   Accessory: 'accessories',
   OnePiece: 'one-piece',
-  Sets: 'sets',
 };
 
 // Lowercase, matching ClothingFit in the app (client/src/services/items.ts).
