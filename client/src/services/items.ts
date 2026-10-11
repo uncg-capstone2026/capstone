@@ -10,8 +10,7 @@ export type ClothingCategory =
   | 'outerwear'
   | 'shoes'
   | 'accessories'
-  | 'one-piece'
-  | 'sets';
+  | 'one-piece';
 
 export type ClosetItem = {
   id: string;
@@ -42,7 +41,6 @@ export const COMMON_CUTS: Record<ClothingCategory, string[]> = {
   shoes: ['Low-top', 'High-top', 'Ankle', 'Knee-high', 'Slip-on', 'Lace-up', 'Platform', 'Pointed toe'],
   accessories: GENERAL_CUTS,
   'one-piece': ['A-line', 'Bodycon', 'Shift', 'Wrap', 'Slip', 'Fit and flare', 'Shirt dress', 'Jumpsuit', 'Romper'],
-  sets: GENERAL_CUTS,
 };
 
 // GET /api/items/:id: the closet fields plus the item's tags. Untagged items have nulls.
@@ -100,7 +98,6 @@ export const CLOSET_FILTERS: { key: ClosetFilter; label: string }[] = [
   { key: 'shoes', label: 'Shoes' },
   { key: 'accessories', label: 'Accessories' },
   { key: 'one-piece', label: 'One-Piece' },
-  { key: 'sets', label: 'Sets' },
 ];
 
 // The categories an item can have, for the Category dropdown.
@@ -210,11 +207,11 @@ export function filterItems(items: ClosetItem[], filter: ClosetFilter): ClosetIt
   return items.filter((item) => item.category === filter);
 }
 
-// The least the stylist needs for an outfit: a top and bottoms, or a one-piece, plus shoes.
+// The least the stylist needs for an outfit: a top and bottoms, or a one-piece. Shoes are optional.
 // Matches "A complete outfit" in server/src/gemini/outfit-planning/prompt.ts.
 export function canBuildOutfit(items: ClosetItem[]): boolean {
   const has = (category: ClothingCategory) => items.some((item) => item.category === category);
-  return ((has('tops') && has('bottoms')) || has('one-piece')) && has('shoes');
+  return (has('tops') && has('bottoms')) || has('one-piece');
 }
 
 // Until EXPO_PUBLIC_API_URL is set, the closet is empty.
