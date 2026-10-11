@@ -20,7 +20,6 @@ enum Category {
   Shoes
   Accessory
   OnePiece
-  Sets
 }
 
 enum NotificationType {
@@ -73,6 +72,11 @@ enum StyleFeedbackKind {
   Rejected
 }
 
+enum NoteSource {
+  User // typed by the user on the Style Preferences screen
+  Learned // worked out from the outfits they accept and reject
+}
+
 model User {
   id                   String          @id @default(uuid())
   name                 String
@@ -92,12 +96,13 @@ model User {
   styleFeedback        StyleFeedback[]
   outfitSessions       OutfitSession[]
   pushTokens           PushToken[]
+  styleNotes           StyleNote[]
 }
 
 model TryOnPhoto {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   imageKey   String // S3 key
   isPrimary  Boolean  @default(false)
   capturedAt DateTime @default(now())
@@ -106,7 +111,7 @@ model TryOnPhoto {
 model Item {
   id                     String                      @id @default(uuid())
   userId                 String
-  user                   User                        @relation(fields: [userId], references: [id])
+  user                   User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
   name                   String                      @default("New item")
   category               Category?
   type                   String? // Javier's field, e.g. "t-shirt", "jeans", "sneakers"
@@ -133,7 +138,7 @@ model Item {
 model Collection {
   id        String             @id @default(uuid())
   userId    String
-  user      User               @relation(fields: [userId], references: [id])
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   createdAt DateTime           @default(now())
   outfits   CollectionOutfit[]
@@ -154,7 +159,7 @@ model CollectionOutfit {
 model Outfit {
   id              String             @id @default(uuid())
   userId          String
-  user            User               @relation(fields: [userId], references: [id])
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   name            String
   isFavorite      Boolean            @default(false)
   timesWorn       Int                @default(0)
@@ -282,4 +287,17 @@ model PushToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// What StyleMe remembers about the user's style, added to every outfit request.
+// Shown and edited on the Style Preferences screen.
+model StyleNote {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      String // 1-200 characters
+  source    NoteSource @default(User)
+  createdAt DateTime   @default(now())
+
+  @@index([userId, createdAt])
 }

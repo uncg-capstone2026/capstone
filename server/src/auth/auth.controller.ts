@@ -1,8 +1,8 @@
-import { Body, Controller, Get, HttpCode, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Patch, Post, UseGuards } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import { AuthService } from './auth.service';
 import { AuthGuard, CurrentUserId } from './auth.guard';
-import { LoginDto, PushTokenDto, SignupDto, UpdateMeDto } from './auth.dto';
+import { ChangePasswordDto, LoginDto, PushTokenDto, SignupDto, UpdateMeDto } from './auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -28,13 +28,30 @@ export class AuthController {
     return this.auth.me(userId);
   }
 
-  // PATCH /api/auth/me { name?, displayName?, phone?, timeZone?, notificationsEnabled? }  (needs Authorization)
-  //   -> 200, the updated user (same shape as GET /api/auth/me)
-  // 400 for an empty body or invalid values, 409 if the phone number is taken.
+  // PATCH /api/auth/me { name?, email?, displayName?, phone?, timeZone?, notificationsEnabled? }
+  //   (needs Authorization) -> 200, the updated user (same shape as GET /api/auth/me)
+  // 400 for an empty body or invalid values, 409 if the email or phone is taken.
   @Patch('me')
   @UseGuards(AuthGuard)
   updateMe(@CurrentUserId() userId: User['id'], @Body() body: UpdateMeDto) {
     return this.auth.updateMe(userId, body);
+  }
+
+  // POST /api/auth/me/password { currentPassword, newPassword }  (needs Authorization) -> 204
+  // 400 if the current password is wrong or the new one is too weak.
+  @Post('me/password')
+  @UseGuards(AuthGuard)
+  @HttpCode(204)
+  changePassword(@CurrentUserId() userId: User['id'], @Body() body: ChangePasswordDto) {
+    return this.auth.changePassword(userId, body);
+  }
+
+  // DELETE /api/auth/me  (needs Authorization) -> 204. Deletes the account and all its data.
+  @Delete('me')
+  @UseGuards(AuthGuard)
+  @HttpCode(204)
+  deleteAccount(@CurrentUserId() userId: User['id']) {
+    return this.auth.deleteAccount(userId);
   }
 
   // POST /api/auth/me/push-token { token }  (needs Authorization) -> 204
