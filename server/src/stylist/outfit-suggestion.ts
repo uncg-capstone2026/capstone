@@ -8,7 +8,7 @@ import type { S3Service } from '../s3/s3.service';
 export type OutfitSuggestion = {
   sessionId?: string; // send back with a reprompt
   turnId?: string; // which outfit this is, e.g. for accepting it
-  suggestionId: string; // the outfit's items, encoded (see comboKey); for excludeSuggestionIds
+  suggestionId: string; // the outfit's items, encoded (see comboKey); sent back with accept and feedback
   name: string; // e.g. "Easy layers for class"
   reasons: string[]; // 2-4 short reasons, written to the user
   items: {
@@ -58,16 +58,6 @@ export async function toSuggestion(
     reasons: outfit.reasons,
     items,
   };
-}
-
-// The item ids inside a suggestionId, or null if it isn't one of ours
-// (e.g. the app's old "fixture-0" ids).
-// Remove with excludeSuggestionIds once the app uses the reprompt route.
-export function fromSuggestionId(suggestionId: string): string[] | null
-{
-  const ids = Buffer.from(suggestionId, 'base64url').toString('utf8').split(',');
-  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return ids.length > 0 && ids.every((id) => uuid.test(id)) ? ids : null;
 }
 
 // Position in DISPLAY_ORDER; unknown or missing categories go last.
