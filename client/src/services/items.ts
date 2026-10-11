@@ -307,19 +307,18 @@ export async function uploadItemPhoto(photo: PickedPhoto): Promise<string> {
   return itemId;
 }
 
-// POST /api/items/link { url } -> { itemId }. The server fetches the product page, saves the
-// product photo, then cuts it out, tags and embeds it like a photo upload (a few seconds).
-// The same link twice returns the existing item. A 400 has a message for the user, e.g. when
-// the page has no product photo.
+// POST /api/items/link { url } -> { itemId, isNew }. The server fetches the product page, saves
+// the product photo, then cuts it out, tags and embeds it like a photo upload (a few seconds).
+// The same link twice returns the existing item with isNew: false. A 400 has a message for the
+// user, e.g. when the page has no product photo.
 // Until EXPO_PUBLIC_API_URL is set, this resolves locally so the flow stays walkable.
-export async function importItemFromLink(url: string): Promise<string> {
+export async function importItemFromLink(url: string): Promise<{ itemId: string; isNew: boolean }> {
   if (!isBackendConfigured) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
-    return 'local-placeholder';
+    return { itemId: 'local-placeholder', isNew: true };
   }
   try {
-    const { itemId } = await apiPost<{ itemId: string }>('/api/items/link', { url });
-    return itemId;
+    return await apiPost<{ itemId: string; isNew: boolean }>('/api/items/link', { url });
   } catch (e) {
     throw itemError(e, "Couldn't add from that link. Please try again.");
   }

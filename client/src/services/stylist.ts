@@ -12,6 +12,7 @@ const USE_ACCEPT_FEEDBACK_FIXTURE = false;
 export type OutfitRequest = {
   date: Date;
   occasion: string; // where they're headed or what they're going for
+  coords?: { lat: number; lon: number } | null; // where the user is, for that day's weather
 };
 
 // "Not for me": the next outfit in the same session, adjusted to the user's answer.
@@ -55,6 +56,9 @@ export async function styleOutfit(request: OutfitRequest): Promise<OutfitSuggest
     return await apiPost<OutfitSuggestion>('/api/stylist/outfit', {
       date: toDateKey(request.date),
       occasion: request.occasion,
+      // Optional: without them the outfit is picked without the weather. Only the first
+      // request sends them; the server saves the forecast on the session for reprompts.
+      ...(request.coords ? { lat: request.coords.lat, lon: request.coords.lon } : {}),
     });
   } catch (e) {
     throw stylistError(e, 'StyleMe could not put an outfit together. Please try again.');

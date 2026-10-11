@@ -43,14 +43,17 @@ export default function SuggestionScreen() {
   const [accepted, setAccepted] = useState<{ eventName: string; outfitId: string } | null>(null);
   const [isLoaderDone, setIsLoaderDone] = useState(false); // the loader has shown for its minimum time
 
-  const { weather } = useWeather(date);
+  const { weather, coords, loading: isWeatherLoading } = useWeather(date);
+  // A new session waits until the location is known (or can't be), so it can send it.
+  const isLocationSettled = !!coords || !isWeatherLoading;
   const { unit } = useTemperatureUnit();
 
   useEffect(() => {
+    if (request.kind === 'start' && !isLocationSettled) return;
     let cancelled = false;
     const load =
       request.kind === 'start'
-        ? styleOutfit({ date: fromDateKey(dateKey), occasion })
+        ? styleOutfit({ date: fromDateKey(dateKey), occasion, coords })
         : repromptOutfit({ sessionId: request.sessionId, message: request.message });
     load
       .then((next) => {
@@ -63,7 +66,7 @@ export default function SuggestionScreen() {
     return () => {
       cancelled = true;
     };
-  }, [dateKey, occasion, request, attempt]);
+  }, [dateKey, occasion, request, attempt, isLocationSettled, coords]);
 
   useEffect(() => {
     getStageColor().then(setStageColor);

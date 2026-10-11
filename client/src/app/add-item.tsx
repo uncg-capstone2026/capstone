@@ -68,11 +68,14 @@ export default function AddItemScreen() {
     }
     setIsImporting(true);
     try {
-      const itemId = await importItemFromLink(link.trim());
-      if (isBackendConfigured) {
+      const { itemId, isNew } = await importItemFromLink(link.trim());
+      if (!isBackendConfigured) {
+        router.back(); // nothing was saved, so there's nothing to check
+      } else if (isNew) {
         router.push({ pathname: '/confirm-item/[id]', params: { id: itemId } });
       } else {
-        router.back(); // nothing was saved, so there's nothing to check
+        // Already in the closet. The confirm screen's Discard would delete it, so open its details.
+        router.push({ pathname: '/item/[id]', params: { id: itemId } });
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');

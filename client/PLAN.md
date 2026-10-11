@@ -23,7 +23,7 @@ All done.
 
 Clothing photos live in AWS S3. The client uploads the original photo, and the server cuts the piece out and stores the cutout in S3 as well (`Item.imageKey` for the original, `Item.cutoutKey` for the cutout).
 
-- [ ] Server: `POST /api/items/link` returns the existing item when the same link is pasted again, and the app can't tell. It opens the confirm screen for that item, where Discard or Retake deletes it from the closet. Return `{ itemId, isNew }` (or 409 with the item id) so the app can open the item details screen instead.
+- [ ] Test adding an item by link on a device: a new link opens the confirm screen, and pasting the same link again opens the existing item's details.
 - [ ] If the app is closed on the confirm screen, the item stays in the closet unchecked (and untagged until tagging is wired in). Later, an `isConfirmed` flag on `Item` (hidden from `GET /api/items` until Save) would stop that.
 
 ### Item details screen
@@ -69,14 +69,14 @@ The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The 
 ### Client
 The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" opens it, and it shows one outfit at a time as a flat-lay, with "Not for me" and "Looks right". It calls the live `POST /api/stylist/outfit` (`USE_OUTFIT_FIXTURE` is off). "Looks right" calls `POST /api/stylist/outfit/accept` with the `sessionId` and `turnId`, which saves the outfit with a calendar entry for the day and closes the session. "Not for me" sends the answer to `POST /api/stylist/outfit/reprompt` and goes straight to the next outfit in the same session (`USE_ACCEPT_FEEDBACK_FIXTURE` is off).
 
-- [ ] Send `lat`/`lon` with the first `POST /api/stylist/outfit` so suggestions use the weather (`ai/frontend-handoff.md` section 2): return `coords` from `src/hooks/use-weather.ts` and wait for it before starting.
-
 - [ ] Style Preferences (`src/app/style-preferences.tsx`, "See what was remembered") is a "coming soon" placeholder.
 
 ### Server
-`POST /api/stylist/outfit { occasion, date? }` (`server/src/stylist/`) is built: `QueryExpansionService` expands and embeds the request, `OutfitPlanningService.findCandidates` finds the closest closet items with pgvector, and `selectOutfit` has Gemini pick one complete outfit. It returns the shape agreed with the app (`OutfitSuggestion` in `src/services/stylist.ts`): `{ suggestionId, name, reasons, items: { id, name, category, type, imageUrl }[] }`, taking `{ date, occasion, excludeSuggestionIds }`, or 422 when the closet can't make a complete outfit.
+Outfit suggestions are sessions of turns (`ai/repromptimplementation.md`, API in `server/CLAUDE.md`). `POST /api/stylist/outfit { occasion, date?, lat?, lon? }` starts a session and returns `OutfitSuggestion` plus `sessionId` and `turnId`. `POST /api/stylist/outfit/reprompt { sessionId, message? }` returns the next outfit, and `POST /api/stylist/outfit/accept` closes the session. `POST /api/stylist/try-on` is done too.
 
-The Gemini work on the outfit route itself (weather, search, errors, prompts) is in section 8. The accept and feedback routes are done.
+- [ ] Remove `excludeSuggestionIds` from `POST /api/stylist/outfit` and `POST /api/stylist/outfit/feedback`: the app no longer uses either.
+
+The remaining Gemini work is in section 8.
 
 ## 8. AI (Gemini)
 
@@ -84,7 +84,6 @@ Everything that touches Gemini, the embeddings or the pgvector search: setup, it
 
 ### Setup and security
 - [ ] Add `GEMINI_API_KEY` to `server/.env` and the Railway variables (`server/.env.example` has it). Without it, every Gemini call fails.
-- [ ] Security: `GeminiController` (`/api/gemini/*`) has no auth guard, so anyone can use up the Gemini quota. Remove the three "DELETE LATER" test routes (`expand-and-embed`, `embed-image`, `image-attributes`) and `expand-query` before release, or put them behind `AuthGuard` until then.
 - [ ] Database: the init migration creates an `embedding vector(768)` column but never runs `CREATE EXTENSION vector`. Check pgvector is enabled on Railway, and add a migration with `CREATE EXTENSION IF NOT EXISTS vector` so a fresh database works.
 - [ ] `server/src/main.ts` now loads `.env` with `dotenv/config` as well as `ConfigModule`. Keep one. `GeminiHelpers` reads `process.env.GEMINI_API_KEY` directly, so whichever stays must load before it.
 
@@ -96,11 +95,8 @@ Everything that touches Gemini, the embeddings or the pgvector search: setup, it
 - [ ] Add `cut` to AI tagging. `extractImageAttributes` fills every other tag but not `cut`, so it's always empty until the user picks one. Add it to the image-attributes schema, prompt and result type (`server/src/gemini/image-processing/`), and save it in `ItemsService.createFromPhoto` with the other tags. Pick from the cuts the app offers for the item's category (`COMMON_CUTS` in `client/src/services/items.ts`; copy the list into `server/src/gemini/constants.ts`, since the server can't import from the client), or `null` if it can't tell or the category has no cuts. The confirm screen already shows `cut` and marks AI-filled fields, so the app needs no change.
 
 ### Outfit suggestions (`POST /api/stylist/outfit`, section 7)
-- [ ] Pass the day's weather (from `WeatherService`, with `date`) into the query expansion and outfit prompts. Neither gets the weather yet, though both rely on it.
-- [ ] `findCandidates` ignores the `season`, `formality`, `preferred_colors` and `exclude_colors` the query expansion returns. Decide whether to filter or rank by them.
 - [ ] Server: make "Exclude from future outfit suggestions" work. `findClosestItems` in `server/src/gemini/outfit-planning/service.ts` is where all Stylist candidates come from, but it doesn't check `excludeFromSuggestions` yet (its "Later" comment says it's waiting for the column, which exists now). Add `AND "excludeFromSuggestions" = false` to its `WHERE`, and update the comment. Also check the two Oct 7 migrations have run on Railway (`build` and `start` don't run `prisma migrate deploy`). To test: exclude an item, ask the Stylist for an outfit it would suit, and check it's never suggested. (See "Wear tracking" in section 4.)
-- [ ] Return Gemini failures as 503 `{ message }`, like weather. Right now they surface as raw errors (the 422 for "not enough items" can stay).
-- [ ] Use the Style Preferences saved by the feedback route (section 7) in the outfit prompt, so suggestions learn from what the user turned down.
+- [ ] Later: memory from past sessions, so suggestions learn from what the user turned down before (`memoryProcessed` on `OutfitSession` is there for it). This replaces the old feedback route, which saved answers nothing read.
 
 ### Prompts
 - [ ] `ai/Prompts.md` has older drafts that differ from the prompts in `server/src/gemini/*/prompt.ts`. Update or delete it so there's one source.
@@ -113,18 +109,17 @@ The Outfits tab (`src/app/(tabs)/outfits.tsx`) is built: the "All saved outfits"
 Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where `id` is `all`, `favorites` or a collection id): the title, the outfit count and a grid of outfits, each opening `src/app/outfit/[id].tsx`. In edit mode, a user collection can be renamed and have outfits added ("Add from all saved outfits") or removed. Favorites can have outfits added (favorited) or removed (unfavorited). All saved outfits can only delete outfits, after a confirmation.
 
 ### Server
-- [ ] `GET /api/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD` for the Calendar tab. Both dates are required and inclusive; 400 if either is missing or invalid. Behind `AuthGuard`. Returns the user's calendar entries in that range, earliest first, as `{ id, date, eventName, outfit: SavedOutfit }[]` (`date` as `YYYY-MM-DD` like `toScheduledDay`, `outfit` loaded with `WITH_PIECES` and shaped like `GET /api/outfits`). The app asks for one month at a time (`src/services/calendar.ts`). Right now no route lists calendar entries: `GET /api/outfits` has no `scheduled`, and only `GET /api/outfits/:id` does.
-- [ ] Notifications: the Settings switch is only saved on the device (`src/hooks/use-notifications-enabled.ts`). Add a place to store it per user (e.g. `notificationsEnabled` on `User`, set with `PATCH /api/auth/me`), and a route to save the device's Expo push token (e.g. `POST /api/auth/me/push-token { token }`), so the server can send outfit reminders and respect the switch.
-- [ ] Profile: `PATCH /api/auth/me` only accepts `timeZone`. Accept `name`, `displayName` and `phone` too (400 if invalid, 409 if the phone is taken), for the Profile screen.
+- [ ] Account screen (`src/app/profile.tsx`) needs three routes. The app already calls them and shows "isn't available yet" until they exist:
+  - `PATCH /api/auth/me` accepts `email`: check it with `isValidEmail` and save it with `normalizeEmail` (`server/src/auth/auth.utils.ts`, same as sign-up), 409 "Email already in use". Right now `parseProfileChanges` rejects it ("email can't be changed here").
+  - `POST /api/auth/me/password { currentPassword, newPassword }` → 204. A wrong current password must be a **400** "Current password is incorrect", not a 401: the app treats any 401 as an expired session and signs the user out. Check the new password with `assertStrongPassword` (`auth.utils.ts`, same as sign-up: 8+ characters, upper, lower, number).
+  - `DELETE /api/auth/me` → 204. Deletes the user (the relations cascade) and their S3 files: item photos and cutouts, body photos.
 - [ ] Later: let the user say they didn't wear a planned outfit (e.g. "Didn't wear it" on a past calendar day). That would undo the counts for that entry, rolling `lastWorn` back to the outfit's previous worn entry.
 
 ### Client
-The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45).
+The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45). So are `GET /api/calendar`, `PATCH /api/auth/me` with `name`, `displayName`, `phone` and `notificationsEnabled`, and `POST /api/auth/me/push-token { token }`.
 
-- [ ] The Calendar tab (`src/app/(tabs)/calendar.tsx`) is built: a month grid with green dots on upcoming planned days and gold on past ones, the weather card for the selected day, and its planned outfits. It shows a load error until the server has `GET /api/calendar` (see Server above). Test it on a device once that's live.
-- [ ] Notifications: add `expo-notifications` (needs a new dev build), ask for permission when the Settings switch is turned on, register the push token and send the switch to the server once the routes above exist.
-- [ ] Profile (`src/app/profile.tsx`, opened from the Settings profile card) is "coming soon". Build it once `PATCH /api/auth/me` accepts name, display name and phone.
-- [ ] Test the outfit details screen against the seeded test account (`seed.tester@example.com` / `TestPass123!`, created by `server/prisma/seed.ts`): edit pieces, plan and unplan days, and check collections.
+- [ ] Notifications: add `expo-notifications` (needs a new dev build), ask for permission when the Settings switch is turned on, register the push token with `POST /api/auth/me/push-token` and send the switch as `notificationsEnabled` with `PATCH /api/auth/me`.
+- [ ] Account screen (`src/app/profile.tsx`): test changing email and password and deleting the account on a device once the server routes above exist.
 
 ## Suggested order
 
@@ -135,15 +130,17 @@ The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfi
 5. Add-item flow (section 4): upload first, saving the item with just the original photo (done)
 6. Cutout and tagging (section 4) (done; backfilling older items, WebP conversion and `FITS` are in section 8)
 7. Weather (section 6) (done, including `?date=` for the Stylist day picker)
-8. Stylist (section 7): the screen and the outfit route are built, with the agreed response shape. The accept and feedback routes are done and the app uses them. Next is passing in the weather (section 8)
-9. Outfits and collections (section 9): the client screens are built and use the live routes. The schema, `OutfitsService.create` and the outfit and collection routes are done on the server. So are `PATCH /api/auth/me { timeZone }` and the hourly wear tracking job. The app sends the device's time zone. The outfit details screen is built; next is showing wear stats on it
+8. Stylist (section 7): sessions, reprompting, accept and try-on are done on the server, and the app uses them. The first request sends the location, so suggestions use the weather
+9. Outfits and collections (section 9): the client screens are built and use the live routes. The schema, `OutfitsService.create` and the outfit and collection routes are done on the server. So are `PATCH /api/auth/me { timeZone }` and the hourly wear tracking job. The app sends the device's time zone. The outfit details screen, wear stats and the Calendar tab are built and tested on a device
 
 ## Client-only checklist
 
 What the client needs, split by whether it can be done now.
 
 ### Can do now
-- [ ] Test the Outfits tab and the collection screen on a device: accept a Stylist suggestion, then create a collection, add and remove outfits, rename it, favorite and unfavorite, and delete an outfit (section 9).
+- [ ] Test adding by link on a device (section 4).
+- [ ] Wire up notifications (section 9).
+- [ ] Test name and mobile saving on the Account screen on a device (section 9).
 
 ### Needs a server decision first
 
