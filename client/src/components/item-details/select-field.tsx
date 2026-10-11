@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+import { TextField } from '@/components/text-field';
 
 type Option<T extends string> = { value: T; label: string };
 
@@ -87,7 +89,7 @@ export function SelectField<T extends string>({
           <ScrollView keyboardShouldPersistTaps="handled" contentContainerClassName="px-4 pb-2">
             {custom !== null && allowCustom ? (
               <View className="flex-row gap-2 px-2 py-2">
-                <TextInput
+                <TextField
                   value={custom}
                   onChangeText={setCustom}
                   maxLength={allowCustom.maxLength}
@@ -96,7 +98,8 @@ export function SelectField<T extends string>({
                   autoFocus
                   returnKeyType="done"
                   onSubmitEditing={saveCustom}
-                  className="flex-1 rounded-xl border border-sage-200 bg-cream-100 px-4 py-3 font-body text-sage-800"
+                  className="h-12 flex-1 rounded-xl border border-sage-200 bg-cream-100"
+                  textClassName="px-4 font-body text-sage-800"
                 />
                 <Pressable
                   onPress={saveCustom}

@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { SheetHeader } from '@/components/sheet-header';
 import type { SuggestedPiece } from '@/services/stylist';
 
 type PiecePickerSheetProps = {
@@ -51,15 +52,18 @@ export function PiecePickerSheet({
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={cancel}>
       <View className="flex-1 bg-cream-100">
-        <View className="flex-row items-center justify-between border-b border-sage-200 px-4 py-3.5">
-          <Pressable onPress={cancel} accessibilityRole="button" hitSlop={8} className="min-w-[64px]">
-            <Text className="font-label text-base text-sage-700">Cancel</Text>
-          </Pressable>
-          <Text accessibilityRole="header" className="font-heading text-lg text-sage-800">
-            {title}
-          </Text>
-          <View className="min-w-[64px]" />
-        </View>
+        <SheetHeader
+          left={
+            <Pressable onPress={cancel} accessibilityRole="button" hitSlop={8}>
+              <Text className="font-label text-base text-sage-700">Cancel</Text>
+            </Pressable>
+          }
+          title={
+            <Text accessibilityRole="header" className="font-heading text-lg text-sage-800">
+              {title}
+            </Text>
+          }
+        />
 
         <ScrollView contentContainerClassName="gap-4 px-6 pb-10 pt-4">
           {error ? <Text className="font-body text-sm text-red-700">{error}</Text> : null}

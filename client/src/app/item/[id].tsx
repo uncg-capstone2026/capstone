@@ -226,7 +226,7 @@ export default function ItemDetailsScreen() {
             onChange={(excludeFromSuggestions) => save({ excludeFromSuggestions })}
           />
 
-          <RemoveItem onRemove={remove} />
+          <RemoveItem outfits={item.outfits ?? []} onRemove={remove} />
         </ScrollView>
       )}
     </SafeAreaView>
@@ -261,7 +261,7 @@ function ItemName({ name, onRename }: { name: string; onRename: (name: string) =
         selectTextOnFocus
         returnKeyType="done"
         accessibilityLabel="Item name"
-        className="rounded-xl border border-sage-300 bg-cream-50 px-3 py-2 font-heading text-2xl text-sage-800"
+        className="rounded-xl border border-sage-300 bg-cream-50 px-3 py-2 font-heading text-[24px] text-sage-800"
       />
     );
   }

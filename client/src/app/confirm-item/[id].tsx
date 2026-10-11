@@ -8,7 +8,6 @@ import {
   Pressable,
   ScrollView,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,6 +17,7 @@ import { FitSlider } from '@/components/item-details/fit-slider';
 import { GarmentCard } from '@/components/item-details/garment-card';
 import { SelectField } from '@/components/item-details/select-field';
 import { MascotMessage } from '@/components/mascot-message';
+import { TextField } from '@/components/text-field';
 import { SessionExpiredError } from '@/services/api';
 import {
   AI_HINT,
@@ -220,7 +220,7 @@ export default function ConfirmItemScreen() {
 
             <View className="gap-2">
               <Text className="font-label text-base text-sage-700">Name</Text>
-              <TextInput
+              <TextField
                 value={draft.name}
                 onChangeText={(name) => edit({ name })}
                 maxLength={MAX_NAME_LENGTH}
@@ -228,7 +228,8 @@ export default function ConfirmItemScreen() {
                 placeholderTextColor="#7a9264"
                 returnKeyType="done"
                 accessibilityLabel="Name"
-                className="rounded-xl border border-sage-200 bg-cream-50 px-4 py-3 font-body text-base text-sage-800"
+                className="h-12 rounded-xl border border-sage-200 bg-cream-50"
+                textClassName="px-4 font-body text-[16px] text-sage-800"
               />
               {!draft.name.trim() ? (
                 <Text className="font-body text-xs text-sage-500">Give it a name to save it.</Text>

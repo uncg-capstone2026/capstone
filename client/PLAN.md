@@ -69,17 +69,13 @@ The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The 
 ### Client
 The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" opens it, and it shows one outfit at a time as a flat-lay, with "Not for me" and "Looks right". It calls the live `POST /api/stylist/outfit` (`USE_OUTFIT_FIXTURE` is off). "Looks right" calls `POST /api/stylist/outfit/accept` with the `sessionId` and `turnId`, which saves the outfit with a calendar entry for the day and closes the session. "Not for me" sends the answer to `POST /api/stylist/outfit/reprompt` and goes straight to the next outfit in the same session (`USE_ACCEPT_FEEDBACK_FIXTURE` is off).
 
-- [ ] Style Preferences (`src/app/style-preferences.tsx`) is built, but `USE_STYLE_NOTES_FIXTURE` in `src/services/style-notes.ts` keeps notes on the device until the style notes routes below exist. Switch it off then, and test on a device.
+- [ ] Test Style Preferences (`src/app/style-preferences.tsx`) on a device against the live `/api/style-notes` routes (PR #58; `USE_STYLE_NOTES_FIXTURE` is off): adding, the 200-character and 50-note limits (400 messages), and deleting. Notes saved on the device while the fixture was on aren't carried over.
 
 ### Server
 Outfit suggestions are sessions of turns (`ai/repromptimplementation.md`, API in `server/CLAUDE.md`). `POST /api/stylist/outfit { occasion, date?, lat?, lon? }` starts a session and returns `OutfitSuggestion` plus `sessionId` and `turnId`. `POST /api/stylist/outfit/reprompt { sessionId, message? }` returns the next outfit, and `POST /api/stylist/outfit/accept` closes the session. `POST /api/stylist/try-on` is done too.
 
-- [ ] Style notes for the Style Preferences screen ("What StyleMe remembers"). The app's shape is `StyleNote` in `client/src/services/style-notes.ts`.
-  - Model `StyleNote`: `id`, `userId` (cascade), `text` (≤200), `source` enum `User | Learned`, `createdAt`; `@@index([userId, createdAt])`.
-  - Routes behind `AuthGuard`: `GET /api/style-notes` → `{ id, text, source: 'user' | 'learned', createdAt }[]`, newest first. `POST /api/style-notes { text }` → the new note (trimmed, 1–200 characters, and a cap such as 50 notes; 400 with a message otherwise). `DELETE /api/style-notes/:id` → 204, 404 if it isn't the user's.
-  - Prompts: `startSession` and `reprompt` load the user's notes and add a "What the user has told StyleMe about their style" block to the query expansion and outfit selection prompts. The request on screen still takes priority.
-  - Learned notes: the memory job (below) saves short preferences from accepted and rejected outfits as `Learned` notes, skipping ones already covered.
-- [ ] Remove `excludeSuggestionIds` from `POST /api/stylist/outfit` and `POST /api/stylist/outfit/feedback`: the app no longer uses either.
+- [ ] Add style notes to the prompts. `StyleNotesService.listForPrompt(userId)` (`server/src/style-notes/style-notes.service.ts`) returns the user's notes, but nothing calls it yet. Import `StyleNotesModule` into the Stylist module, and have `startSession` and `reprompt` add a "What the user has told StyleMe about their style" block to the query expansion and outfit selection prompts. The request on screen still takes priority.
+- [ ] Learned notes: the memory job (section 8) saves short preferences from accepted and rejected outfits as `Learned` notes, skipping ones already covered.
 
 The remaining Gemini work is in section 8.
 
@@ -114,21 +110,11 @@ The Outfits tab (`src/app/(tabs)/outfits.tsx`) is built: the "All saved outfits"
 Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where `id` is `all`, `favorites` or a collection id): the title, the outfit count and a grid of outfits, each opening `src/app/outfit/[id].tsx`. In edit mode, a user collection can be renamed and have outfits added ("Add from all saved outfits") or removed. Favorites can have outfits added (favorited) or removed (unfavorited). All saved outfits can only delete outfits, after a confirmation.
 
 ### Server
-- [ ] Account screen (`src/app/profile.tsx`) needs three routes. The app already calls them and shows "isn't available yet" until they exist:
-  - `PATCH /api/auth/me` accepts `email`: check it with `isValidEmail` and save it with `normalizeEmail` (`server/src/auth/auth.utils.ts`, same as sign-up), 409 "Email already in use". Right now `parseProfileChanges` rejects it ("email can't be changed here").
-  - `POST /api/auth/me/password { currentPassword, newPassword }` → 204. A wrong current password must be a **400** "Current password is incorrect", not a 401: the app treats any 401 as an expired session and signs the user out. Check the new password with `assertStrongPassword` (`auth.utils.ts`, same as sign-up: 8+ characters, upper, lower, number).
-  - `DELETE /api/auth/me` → 204. Deletes the user (the relations cascade) and their S3 files: item photos and cutouts, body photos.
 - [ ] Optional cleanup: outfit reminders are local notifications scheduled by the app, so `notificationsEnabled` on `User`, `POST /api/auth/me/push-token`, the `PushToken` model and the `Notification` model are unused. Remove them, or keep them for server-sent push later (which would need an Apple Developer account and APNs key). `marketingOptIn` is no longer sent at sign-up either.
-- [ ] Deleting an item that an outfit needs must delete that outfit. An outfit can't work without its `top`, `bottom` or `onepiece` piece, but right now `ItemsService.remove` (`server/src/items/items.service.ts`) only deletes the item's `OutfitItem` rows, so those outfits stay with a missing piece. In the same transaction, find the outfit ids from `OutfitItem` where `itemId` is the item and `slot` is `top`, `bottom` or `onepiece`, delete those `Outfit`s (their pieces, schedule entries and collection memberships should cascade; check the schema), then delete the item. Outfits where the item is only `shoes`, `outerwear` or `accessory` are kept with that piece removed, as now. Go by the slot in each outfit, not the item's category.
-- [ ] Remove the `Sets` category (the app no longer has it). Add a migration that moves existing `Sets` items to `OnePiece` (outfits already store them in the `onepiece` slot, so nothing else changes), then drop `Sets` from the `Category` enum in `server/prisma/schema.prisma`. Remove it from `item-mappings.ts`, `SLOT_BY_CATEGORY` and `isCompleteOutfit` in `server/src/outfits/outfits.service.ts`, and `DISPLAY_ORDER` in `server/src/stylist/outfit-suggestion.ts`. Check the AI tagging never returns it (`server/src/gemini/constants.ts` has no `Sets`, so it shouldn't). Until this lands, an item the server still sends as `sets` only shows under "All" in the closet.
 - [ ] Later: let the user say they didn't wear a planned outfit (e.g. "Didn't wear it" on a past calendar day). That would undo the counts for that entry, rolling `lastWorn` back to the outfit's previous worn entry.
 
 ### Client
 The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45). So are `GET /api/calendar`, `PATCH /api/auth/me` with `name`, `displayName`, `phone` and `notificationsEnabled`, and `POST /api/auth/me/push-token { token }`.
-
-- [ ] Outfit reminders (local notifications, `src/services/reminders.ts`): make a new dev build (`npx expo run:ios`, since `expo-notifications` is native), then test on a device: the prompt after sign-up, a reminder at 5 PM the day before a planned day (one or several outfits), tapping it opens the Calendar, planning or unplanning updates it, the Settings switch (including after denying the prompt), and that signing out clears them.
-- [ ] Once deleting an item deletes the outfits that need it (server, above): when the item is a top, bottom or one-piece in saved outfits, the "Remove from closet" confirmation (`src/components/item-details/remove-item.tsx`) should say so, e.g. "This also deletes the 3 outfits it's in." For shoes, outerwear and accessories, say it's removed from those outfits instead. Base it on the "Saved in outfits" data the item details screen already has (check it includes each outfit's slot, or ask for that on the server). Update the comment on `deleteItem` in `src/services/items.ts` too, and check the Outfits tab, collections and Calendar refresh afterwards.
-- [ ] Account screen (`src/app/profile.tsx`): test changing email and password and deleting the account on a device once the server routes above exist.
 
 ## Suggested order
 
@@ -148,8 +134,7 @@ What the client needs, split by whether it can be done now.
 
 ### Can do now
 - [ ] Test adding by link on a device (section 4).
-- [ ] Test outfit reminders on a device after a new dev build (section 9).
-- [ ] Test name and mobile saving on the Account screen on a device (section 9).
+- [ ] Test Style Preferences on a device (section 7).
 
 ### Needs a server decision first
 

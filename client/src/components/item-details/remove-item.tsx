@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { isRequiredSlot, type ItemOutfit } from '@/services/items';
 
 type RemoveItemProps = {
+  outfits: ItemOutfit[]; // the saved outfits this item is in
   onRemove: () => Promise<void>;
 };
 
-// "Remove from closet" text link. Asks for confirmation inline before deleting.
-export function RemoveItem({ onRemove }: RemoveItemProps) {
+// "Remove from closet" text link. Asks for confirmation inline before deleting, and says which
+// saved outfits are deleted with it (where it's the top, bottom or one-piece).
+export function RemoveItem({ outfits, onRemove }: RemoveItemProps) {
   const [isConfirming, setIsConfirming] = useState(false);
   const [isRemoving, setIsRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,6 +38,11 @@ export function RemoveItem({ onRemove }: RemoveItemProps) {
       <Text className="font-body text-base text-sage-800">
         Remove this item from your closet? This can&apos;t be undone.
       </Text>
+      {consequences(outfits).map((line) => (
+        <Text key={line} className="font-body text-sm text-sage-700">
+          {line}
+        </Text>
+      ))}
       {error ? <Text className="font-body text-sm text-red-600">{error}</Text> : null}
       <View className="flex-row gap-3">
         <Pressable
@@ -58,4 +66,34 @@ export function RemoveItem({ onRemove }: RemoveItemProps) {
       </View>
     </View>
   );
+}
+
+// What else the delete does, e.g. "This also deletes 2 outfits: Brunch fit and Easy layers."
+// and "It's removed from 1 other outfit, which stays saved."
+function consequences(outfits: ItemOutfit[]): string[] {
+  const deleted = outfits.filter((outfit) => isRequiredSlot(outfit.slot));
+  const kept = outfits.length - deleted.length;
+  const lines: string[] = [];
+  if (deleted.length > 0) {
+    lines.push(`This also deletes ${count(deleted.length, 'outfit')}: ${listNames(deleted.map((o) => o.name))}.`);
+  }
+  if (kept > 0) {
+    const other = deleted.length > 0 ? 'other ' : '';
+    lines.push(`It's removed from ${kept} ${other}${kept === 1 ? 'outfit, which stays' : 'outfits, which stay'} saved.`);
+  }
+  return lines;
+}
+
+function count(n: number, noun: string): string {
+  return n === 1 ? `1 ${noun}` : `${n} ${noun}s`;
+}
+
+// "A", "A and B", "A, B and C", "A, B, C and 2 more"
+function listNames(names: string[]): string {
+  const MAX_SHOWN = 3;
+  if (names.length > MAX_SHOWN) {
+    return `${names.slice(0, MAX_SHOWN).join(', ')} and ${names.length - MAX_SHOWN} more`;
+  }
+  if (names.length === 1) return names[0];
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }

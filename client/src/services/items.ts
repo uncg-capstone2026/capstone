@@ -2,6 +2,7 @@ import { isBackendConfigured } from '@/config/api';
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
 import { rememberItemColors } from '@/services/item-colors';
 import { uploadToS3, type PickedPhoto } from '@/services/photos';
+import { syncReminders } from '@/services/reminders';
 import { formatTag } from '@/utils/format';
 
 export type ClothingCategory =
@@ -59,8 +60,19 @@ export type ClothingItemDetails = ClosetItem & {
   timesWorn?: number;
   timesWornThisMonth?: number;
   excludeFromSuggestions?: boolean;
-  outfits?: { id: string; name: string }[]; // the user's outfits that include this item
+  outfits?: ItemOutfit[]; // the user's outfits that include this item, newest first
 };
+
+// The slot an item fills in an outfit. Matches OutfitSlot on the server.
+export type OutfitSlot = 'top' | 'bottom' | 'onepiece' | 'outerwear' | 'shoes' | 'accessory';
+
+export type ItemOutfit = { id: string; name: string; slot: OutfitSlot };
+
+// An outfit can't stand without its top, bottom or one-piece, so deleting the item in one of
+// these slots deletes the outfit too. Matches REQUIRED_SLOTS in server/src/items/items.service.ts.
+export function isRequiredSlot(slot: OutfitSlot): boolean {
+  return slot === 'top' || slot === 'bottom' || slot === 'onepiece';
+}
 
 // GET /api/items/:id/color-grid: a small downscaled copy of the item's image for the color
 // dropper. pixels is row-major, `width * height` long; null where the cutout is transparent.
@@ -262,13 +274,15 @@ export async function getItemColorGrid(id: string): Promise<ItemColorGrid> {
   }
 }
 
-// DELETE /api/items/:id. The server also removes it from outfits and collections.
+// DELETE /api/items/:id. The server also deletes the outfits where it's the top, bottom or
+// one-piece (see isRequiredSlot), and removes it from the rest.
 export async function deleteItem(id: string): Promise<void> {
   try {
     await apiDelete(`/api/items/${encodeURIComponent(id)}`);
   } catch (e) {
     throw itemError(e, 'Could not delete this item. Please try again.');
   }
+  void syncReminders(); // deleted outfits take their planned days with them
 }
 
 // 404 means the item is gone (or isn't this user's). 400 is a validation message worth showing.

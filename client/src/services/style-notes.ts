@@ -2,9 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ApiError, apiDelete, apiGet, apiPost, SessionExpiredError } from '@/services/api';
 
-// The style notes routes aren't on the server yet (PLAN.md section 7), so this keeps notes on
-// the device. Set it to false once they're live. Until then, notes don't reach the AI.
-const USE_STYLE_NOTES_FIXTURE = true;
+// The style notes routes are live. Set this to true to keep notes on the device instead.
+const USE_STYLE_NOTES_FIXTURE = false;
 
 export const MAX_NOTE_LENGTH = 200;
 

@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DayPicker } from '@/components/stylist/day-picker';
+import { TextField } from '@/components/text-field';
 import { startOfToday, toDateKey } from '@/utils/dates';
 
 const MAX_EVENT_LENGTH = 100;
@@ -68,7 +69,7 @@ export function ScheduleSheet({ visible, onCancel, onSchedule }: ScheduleSheetPr
 
           <View className="gap-1.5">
             <Text className="font-label text-sm text-sage-700">Event (optional)</Text>
-            <TextInput
+            <TextField
               value={eventName}
               onChangeText={setEventName}
               placeholder="e.g. Dinner with friends"
@@ -76,7 +77,8 @@ export function ScheduleSheet({ visible, onCancel, onSchedule }: ScheduleSheetPr
               accessibilityLabel="Event name"
               maxLength={MAX_EVENT_LENGTH}
               returnKeyType="done"
-              className="rounded-xl border border-sage-200 bg-cream-100 px-4 py-3 font-body text-base text-sage-800"
+              className="h-12 rounded-xl border border-sage-200 bg-cream-100"
+              textClassName="px-4 font-body text-[16px] text-sage-800"
             />
           </View>
 
