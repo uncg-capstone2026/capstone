@@ -9,11 +9,12 @@ import { MascotMessage } from '@/components/mascot-message';
 import { choosePhotoSource, pickPhoto } from '@/components/photo-picker';
 import { uploadBodyPhoto, type PickedPhoto } from '@/services/photos';
 
-// Shown once during onboarding, and again from Settings → Try-On Photo (`?from=settings`),
-// where it has a back button instead of "Skip for now" and goes back to Settings after Submit.
+// Shown once during onboarding, and again from Settings → Try-On Photo (`?from=settings`) or
+// the try-on screen (`?from=try-on`), where it has a back button instead of "Skip for now"
+// and goes back to that screen after Submit.
 export default function BodyPhotoScreen() {
   const { from } = useLocalSearchParams<{ from?: string }>();
-  const fromSettings = from === 'settings';
+  const fromApp = from === 'settings' || from === 'try-on';
   const [photo, setPhoto] = useState<PickedPhoto | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,7 +41,7 @@ export default function BodyPhotoScreen() {
     setIsSubmitting(true);
     try {
       await uploadBodyPhoto(photo);
-      if (fromSettings) router.back();
+      if (fromApp) router.back();
       else router.replace('/closet');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -54,7 +55,7 @@ export default function BodyPhotoScreen() {
       <ScrollView contentContainerClassName="flex-grow items-center px-6 py-4">
         <View className="w-full max-w-sm flex-1 gap-4">
           <View className="items-center gap-1">
-            {fromSettings ? (
+            {fromApp ? (
               <Pressable
                 onPress={() => router.back()}
                 disabled={isSubmitting}
@@ -118,7 +119,7 @@ export default function BodyPhotoScreen() {
               )}
             </Pressable>
 
-            {fromSettings ? null : (
+            {fromApp ? null : (
               <Pressable
                 onPress={() => router.replace('/closet')}
                 disabled={isSubmitting}

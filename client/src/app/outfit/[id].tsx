@@ -302,7 +302,12 @@ export default function OutfitDetailsScreen() {
           />
 
           <Pressable
-            onPress={() => router.push('/try-on')}
+            onPress={() =>
+              router.push({
+                pathname: '/try-on',
+                params: { itemIds: pieces.map((piece) => piece.id).join(','), name: outfit.name },
+              })
+            }
             accessibilityRole="button"
             className="items-center rounded-full bg-sage-500 py-3.5">
             <Text className="font-label text-base text-cream-50">✧ Try on</Text>

@@ -67,9 +67,11 @@ All done.
 The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The user picks any upcoming day (defaulting to today), sees that day's weather, types where they're headed, and taps "Style my outfit →".
 
 ### Client
-The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" opens it, and it shows one outfit at a time as a flat-lay, with "Not for me" and "Looks right". It calls the live `POST /api/stylist/outfit` (`USE_OUTFIT_FIXTURE` is off). "Looks right" calls `POST /api/stylist/outfit/accept`, which saves the outfit with a calendar entry for the day, and "Not for me" sends the answer to `POST /api/stylist/outfit/feedback` (`USE_ACCEPT_FEEDBACK_FIXTURE` is off).
+The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" opens it, and it shows one outfit at a time as a flat-lay, with "Not for me" and "Looks right". It calls the live `POST /api/stylist/outfit` (`USE_OUTFIT_FIXTURE` is off). "Looks right" calls `POST /api/stylist/outfit/accept` with the `sessionId` and `turnId`, which saves the outfit with a calendar entry for the day and closes the session. "Not for me" sends the answer to `POST /api/stylist/outfit/reprompt` and goes straight to the next outfit in the same session (`USE_ACCEPT_FEEDBACK_FIXTURE` is off).
 
-- [ ] The try-on screen (`src/app/try-on.tsx`, "See it on your photo") and Style Preferences (`src/app/style-preferences.tsx`, "See what was remembered") are "coming soon" placeholders.
+- [ ] Send `lat`/`lon` with the first `POST /api/stylist/outfit` so suggestions use the weather (`ai/frontend-handoff.md` section 2): return `coords` from `src/hooks/use-weather.ts` and wait for it before starting.
+
+- [ ] Style Preferences (`src/app/style-preferences.tsx`, "See what was remembered") is a "coming soon" placeholder.
 
 ### Server
 `POST /api/stylist/outfit { occasion, date? }` (`server/src/stylist/`) is built: `QueryExpansionService` expands and embeds the request, `OutfitPlanningService.findCandidates` finds the closest closet items with pgvector, and `selectOutfit` has Gemini pick one complete outfit. It returns the shape agreed with the app (`OutfitSuggestion` in `src/services/stylist.ts`): `{ suggestionId, name, reasons, items: { id, name, category, type, imageUrl }[] }`, taking `{ date, occasion, excludeSuggestionIds }`, or 422 when the closet can't make a complete outfit.
@@ -122,7 +124,6 @@ The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfi
 - [ ] The Calendar tab (`src/app/(tabs)/calendar.tsx`) is built: a month grid with green dots on upcoming planned days and gold on past ones, the weather card for the selected day, and its planned outfits. It shows a load error until the server has `GET /api/calendar` (see Server above). Test it on a device once that's live.
 - [ ] Notifications: add `expo-notifications` (needs a new dev build), ask for permission when the Settings switch is turned on, register the push token and send the switch to the server once the routes above exist.
 - [ ] Profile (`src/app/profile.tsx`, opened from the Settings profile card) is "coming soon". Build it once `PATCH /api/auth/me` accepts name, display name and phone.
-- [ ] Try on (`src/app/try-on.tsx`) is still "coming soon". Load the user's body photo with `GET /api/photos/body` → `{ photoId, imageUrl }`. On a 404, send them to add a body photo.
 - [ ] Test the outfit details screen against the seeded test account (`seed.tester@example.com` / `TestPass123!`, created by `server/prisma/seed.ts`): edit pieces, plan and unplan days, and check collections.
 
 ## Suggested order
@@ -143,7 +144,6 @@ What the client needs, split by whether it can be done now.
 
 ### Can do now
 - [ ] Test the Outfits tab and the collection screen on a device: accept a Stylist suggestion, then create a collection, add and remove outfits, rename it, favorite and unfavorite, and delete an outfit (section 9).
-- [ ] Build try on with `GET /api/photos/body` (section 9).
 
 ### Needs a server decision first
 
