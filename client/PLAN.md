@@ -69,7 +69,7 @@ The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The 
 ### Client
 The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" opens it, and it shows one outfit at a time as a flat-lay, with "Not for me" and "Looks right". It calls the live `POST /api/stylist/outfit` (`USE_OUTFIT_FIXTURE` is off). "Looks right" calls `POST /api/stylist/outfit/accept` with the `sessionId` and `turnId`, which saves the outfit with a calendar entry for the day and closes the session. "Not for me" sends the answer to `POST /api/stylist/outfit/reprompt` and goes straight to the next outfit in the same session (`USE_ACCEPT_FEEDBACK_FIXTURE` is off).
 
-- [ ] Style Preferences (`src/app/style-preferences.tsx`) is built, but `USE_STYLE_NOTES_FIXTURE` in `src/services/style-notes.ts` keeps notes on the device. The `/api/style-notes` routes are now live (PR #58), so switch it off and test on a device: adding, the 200-character and 50-note limits (400 messages), and deleting.
+- [ ] Test Style Preferences (`src/app/style-preferences.tsx`) on a device against the live `/api/style-notes` routes (PR #58; `USE_STYLE_NOTES_FIXTURE` is off): adding, the 200-character and 50-note limits (400 messages), and deleting. Notes saved on the device while the fixture was on aren't carried over.
 
 ### Server
 Outfit suggestions are sessions of turns (`ai/repromptimplementation.md`, API in `server/CLAUDE.md`). `POST /api/stylist/outfit { occasion, date?, lat?, lon? }` starts a session and returns `OutfitSuggestion` plus `sessionId` and `turnId`. `POST /api/stylist/outfit/reprompt { sessionId, message? }` returns the next outfit, and `POST /api/stylist/outfit/accept` closes the session. `POST /api/stylist/try-on` is done too.
@@ -116,9 +116,6 @@ Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where
 ### Client
 The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45). So are `GET /api/calendar`, `PATCH /api/auth/me` with `name`, `displayName`, `phone` and `notificationsEnabled`, and `POST /api/auth/me/push-token { token }`.
 
-- [ ] Test removing an item on a device: as a top, bottom or one-piece in saved outfits (the confirmation names them, and they're gone from the Outfits tab, collections and Calendar afterwards), and as shoes, outerwear or an accessory (the outfits stay, without it).
-- [ ] Account screen (`src/app/profile.tsx`): test changing email and password and deleting the account on a device. The routes are now live (PR #57). A wrong current password comes back as a 400.
-
 ## Suggested order
 
 1. Basic server setup (section 1) (done)
@@ -137,9 +134,7 @@ What the client needs, split by whether it can be done now.
 
 ### Can do now
 - [ ] Test adding by link on a device (section 4).
-- [ ] Test changing email and password and deleting the account on a device (section 9).
-- [ ] Switch off `USE_STYLE_NOTES_FIXTURE` and test Style Preferences (section 7).
-- [ ] Test removing an item that's in saved outfits on a device (section 9).
+- [ ] Test Style Preferences on a device (section 7).
 
 ### Needs a server decision first
 
