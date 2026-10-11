@@ -73,6 +73,11 @@ enum StyleFeedbackKind {
   Rejected
 }
 
+enum NoteSource {
+  User // typed by the user on the Style Preferences screen
+  Learned // worked out from the outfits they accept and reject
+}
+
 model User {
   id                   String          @id @default(uuid())
   name                 String
@@ -92,6 +97,7 @@ model User {
   styleFeedback        StyleFeedback[]
   outfitSessions       OutfitSession[]
   pushTokens           PushToken[]
+  styleNotes           StyleNote[]
 }
 
 model TryOnPhoto {
@@ -282,4 +288,17 @@ model PushToken {
   createdAt DateTime @default(now())
 
   @@index([userId])
+}
+
+// What StyleMe remembers about the user's style, added to every outfit request.
+// Shown and edited on the Style Preferences screen.
+model StyleNote {
+  id        String     @id @default(uuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      String // 1-200 characters
+  source    NoteSource @default(User)
+  createdAt DateTime   @default(now())
+
+  @@index([userId, createdAt])
 }
