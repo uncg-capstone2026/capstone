@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   S3Client,
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -17,6 +18,7 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
 
 @Injectable()
 export class S3Service {
+  private readonly logger = new Logger(S3Service.name);
   private client: S3Client;
   private bucket: string;
 
@@ -53,19 +55,41 @@ export class S3Service {
     return getSignedUrl(this.client, command, { expiresIn: 300 }); // 5 minutes
   }
 
-  // Returns a URL the client can GET the file from, valid for 24 hours. 
+  // Returns a URL the client can GET the file from, valid for 24 hours.
   async getDownloadUrl(key: string): Promise<string> {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: key,
     });
-    return getSignedUrl(this.client, command, { expiresIn: 60 * 60 * 24 }); // 24 hours  
+    return getSignedUrl(this.client, command, { expiresIn: 60 * 60 * 24 }); // 24 hours
   }
 
   async deleteObject(key: string): Promise<void> {
     await this.client.send(
       new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
     );
+  }
+
+  // Deletes many files, 1000 per request (S3's limit). Never throws: returns
+  // the keys that couldn't be deleted, and logs any batch that failed outright.
+  async deleteObjects(keys: string[]): Promise<string[]> {
+    const failed: string[] = [];
+    for (let i = 0; i < keys.length; i += 1000) {
+      const batch = keys.slice(i, i + 1000);
+      try {
+        const res = await this.client.send(
+          new DeleteObjectsCommand({
+            Bucket: this.bucket,
+            Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+          }),
+        );
+        for (const err of res.Errors ?? []) if (err.Key) failed.push(err.Key);
+      } catch (err) {
+        this.logger.warn(`Batch delete of ${batch.length} files failed: ${(err as Error).message}`);
+        failed.push(...batch);
+      }
+    }
+    return failed;
   }
 
   // Maps a content type to a file extension; null means "not an allowed image".

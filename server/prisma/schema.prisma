@@ -97,7 +97,7 @@ model User {
 model TryOnPhoto {
   id         String   @id @default(uuid())
   userId     String
-  user       User     @relation(fields: [userId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   imageKey   String // S3 key
   isPrimary  Boolean  @default(false)
   capturedAt DateTime @default(now())
@@ -106,7 +106,7 @@ model TryOnPhoto {
 model Item {
   id                     String                      @id @default(uuid())
   userId                 String
-  user                   User                        @relation(fields: [userId], references: [id])
+  user                   User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
   name                   String                      @default("New item")
   category               Category?
   type                   String? // Javier's field, e.g. "t-shirt", "jeans", "sneakers"
@@ -133,7 +133,7 @@ model Item {
 model Collection {
   id        String             @id @default(uuid())
   userId    String
-  user      User               @relation(fields: [userId], references: [id])
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   createdAt DateTime           @default(now())
   outfits   CollectionOutfit[]
@@ -154,7 +154,7 @@ model CollectionOutfit {
 model Outfit {
   id              String             @id @default(uuid())
   userId          String
-  user            User               @relation(fields: [userId], references: [id])
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   name            String
   isFavorite      Boolean            @default(false)
   timesWorn       Int                @default(0)
