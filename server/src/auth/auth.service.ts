@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -9,7 +10,8 @@ import { Prisma } from '@prisma/client';
 import type { User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { LoginDto, PushTokenDto, SignupDto, UpdateMeDto } from './auth.dto';
+import { S3Service } from '../s3/s3.service';
+import { ChangePasswordDto, LoginDto, PushTokenDto, SignupDto, UpdateMeDto } from './auth.dto';
 import {
   assertStrongPassword,
   isValidEmail,
@@ -20,9 +22,12 @@ import { isValidTimeZone, parseProfileChanges, readPushToken } from './profile-c
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly s3: S3Service,
   ) {}
 
   async signup(body: SignupDto) {
@@ -94,9 +99,11 @@ export class AuthService {
     return this.toPublicUser(user);
   }
 
-  // PATCH /api/auth/me { name?, displayName?, phone?, timeZone?, notificationsEnabled? } -> the updated
-  // user (same shape as GET /api/auth/me). 400 for an empty body, unknown fields
-  // or invalid values; 409 if another account already has the phone number.
+  // PATCH /api/auth/me { name?, email?, displayName?, phone?, timeZone?, notificationsEnabled? }
+  // -> the updated user (same shape as GET /api/auth/me). 400 for an empty body,
+  // unknown fields or invalid values; 409 if another account already has the
+  // email or phone. The login token only holds the user id, so it stays valid
+  // after an email change.
   async updateMe(userId: User['id'], body: UpdateMeDto) {
     const changes = parseProfileChanges(body);
     try {
@@ -104,11 +111,64 @@ export class AuthService {
       return this.toPublicUser(user);
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError) {
-        // Phone is the only unique field this route can change.
-        if (e.code === 'P2002') throw new ConflictException('Phone number already in use');
+        // Email and phone are the unique fields this route can change.
+        if (e.code === 'P2002') {
+          const target = String(e.meta?.target ?? '');
+          throw new ConflictException(
+            target.includes('email') ? 'Email already in use' : 'Phone number already in use',
+          );
+        }
         if (e.code === 'P2025') throw new UnauthorizedException(); // the account no longer exists
       }
       throw e;
+    }
+  }
+
+  // POST /api/auth/me/password { currentPassword, newPassword } -> 204.
+  // A wrong current password is a 400, not a 401: the app treats any 401 as an
+  // expired session and signs the user out.
+  async changePassword(userId: User['id'], body: ChangePasswordDto) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+
+    const currentOk =
+      typeof body?.currentPassword === 'string' &&
+      (await bcrypt.compare(body.currentPassword, user.passwordHash));
+    if (!currentOk) throw new BadRequestException('Your current password is incorrect');
+
+    assertStrongPassword(body.newPassword);
+    if (body.newPassword === body.currentPassword) {
+      throw new BadRequestException('Choose a password different from your current one');
+    }
+
+    const passwordHash = await bcrypt.hash(body.newPassword, 12);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  }
+
+  // DELETE /api/auth/me -> 204. Deletes the account and everything in it: items,
+  // body photos, outfits (with their pieces, calendar days and collection
+  // entries), collections, Stylist sessions, feedback, notifications and push
+  // tokens, all through the schema's cascades. The photos in S3 go afterwards:
+  // the database comes first, so an S3 problem can never leave a half-deleted
+  // account, and S3 failures are only logged.
+  async deleteAccount(userId: User['id']) {
+    const [items, photos] = await Promise.all([
+      this.prisma.item.findMany({ where: { userId }, select: { imageKey: true, cutoutKey: true } }),
+      this.prisma.tryOnPhoto.findMany({ where: { userId }, select: { imageKey: true } }),
+    ]);
+    const keys = [
+      ...new Set(
+        [...items.flatMap((item) => [item.imageKey, item.cutoutKey]), ...photos.map((photo) => photo.imageKey)]
+          .filter((key): key is string => !!key),
+      ),
+    ];
+
+    const { count } = await this.prisma.user.deleteMany({ where: { id: userId } });
+    if (count === 0) throw new UnauthorizedException(); // already gone
+
+    const failed = await this.s3.deleteObjects(keys);
+    if (failed.length > 0) {
+      this.logger.warn(`Account ${userId} deleted, but ${failed.length} of ${keys.length} S3 files weren't: ${failed.join(', ')}`);
     }
   }
 

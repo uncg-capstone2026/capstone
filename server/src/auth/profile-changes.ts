@@ -1,30 +1,35 @@
 import { BadRequestException } from '@nestjs/common';
-import { normalizePhone } from './auth.utils';
+import { isValidEmail, normalizeEmail, normalizePhone } from './auth.utils';
 
 // Checks and cleans the body of PATCH /api/auth/me. Every field is optional,
 // but at least one must be sent. Throws a 400 with a message the app can show.
 
 export type ProfileChanges = {
   name?: string;
+  email?: string; // trimmed and lowercased
   displayName?: string | null;
   phone?: string | null; // E.164, e.g. +13365550123
   timeZone?: string;
   notificationsEnabled?: boolean;
 };
 
-const EDITABLE = ['name', 'displayName', 'phone', 'timeZone', 'notificationsEnabled'];
+const EDITABLE = ['name', 'email', 'displayName', 'phone', 'timeZone', 'notificationsEnabled'];
 const NAME_MAX_LENGTH = 50;
 
 export function parseProfileChanges(body: unknown): ProfileChanges {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw bad('Nothing to update');
   const input = body as Record<string, unknown>;
 
-  // Email, password and the like can't be changed through this route.
+  // Password and the like can't be changed through this route (password has its own).
   const other = Object.keys(input).find((key) => !EDITABLE.includes(key));
   if (other) throw bad(`${other} can't be changed here`);
 
   const changes: ProfileChanges = {};
   if (input.name !== undefined) changes.name = readName(input.name, 'Name') ?? undefined;
+  if (input.email !== undefined) {
+    if (!isValidEmail(input.email)) throw bad('Enter a valid email');
+    changes.email = normalizeEmail(input.email);
+  }
   if (input.displayName !== undefined) changes.displayName = readName(input.displayName, 'Display name', { allowEmpty: true });
   if (input.phone !== undefined) changes.phone = readPhone(input.phone);
   if (input.timeZone !== undefined) {
