@@ -1,6 +1,7 @@
 import { isBackendConfigured } from '@/config/api';
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
 import { getSentTimeZone, setSentTimeZone } from '@/services/preferences';
+import { cancelReminders } from '@/services/reminders';
 import { clearToken, getToken, saveToken } from '@/services/session';
 
 export type LoginMode = 'email' | 'phone';
@@ -16,7 +17,6 @@ export type SignUpInput = {
   email: string;
   phone?: string;
   password: string;
-  marketingOptIn: boolean;
 };
 
 // GET /api/auth/me, and `user` in the login and sign-up responses.
@@ -54,7 +54,9 @@ export function getMe(): Promise<PublicUser> {
   return apiGet<PublicUser>('/api/auth/me');
 }
 
+// Also clears outfit reminders, so this account's plans don't notify the next person to sign in.
 export async function signOut(): Promise<void> {
+  await cancelReminders();
   await clearToken();
 }
 
@@ -109,6 +111,7 @@ export async function deleteAccount(): Promise<void> {
     if (e instanceof ApiError && e.status === 404) throw new Error("Deleting your account isn't available yet.");
     throw toAuthError(e);
   }
+  await cancelReminders();
   await clearToken();
 }
 

@@ -1,6 +1,7 @@
 import { ApiError, apiPost, SessionExpiredError } from '@/services/api';
 import { listItems, type ClosetItem, type ClothingCategory } from '@/services/items';
 import { saveFixtureOutfit } from '@/services/outfits';
+import { syncReminders } from '@/services/reminders';
 import { toDateKey } from '@/utils/dates';
 
 // All the Stylist routes are live. Set USE_OUTFIT_FIXTURE to true to build suggestions from
@@ -93,10 +94,12 @@ export async function acceptOutfit(request: AcceptOutfitRequest): Promise<{ outf
     return { outfitId };
   }
   try {
-    return await apiPost<{ outfitId: string }>('/api/stylist/outfit/accept', {
+    const saved = await apiPost<{ outfitId: string }>('/api/stylist/outfit/accept', {
       ...request,
       date: toDateKey(request.date),
     });
+    void syncReminders(); // accepting plans it for the day
+    return saved;
   } catch (e) {
     throw stylistError(e, 'Could not save this outfit. Please try again.');
   }

@@ -11,13 +11,15 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AuthCheckbox, AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
+import { AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
 import { PasswordStrength } from '@/components/auth/password-strength';
+import { saveNotificationsEnabled } from '@/hooks/use-notifications-enabled';
 import {
   TakenFieldError,
   continueWithGoogle,
   signUpWithPassword,
 } from '@/services/auth';
+import { ensureNotificationPermission } from '@/services/reminders';
 import {
   formatPhone,
   isValidEmail,
@@ -34,7 +36,6 @@ export default function SignUpScreen() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // A field's error shows once the user has left it, or after they try to submit.
@@ -75,8 +76,10 @@ export default function SignUpScreen() {
         email: email.trim().toLowerCase(),
         phone: toE164(phone),
         password,
-        marketingOptIn,
       });
+      // The system "Allow notifications?" prompt, for outfit reminders. Shown once, right after
+      // the account is created; after that it can only be turned on from Settings.
+      if (await ensureNotificationPermission()) await saveNotificationsEnabled(true);
       router.replace('/body-photo');
     } catch (e) {
       if (e instanceof TakenFieldError) {
@@ -170,11 +173,6 @@ export default function SignUpScreen() {
                 secureTextEntry
                 autoComplete="new-password"
                 textContentType="newPassword"
-              />
-              <AuthCheckbox
-                checked={marketingOptIn}
-                onChange={setMarketingOptIn}
-                label="Send me styling picks and event alerts by email or text. You can turn these off any time."
               />
 
               {error ? <Text className="font-body text-sm text-red-600">{error}</Text> : null}

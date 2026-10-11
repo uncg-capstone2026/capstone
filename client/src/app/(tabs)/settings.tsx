@@ -1,13 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
-import { useCallback, useState, type ComponentProps, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { useCallback, useEffect, useState, type ComponentProps, type ReactNode } from 'react';
+import { ActivityIndicator, Alert, AppState, Linking, Pressable, ScrollView, Switch, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useNotificationsEnabled } from '@/hooks/use-notifications-enabled';
 import { useTemperatureUnit } from '@/hooks/use-temperature-unit';
 import { getMe, signOut, type PublicUser } from '@/services/auth';
 import { hasBodyPhoto } from '@/services/photos';
+import {
+  cancelReminders,
+  ensureNotificationPermission,
+  getNotificationPermission,
+  syncReminders,
+  type NotificationPermission,
+} from '@/services/reminders';
 
 const ICON_COLOR = '#4d5d3f'; // sage-700
 const CHEVRON_COLOR = '#93aa7d'; // sage-400
@@ -18,6 +25,17 @@ export default function SettingsScreen() {
   const [hasPhoto, setHasPhoto] = useState<boolean | null>(null); // null until known
   const { unit, setUnit } = useTemperatureUnit();
   const { enabled: notificationsEnabled, setEnabled: setNotificationsEnabled } = useNotificationsEnabled();
+  const [permission, setPermission] = useState<NotificationPermission | null>(null);
+
+  // Rechecked on return to the app too, e.g. after allowing notifications in the Settings app.
+  useEffect(() => {
+    const check = () => getNotificationPermission().then(setPermission).catch(() => {});
+    check();
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
+    return () => subscription.remove();
+  }, []);
 
   // Reload on focus, so "Set" shows straight after adding a try-on photo.
   useFocusEffect(
@@ -47,6 +65,27 @@ export default function SettingsScreen() {
       // Go to login even if clearing the token failed, so the button never looks stuck.
     }
     router.replace('/login');
+  }
+
+  // Reminders need both this switch and the system permission. Turning it on asks for the
+  // permission if it hasn't been answered yet, or points to the Settings app if it was denied.
+  async function changeNotifications(on: boolean) {
+    if (!on) {
+      await setNotificationsEnabled(false);
+      await cancelReminders();
+      return;
+    }
+    if (await ensureNotificationPermission()) {
+      setPermission('granted');
+      await setNotificationsEnabled(true);
+      void syncReminders();
+      return;
+    }
+    setPermission('denied');
+    Alert.alert('Notifications are off for StyleMe', 'Turn them on in Settings to get outfit reminders.', [
+      { text: 'Not now', style: 'cancel' },
+      { text: 'Open Settings', onPress: () => void Linking.openSettings() },
+    ]);
   }
 
   const name = user ? (user.displayName ?? user.name) : '';
@@ -102,10 +141,11 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="notifications-outline"
             label="Notifications"
+            accessibilityHint="Reminds you at 5 PM the day before a planned outfit"
             right={
               <Switch
-                value={notificationsEnabled}
-                onValueChange={setNotificationsEnabled}
+                value={notificationsEnabled && permission === 'granted'}
+                onValueChange={(on) => void changeNotifications(on)}
                 trackColor={{ true: '#7a9264' }}
                 accessibilityLabel="Notifications"
               />

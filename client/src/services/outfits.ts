@@ -1,4 +1,5 @@
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, SessionExpiredError } from '@/services/api';
+import { syncReminders } from '@/services/reminders';
 import type { SuggestedPiece } from '@/services/stylist';
 
 // The outfit and collection routes are live. Set this to true to use an in-memory fixture
@@ -243,6 +244,7 @@ export async function deleteOutfit(outfitId: string): Promise<void> {
   } catch (e) {
     throw collectionsError(e, 'Could not delete this outfit. Please try again.');
   }
+  void syncReminders(); // its planned days go with it
 }
 
 // PATCH /api/outfits/:id { isFavorite }
@@ -294,7 +296,9 @@ export async function scheduleOutfit(
     return created;
   }
   try {
-    return await apiPost<ScheduledDate>(`/api/outfits/${outfitId}/schedule`, entry);
+    const created = await apiPost<ScheduledDate>(`/api/outfits/${outfitId}/schedule`, entry);
+    void syncReminders();
+    return created;
   } catch (e) {
     throw collectionsError(e, 'Could not schedule this outfit. Please try again.');
   }
@@ -312,6 +316,7 @@ export async function unscheduleOutfit(outfitId: string, entryId: string): Promi
   } catch (e) {
     throw collectionsError(e, 'Could not remove this date. Please try again.');
   }
+  void syncReminders();
 }
 
 export function formatOutfitCount(count: number): string {

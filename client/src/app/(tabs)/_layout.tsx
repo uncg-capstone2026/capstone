@@ -4,10 +4,14 @@ import { Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, View, type GestureResponderEvent } from 'react-native';
 
+import { useOutfitReminders } from '@/hooks/use-outfit-reminders';
+
 const ACTIVE_COLOR = '#4d5d3f'; // sage-700
 const INACTIVE_COLOR = '#93aa7d'; // sage-400
 
 export default function TabsLayout() {
+  useOutfitReminders();
+
   return (
     <>
       <StatusBar style="dark" />

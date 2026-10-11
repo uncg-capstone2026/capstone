@@ -113,12 +113,13 @@ Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where
   - `PATCH /api/auth/me` accepts `email`: check it with `isValidEmail` and save it with `normalizeEmail` (`server/src/auth/auth.utils.ts`, same as sign-up), 409 "Email already in use". Right now `parseProfileChanges` rejects it ("email can't be changed here").
   - `POST /api/auth/me/password { currentPassword, newPassword }` → 204. A wrong current password must be a **400** "Current password is incorrect", not a 401: the app treats any 401 as an expired session and signs the user out. Check the new password with `assertStrongPassword` (`auth.utils.ts`, same as sign-up: 8+ characters, upper, lower, number).
   - `DELETE /api/auth/me` → 204. Deletes the user (the relations cascade) and their S3 files: item photos and cutouts, body photos.
+- [ ] Optional cleanup: outfit reminders are local notifications scheduled by the app, so `notificationsEnabled` on `User`, `POST /api/auth/me/push-token`, the `PushToken` model and the `Notification` model are unused. Remove them, or keep them for server-sent push later (which would need an Apple Developer account and APNs key). `marketingOptIn` is no longer sent at sign-up either.
 - [ ] Later: let the user say they didn't wear a planned outfit (e.g. "Didn't wear it" on a past calendar day). That would undo the counts for that entry, rolling `lastWorn` back to the outfit's previous worn entry.
 
 ### Client
 The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45). So are `GET /api/calendar`, `PATCH /api/auth/me` with `name`, `displayName`, `phone` and `notificationsEnabled`, and `POST /api/auth/me/push-token { token }`.
 
-- [ ] Notifications: add `expo-notifications` (needs a new dev build), ask for permission when the Settings switch is turned on, register the push token with `POST /api/auth/me/push-token` and send the switch as `notificationsEnabled` with `PATCH /api/auth/me`.
+- [ ] Outfit reminders (local notifications, `src/services/reminders.ts`): make a new dev build (`npx expo run:ios`, since `expo-notifications` is native), then test on a device: the prompt after sign-up, a reminder at 5 PM the day before a planned day (one or several outfits), tapping it opens the Calendar, planning or unplanning updates it, the Settings switch (including after denying the prompt), and that signing out clears them.
 - [ ] Account screen (`src/app/profile.tsx`): test changing email and password and deleting the account on a device once the server routes above exist.
 
 ## Suggested order
@@ -139,7 +140,7 @@ What the client needs, split by whether it can be done now.
 
 ### Can do now
 - [ ] Test adding by link on a device (section 4).
-- [ ] Wire up notifications (section 9).
+- [ ] Test outfit reminders on a device after a new dev build (section 9).
 - [ ] Test name and mobile saving on the Account screen on a device (section 9).
 
 ### Needs a server decision first

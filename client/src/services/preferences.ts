@@ -22,8 +22,9 @@ export async function setTemperatureUnit(unit: TemperatureUnit): Promise<void> {
   await AsyncStorage.setItem(TEMPERATURE_UNIT_KEY, unit);
 }
 
-// The Notifications switch in Settings. Only kept on this device for now; nothing sends
-// notifications yet (see PLAN.md).
+// The Notifications switch in Settings, for outfit reminders. Kept on this device, since the
+// reminders are local notifications (src/services/reminders.ts). They also need the system
+// notification permission, so on with permission denied still means no reminders.
 export const DEFAULT_NOTIFICATIONS_ENABLED = true;
 
 const NOTIFICATIONS_ENABLED_KEY = 'styleme.notifications-enabled';
