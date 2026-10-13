@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import type { Category, Item, OutfitSlot, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { Category, Item, OutfitSlot } from '@prisma/client';
 import { CATEGORY_TO_CLIENT } from '../items/item-mappings';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
@@ -27,8 +28,9 @@ export type SavedOutfit = {
   items: OutfitPiece[]; // bottom layer first (zIndex order)
 };
 
-// A day the outfit is planned for (or was worn on).
-export type ScheduledDay = { id: string; date: string; eventName: string | null }; // date: 'YYYY-MM-DD'
+// A day the outfit is planned for (or was worn on). notWorn: the user said
+// they didn't wear it that day ("Didn't wear it"), so it isn't counted.
+export type ScheduledDay = { id: string; date: string; eventName: string | null; notWorn: boolean }; // date: 'YYYY-MM-DD'
 
 // GET /api/outfits/:id: the outfit plus its calendar days and collections.
 export type OutfitDetails = SavedOutfit & {
@@ -107,7 +109,7 @@ export class OutfitsService {
         ...WITH_PIECES,
         calendarEntries: {
           orderBy: { date: 'asc' },
-          select: { id: true, date: true, eventName: true },
+          select: { id: true, date: true, eventName: true, notWorn: true },
         },
         collections: {
           where: { collection: { userId } },
@@ -176,7 +178,7 @@ export class OutfitsService {
     await this.assertOwned(userId, id);
     const entry = await this.prisma.calendarEntry.create({
       data: { outfitId: id, date: dayToDate(input.date), eventName: input.eventName?.trim() || null },
-      select: { id: true, date: true, eventName: true },
+      select: { id: true, date: true, eventName: true, notWorn: true },
     });
     return toScheduledDay(entry);
   }
@@ -188,6 +190,57 @@ export class OutfitsService {
       where: { id: entryId, outfitId: id, outfit: { userId } },
     });
     if (count === 0) throw new NotFoundException({ message: 'Scheduled day not found' });
+  }
+
+  // POST /api/outfits/:id/schedule/:entryId/not-worn -> the updated outfit.
+  // "Didn't wear it": only for days that have come (today or earlier, in the
+  // user's time zone); a future day is a 400. If the hourly job already counted
+  // the day, its wear is taken back off the outfit and its items, and lastWorn
+  // falls back to the outfit's latest day that's still worn. Marking a day
+  // twice changes nothing. 404 if the day isn't on the user's outfit.
+  async markNotWorn(userId: string, id: string, entryId: string): Promise<OutfitDetails> {
+    const entry = await this.findOwnedEntry(userId, id, entryId);
+    if (dateToDay(entry.date) > (await this.todayFor(userId))) {
+      throw new BadRequestException({ message: "You can only mark a day you've already had as not worn" });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      // Flip the flag first. 0 rows means it was already marked: nothing to do.
+      // From here on the hourly job can't count this day (it checks notWorn).
+      const flipped = await tx.calendarEntry.updateMany({
+        where: { id: entryId, notWorn: false },
+        data: { notWorn: true },
+      });
+      if (flipped.count === 0) return;
+
+      // Read wornCountedAt after the flip, so a count the job made just before
+      // is seen and undone.
+      const { wornCountedAt } = await tx.calendarEntry.findUniqueOrThrow({
+        where: { id: entryId },
+        select: { wornCountedAt: true },
+      });
+      if (wornCountedAt) {
+        await this.uncountWear(tx, id, wornCountedAt);
+        // Uncounted again, so undoing "Didn't wear it" lets the job count it.
+        await tx.calendarEntry.update({ where: { id: entryId }, data: { wornCountedAt: null } });
+      }
+      await this.recomputeLastWorn(tx, id);
+    });
+
+    return this.getOne(userId, id);
+  }
+
+  // DELETE /api/outfits/:id/schedule/:entryId/not-worn -> the updated outfit.
+  // Undoes "Didn't wear it". The day is counted as worn again by the next
+  // hourly wear-tracking run (within the hour). Fine if it wasn't marked.
+  // 404 if the day isn't on the user's outfit.
+  async unmarkNotWorn(userId: string, id: string, entryId: string): Promise<OutfitDetails> {
+    await this.findOwnedEntry(userId, id, entryId);
+    await this.prisma.calendarEntry.updateMany({
+      where: { id: entryId, notWorn: true },
+      data: { notWorn: false },
+    });
+    return this.getOne(userId, id);
   }
 
   // The app's SavedOutfit shape. Public so collections can reuse it for covers.
@@ -226,6 +279,63 @@ export class OutfitsService {
       .map((piece, zIndex) => ({ ...piece, zIndex }));
   }
 
+  // One of the user's outfit's calendar days. 404 otherwise.
+  private async findOwnedEntry(userId: string, outfitId: string, entryId: string) {
+    const entry = await this.prisma.calendarEntry.findFirst({
+      where: { id: entryId, outfitId, outfit: { userId } },
+      select: { id: true, date: true },
+    });
+    if (!entry) throw new NotFoundException({ message: 'Scheduled day not found' });
+    return entry;
+  }
+
+  // Today as 'YYYY-MM-DD' in the user's time zone.
+  private async todayFor(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { timeZone: true } });
+    try {
+      return new Intl.DateTimeFormat('en-CA', { timeZone: user?.timeZone ?? 'UTC' }).format(new Date());
+    } catch {
+      return new Date().toISOString().slice(0, 10); // unknown zone: fall back to UTC
+    }
+  }
+
+  // Takes one counted wear back off the outfit and each of its items (never
+  // below 0). An item's "this month" count only goes down if the wear was
+  // counted in its current 30-day period (wearPeriodStart <= when it was
+  // counted); a wear from an earlier period was already reset away.
+  // Uses the outfit's pieces as they are now, so if they were edited after the
+  // day was counted, the current pieces are the ones taken off.
+  private async uncountWear(tx: Prisma.TransactionClient, outfitId: string, countedAt: Date): Promise<void> {
+    await tx.$executeRaw`
+      UPDATE "Outfit" SET "timesWorn" = GREATEST("timesWorn" - 1, 0) WHERE id = ${outfitId}
+    `;
+    const pieces = await tx.outfitItem.findMany({ where: { outfitId }, select: { itemId: true } });
+    const itemIds = [...new Set(pieces.map((piece) => piece.itemId))];
+    if (itemIds.length === 0) return;
+    await tx.$executeRaw`
+      UPDATE "Item"
+      SET "timesWorn" = GREATEST("timesWorn" - 1, 0),
+          "timesWornThisMonth" = CASE
+            WHEN "wearPeriodStart" <= ${countedAt} THEN GREATEST("timesWornThisMonth" - 1, 0)
+            ELSE "timesWornThisMonth"
+          END
+      WHERE id IN (${Prisma.join(itemIds)})
+    `;
+  }
+
+  // lastWorn = the latest day that's been counted and isn't marked not worn,
+  // or null if there's none left.
+  private async recomputeLastWorn(tx: Prisma.TransactionClient, outfitId: string): Promise<void> {
+    await tx.$executeRaw`
+      UPDATE "Outfit"
+      SET "lastWorn" = (
+        SELECT MAX("date") FROM "CalendarEntry"
+        WHERE "outfitId" = ${outfitId} AND "wornCountedAt" IS NOT NULL AND "notWorn" = false
+      )
+      WHERE id = ${outfitId}
+    `;
+  }
+
   // 404 unless the outfit is the user's.
   private async assertOwned(userId: string, id: string): Promise<void> {
     const outfit = await this.prisma.outfit.findFirst({ where: { id, userId }, select: { id: true } });
@@ -254,8 +364,8 @@ function isComplete(categories: (Category | null)[]): boolean {
   return has('OnePiece') || (has('Top') && has('Bottoms'));
 }
 
-function toScheduledDay(entry: { id: string; date: Date; eventName: string | null }): ScheduledDay {
-  return { id: entry.id, date: dateToDay(entry.date), eventName: entry.eventName };
+function toScheduledDay(entry: { id: string; date: Date; eventName: string | null; notWorn: boolean }): ScheduledDay {
+  return { id: entry.id, date: dateToDay(entry.date), eventName: entry.eventName, notWorn: entry.notWorn };
 }
 
 function notFound() {

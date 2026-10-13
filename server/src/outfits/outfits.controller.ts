@@ -61,6 +61,29 @@ export class OutfitsController {
     return this.outfits.schedule(userId, id, body);
   }
 
+  // POST /api/outfits/:id/schedule/:entryId/not-worn -> the updated outfit
+  // "Didn't wear it" on a day that's come. 400 for a future day.
+  @Post(':id/schedule/:entryId/not-worn')
+  @HttpCode(200)
+  markNotWorn(
+    @CurrentUserId() userId: User['id'],
+    @Param('id') id: string,
+    @Param('entryId') entryId: string,
+  ) {
+    return this.outfits.markNotWorn(userId, id, entryId);
+  }
+
+  // DELETE /api/outfits/:id/schedule/:entryId/not-worn -> the updated outfit
+  // Undo: the day is counted as worn again within the hour.
+  @Delete(':id/schedule/:entryId/not-worn')
+  unmarkNotWorn(
+    @CurrentUserId() userId: User['id'],
+    @Param('id') id: string,
+    @Param('entryId') entryId: string,
+  ) {
+    return this.outfits.unmarkNotWorn(userId, id, entryId);
+  }
+
   // DELETE /api/outfits/:id/schedule/:entryId -> 204
   @Delete(':id/schedule/:entryId')
   @HttpCode(204)

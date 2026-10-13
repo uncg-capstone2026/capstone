@@ -193,6 +193,7 @@ model CalendarEntry {
   weatherSummary String?
   tempHigh       Int?
   wornCountedAt  DateTime? // set once this entry's wear has been added to the counts
+  notWorn        Boolean        @default(false) // "didnt wear it"; the hourly job skips these days
   createdAt      DateTime       @default(now())
   notifications  Notification[]
 

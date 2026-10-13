@@ -66,7 +66,8 @@ export class WearTrackingService implements OnApplicationBootstrap {
   // ---- Step 2: claim and count past calendar entries ----
 
   // Counts every calendar entry whose day is before today in its user's time
-  // zone and hasn't been counted yet. Returns how many were counted.
+  // zone and hasn't been counted yet, skipping days the user marked "Didn't
+  // wear it". Returns how many were counted.
   private async countPastEntries(): Promise<number> {
     let counted = 0;
     for (let batch = 0; batch < MAX_BATCHES; batch++) {
@@ -78,6 +79,7 @@ export class WearTrackingService implements OnApplicationBootstrap {
         JOIN "Outfit" o ON o.id = ce."outfitId"
         JOIN "User" u ON u.id = o."userId"
         WHERE ce."wornCountedAt" IS NULL
+          AND ce."notWorn" = false
           AND ce."date"::date < (now() AT TIME ZONE u."timeZone")::date
         ORDER BY ce."date"
         LIMIT ${BATCH_SIZE}
@@ -99,9 +101,10 @@ export class WearTrackingService implements OnApplicationBootstrap {
   // already claimed it.
   private countEntry(entryId: string): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
-      // 1. Claim it. 0 rows updated means someone else already counted it.
+      // 1. Claim it. 0 rows updated means someone else already counted it, or
+      // the user marked it "Didn't wear it" in the meantime.
       const claimed = await tx.calendarEntry.updateMany({
-        where: { id: entryId, wornCountedAt: null },
+        where: { id: entryId, wornCountedAt: null, notWorn: false },
         data: { wornCountedAt: new Date() },
       });
       if (claimed.count === 0) return false;

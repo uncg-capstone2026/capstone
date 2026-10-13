@@ -8,6 +8,7 @@ export type CalendarDay = {
   id: string; // the calendar entry's id
   date: string; // YYYY-MM-DD
   eventName: string | null;
+  notWorn: boolean; // the user said they didn't wear it ("Didn't wear it")
   outfit: SavedOutfit;
 };
 
@@ -48,6 +49,7 @@ export class CalendarService {
         id: entry.id,
         date: dateToDay(entry.date),
         eventName: entry.eventName,
+        notWorn: entry.notWorn,
         outfit: await this.outfits.toSavedOutfit(entry.outfit),
       })),
     );
