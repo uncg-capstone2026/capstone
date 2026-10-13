@@ -74,7 +74,7 @@ The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" ope
 ### Server
 Outfit suggestions are sessions of turns (`ai/repromptimplementation.md`, API in `server/CLAUDE.md`). `POST /api/stylist/outfit { occasion, date?, lat?, lon? }` starts a session and returns `OutfitSuggestion` plus `sessionId` and `turnId`. `POST /api/stylist/outfit/reprompt { sessionId, message? }` returns the next outfit, and `POST /api/stylist/outfit/accept` closes the session. `POST /api/stylist/try-on` is done too.
 
-- [ ] Add style notes to the prompts. `StyleNotesService.listForPrompt(userId)` (`server/src/style-notes/style-notes.service.ts`) returns the user's notes, but nothing calls it yet. Import `StyleNotesModule` into the Stylist module, and have `startSession` and `reprompt` add a "What the user has told StyleMe about their style" block to the query expansion and outfit selection prompts. The request on screen still takes priority.
+- [ ] Add style notes to the prompts. `StyleNotesService.listForPrompt(userId)` (`server/src/style-notes/style-notes.service.ts`) returns the user's notes (and `findRelevant` searches them by similarity, since PR #62 embeds each note), but nothing calls either yet. Import `StyleNotesModule` into the Stylist module, and have `startSession` and `reprompt` add a "What the user has told StyleMe about their style" block to the query expansion and outfit selection prompts. The request on screen still takes priority.
 - [ ] Learned notes: the memory job (section 8) saves short preferences from accepted and rejected outfits as `Learned` notes, skipping ones already covered.
 
 The remaining Gemini work is in section 8.
@@ -111,7 +111,9 @@ Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where
 
 ### Server
 - [ ] Optional cleanup: outfit reminders are local notifications scheduled by the app, so `notificationsEnabled` on `User`, `POST /api/auth/me/push-token`, the `PushToken` model and the `Notification` model are unused. Remove them, or keep them for server-sent push later (which would need an Apple Developer account and APNs key). `marketingOptIn` is no longer sent at sign-up either.
-- [ ] Later: let the user say they didn't wear a planned outfit (e.g. "Didn't wear it" on a past calendar day). That would undo the counts for that entry, rolling `lastWorn` back to the outfit's previous worn entry.
+- [ ] "Didn't wear it" fix: Undo on an older day adds a wear to the wrong 30-day period. If the day was counted in an item's earlier period, `markNotWorn` correctly leaves `timesWornThisMonth` alone, but after Undo the hourly job counts the day again and adds 1 to the current period. Have `countEntry` (`server/src/wear-tracking/wear-tracking.service.ts`) only add to `timesWornThisMonth` when the entry's `date` falls in the item's current period (`date >= wearPeriodStart`), and keep adding to `timesWorn` as now. This also fixes old days that get counted late.
+- [ ] "Didn't wear it" fix: `recomputeLastWorn` (`server/src/outfits/outfits.service.ts`) only looks at calendar entries that still exist. A counted entry that was deleted keeps its wear in `timesWorn` but no longer counts toward `lastWorn`, so marking another day can move `lastWorn` back too far, or set it to `null` while `timesWorn` is above 0. Options: when marking, only recompute if the marked day was the current `lastWorn`, and otherwise leave it; or keep deleted counted entries (soft delete) so their dates still count.
+- [ ] Optional "Didn't wear it" fix: `uncountWear` takes the wear off the outfit's current pieces. If the pieces were edited after the day was counted, the wrong items lose a wear. To fix it, record which items were counted for each entry when the job counts it (for example a `countedItemIds String[]` on `CalendarEntry`), and subtract from those.
 
 ### Client
 The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45). So are `GET /api/calendar`, `PATCH /api/auth/me` with `name`, `displayName`, `phone` and `notificationsEnabled`, and `POST /api/auth/me/push-token { token }`.
@@ -135,6 +137,7 @@ What the client needs, split by whether it can be done now.
 ### Can do now
 - [ ] Test adding by link on a device (section 4).
 - [ ] Test Style Preferences on a device (section 7).
+- [ ] Test "Didn't wear it" and Undo on the Calendar tab on a device (section 9): on a past day, check the outfit's times worn and last worn go down, and that Undo counts it again within the hour. The Oct 13 `notWorn` migration has to have run on Railway first.
 
 ### Needs a server decision first
 
