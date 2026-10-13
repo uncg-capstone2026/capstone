@@ -297,6 +297,7 @@ model StyleNote {
   user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   text      String // 1-200 characters
   source    NoteSource @default(User)
+  embedding Unsupported("vector(768)")? // the note's meaning, for similarity search.
   createdAt DateTime   @default(now())
 
   @@index([userId, createdAt])
