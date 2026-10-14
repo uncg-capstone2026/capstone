@@ -30,6 +30,7 @@ type OutfitSuggestion = {
 `POST /api/stylist/outfit/reprompt` `{ sessionId: string; message?: string /* ≤300 */ }` → `OutfitSuggestion`
 - No message is "Try another" (served from a queue of extra outfits when possible, with no AI call).
 - With a message, a router picks `reroll`, `swap` ("different shoes"), `refine` ("add a jacket", "more formal") or `restart` ("actually it's for a wedding").
+- `swap` and a plain removal (`refine` with only "no hat") are also served from the queue when possible: first an outfit that only changes those pieces, otherwise any other queued outfit, which can change other pieces too. The user reprompts from there. Otherwise Gemini picks a replacement.
 
 Both routes:
 - One complete outfit: Top + Bottoms, or a OnePiece (dress). Shoes, outerwear and accessory are optional.

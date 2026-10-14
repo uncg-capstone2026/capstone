@@ -13,7 +13,9 @@ import { HistorySummaryService } from '../gemini/history-summary/service';
 import {
   canBuildNewOutfit,
   comboKey,
+  hasNoneOfTypes,
   isCompleteOutfit,
+  onlyChanges,
   pickToSend,
   type CandidateLists,
 } from '../gemini/outfit-planning/candidates';
@@ -71,6 +73,9 @@ type RouteResult = {
 };
 
 type Selection = { outfits: SelectedOutfit[]; missing: string | null; sentIds: string[] };
+
+// A queued outfit taken by takeFromQueue, and the queue left after it.
+type FromQueue = { outfit: RouteResult['outfit']; queue: QueuedOutfit[]; test: number };
 
 // The Stylist tab: turns a request into an outfit from the user's closet, and
 // reacts to feedback on it (ai/repromptimplementation.md). The AI steps are
@@ -285,26 +290,13 @@ export class StylistService {
   private async reroll(ctx: RepromptContext): Promise<RouteResult> {
     const requirements = ctx.latest.requirements as Requirements;
     let lists = ctx.latest.candidates as CandidateLists;
-    const shownKeys = new Set(ctx.shownOutfits.map(comboKey));
 
-    const queue = [...(ctx.session.queuedOutfits as QueuedOutfit[])];
-    while (queue.length > 0) {
-      const next = queue.shift()!;
-      if (next.itemIds.some((id) => ctx.banned.has(id)) || shownKeys.has(comboKey(next.itemIds))) continue;
-      const items = await this.loadPieces(ctx.userId, next.itemIds, { suggestible: true });
-      // A piece was deleted from the closet, or marked excludeFromSuggestions.
-      if (items.length !== next.itemIds.length) continue;
+    const taken = await this.takeFromQueue(ctx, ctx.banned, [() => true]);
+    if (taken) {
       // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-      this.logger.log(`[DEBUG AI] reroll served from queue (no AI call); ${queue.length} left`);
+      this.logger.log(`[DEBUG AI] reroll served from queue (no AI call); ${taken.queue.length} left`);
       // ==================== END TEST / DEBUG ====================
-      return {
-        outfit: { items, name: next.name, reasons: next.reasons },
-        queue,
-        requirements,
-        candidates: lists,
-        sentItemIds: ctx.latest.sentItemIds,
-        banned: ctx.banned,
-      };
+      return fromQueue(ctx, taken, { requirements, candidates: lists, banned: ctx.banned });
     }
 
     // Favor candidates that haven't been sent yet.
@@ -322,13 +314,32 @@ export class StylistService {
   }
 
   // "Different shoes": keep the other pieces, ban the ones being replaced,
-  // and choose new ones of the same types from the stored candidates.
+  // and choose new ones of the same types. A queued outfit is used first (no
+  // AI call): ideally one that only replaces those pieces, otherwise any
+  // other one, and the user can reprompt from there. Without one, Gemini
+  // chooses from the stored candidates.
   private async swap(ctx: RepromptContext, swapTypes: string[]): Promise<RouteResult> {
     const requirements = ctx.latest.requirements as Requirements;
     let lists = ctx.latest.candidates as CandidateLists;
     const swapping = new Set(swapTypes);
     const replaced = ctx.current.filter((piece) => piece.type !== null && swapping.has(piece.type));
     const banned = new Set([...ctx.banned, ...replaced.map((piece) => piece.id)]);
+    const kept = ctx.current.filter((piece) => !replaced.includes(piece));
+
+    if (replaced.length > 0) {
+      const keptIds = kept.map((piece) => piece.id);
+      const replacedTypes = [...new Set(replaced.map((piece) => piece.type!))];
+      const taken = await this.takeFromQueue(ctx, banned, [
+        (pieces) => onlyChanges(pieces, keptIds, replacedTypes),
+        () => true,
+      ]);
+      if (taken) {
+        // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+        this.logger.log(`[DEBUG AI] swap served from queue (${taken.test === 0 ? 'strict' : 'loose'}, no AI call)`);
+        // ==================== END TEST / DEBUG ====================
+        return fromQueue(ctx, taken, { requirements, candidates: lists, banned });
+      }
+    }
 
     if (!hasChoices(onlyTypes(lists, swapTypes), banned)) {
       lists = await this.searchFurther(ctx.userId, requirements.items.filter((item) => swapping.has(item.type)), lists);
@@ -337,10 +348,7 @@ export class StylistService {
       }
     }
 
-    const fixed = await this.outfitPlanning.loadCandidates(
-      ctx.userId,
-      ctx.current.filter((piece) => !replaced.includes(piece)).map((piece) => piece.id),
-    );
+    const fixed = await this.outfitPlanning.loadCandidates(ctx.userId, kept.map((piece) => piece.id));
     const selection = await this.selectFor(ctx, { lists: onlyTypes(lists, swapTypes), fixed, banned });
     return fromSelection(selection, { requirements, candidates: lists, banned });
   }
@@ -348,6 +356,10 @@ export class StylistService {
   // "Add a jacket", "no hat", "blue shoes instead", "more formal": edit the
   // requirements, search again for the added or changed types, then either
   // build around the rest of the outfit (keepRest) or pick a whole new one.
+  // A plain removal ("no hat") uses a queued outfit first, like swap: ideally
+  // the current outfit without those pieces, otherwise any queued outfit
+  // without them. Adds and changes always search, since the queue was picked
+  // before the new description existed.
   private async refine(ctx: RepromptContext, edits: RefineEdits): Promise<RouteResult> {
     const before = ctx.latest.requirements as Requirements;
     const searchItems = [...edits.change, ...edits.add];
@@ -362,6 +374,21 @@ export class StylistService {
     };
     let lists: CandidateLists = { ...(ctx.latest.candidates as CandidateLists) };
     for (const type of [...removed, ...searchTypes]) delete lists[type];
+
+    const removing = ctx.current.filter((piece) => piece.type !== null && removed.has(piece.type));
+    if (searchItems.length === 0 && removing.length > 0) {
+      const keptIds = ctx.current.filter((piece) => !removing.includes(piece)).map((piece) => piece.id);
+      const taken = await this.takeFromQueue(ctx, ctx.banned, [
+        (pieces) => onlyChanges(pieces, keptIds, []),
+        (pieces) => hasNoneOfTypes(pieces, edits.remove),
+      ]);
+      if (taken) {
+        // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+        this.logger.log(`[DEBUG AI] refine served from queue (${taken.test === 0 ? 'strict' : 'loose'}, no AI call)`);
+        // ==================== END TEST / DEBUG ====================
+        return fromQueue(ctx, taken, { requirements, candidates: lists, banned: ctx.banned });
+      }
+    }
 
     if (searchItems.length > 0) {
       // AI (Gemini embedding): embeds the new descriptions so the closet can be
@@ -565,6 +592,39 @@ export class StylistService {
     });
   }
 
+  // The first usable queued outfit that passes a test, trying each test in
+  // turn over the whole queue (e.g. a strict match, then anything). Usable:
+  // no banned item, not shown before, and every piece still in the closet
+  // and not marked excludeFromSuggestions. The queue left is the other usable
+  // outfits. null when none passes.
+  private async takeFromQueue(
+    ctx: RepromptContext,
+    banned: Set<string>,
+    tests: ((pieces: SuggestionPiece[]) => boolean)[],
+  ): Promise<FromQueue | null> {
+    const shownKeys = new Set(ctx.shownOutfits.map(comboKey));
+    const queued = (ctx.session.queuedOutfits as QueuedOutfit[])
+      .filter((next) => !next.itemIds.some((id) => banned.has(id)) && !shownKeys.has(comboKey(next.itemIds)));
+    if (queued.length === 0) return null;
+
+    const pieces = await this.loadPieces(ctx.userId, [...new Set(queued.flatMap((next) => next.itemIds))], { suggestible: true });
+    const byId = new Map(pieces.map((piece) => [piece.id, piece]));
+    const usable = queued
+      .map((next) => ({ next, items: next.itemIds.map((id) => byId.get(id)).filter((piece) => piece !== undefined) }))
+      .filter(({ next, items }) => items.length === next.itemIds.length);
+
+    for (const [test, passes] of tests.entries()) {
+      const found = usable.find(({ items }) => passes(items));
+      if (!found) continue;
+      return {
+        outfit: { items: found.items, name: found.next.name, reasons: found.next.reasons },
+        queue: usable.filter((option) => option !== found).map((option) => option.next),
+        test,
+      };
+    }
+    return null;
+  }
+
   // Searches again for these items, skipping everything already found, and
   // adds the new matches to the end of each type's list.
   private async searchFurther(userId: string, items: SearchItem[], lists: CandidateLists): Promise<CandidateLists> {
@@ -637,6 +697,16 @@ function fromSelection(
   const [first, ...others] = selection.outfits;
   if (!first) throw new UnprocessableEntityException(selection.missing ?? NO_NEW_OUTFITS);
   return { ...rest, outfit: first, queue: others.map(toQueued), sentItemIds: selection.sentIds };
+}
+
+// A queued outfit becomes the turn, with no AI call: nothing new was sent to
+// Gemini, so sentItemIds stays the latest turn's.
+function fromQueue(
+  ctx: RepromptContext,
+  taken: FromQueue,
+  rest: Pick<RouteResult, 'requirements' | 'candidates' | 'banned'>,
+): RouteResult {
+  return { ...rest, outfit: taken.outfit, queue: taken.queue, sentItemIds: ctx.latest.sentItemIds };
 }
 
 // Just these types' candidate lists.
