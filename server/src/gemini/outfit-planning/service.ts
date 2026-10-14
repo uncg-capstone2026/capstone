@@ -98,10 +98,15 @@ export class OutfitPlanningService {
 
   // Just each item's category, with no photo downloads: enough to check an
   // outfit can be built before loading candidates and calling Gemini.
-  loadCategories(userId: string, ids: string[]): Promise<{ id: string; category: string | null }[]>
+  // suggestible: leave out items marked excludeFromSuggestions.
+  loadCategories(
+    userId: string,
+    ids: string[],
+    opts: { suggestible?: boolean } = {},
+  ): Promise<{ id: string; category: string | null }[]>
   {
     return this.prisma.item.findMany({
-      where: { id: { in: ids }, userId },
+      where: { id: { in: ids }, userId, ...suggestibleOnly(opts) },
       select: { id: true, category: true },
     });
   }
@@ -109,11 +114,16 @@ export class OutfitPlanningService {
   // Loads each candidate's details and photo into memory, in the order of ids.
   // Uses the cutout when there is one so Gemini sees only the garment. Items
   // whose photo is an unsupported type or fails to download are left out, so
-  // only the returned ids should be offered to Gemini.
-  async loadCandidates(userId: string, ids: string[]): Promise<OutfitCandidate[]>
+  // only the returned ids should be offered to Gemini. suggestible: also leave
+  // out items marked excludeFromSuggestions (e.g. since they were found).
+  async loadCandidates(
+    userId: string,
+    ids: string[],
+    opts: { suggestible?: boolean } = {},
+  ): Promise<OutfitCandidate[]>
   {
     const items = await this.prisma.item.findMany({
-      where: { id: { in: ids }, userId },
+      where: { id: { in: ids }, userId, ...suggestibleOnly(opts) },
       select: {
         id: true,
         name: true,
@@ -265,9 +275,9 @@ export class OutfitPlanningService {
   }
 
   // The user's items of this type, closest to the embedding first, with their
-  // cosine distance (<=>: 0 is identical). Prisma can't send the vector type,
-  // so it goes in as '[0.1,...]' text and is cast in SQL.
-  // Later: also skip items with excludeFromSuggestions once that column exists.
+  // cosine distance (<=>: 0 is identical), skipping items marked
+  // excludeFromSuggestions. Prisma can't send the vector type, so it goes in
+  // as '[0.1,...]' text and is cast in SQL.
   private findClosestItems(
     userId: string,
     type: string,
@@ -283,6 +293,7 @@ export class OutfitPlanningService {
       WHERE "userId" = ${userId}
         AND type = ${type}
         AND embedding IS NOT NULL
+        AND "excludeFromSuggestions" = false
         AND NOT (id = ANY(${excludeIds}::text[]))
       ORDER BY score
       LIMIT ${limit}
@@ -310,4 +321,9 @@ export class OutfitPlanningService {
       .map(([label, value]) => `${label}: ${value}`)
       .join(' | ');
   }
+}
+
+// Prisma filter for loadCategories / loadCandidates' suggestible option.
+function suggestibleOnly(opts: { suggestible?: boolean }): { excludeFromSuggestions?: false } {
+  return opts.suggestible ? { excludeFromSuggestions: false } : {};
 }

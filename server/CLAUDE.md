@@ -33,6 +33,7 @@ type OutfitSuggestion = {
 
 Both routes:
 - One complete outfit: Top + Bottoms, or a OnePiece (dress). Shoes, outerwear and accessory are optional.
+- Items with `excludeFromSuggestions: true` are never suggested, including ones marked partway through a session.
 - `type` is the garment type (`'t-shirt'`, `'jeans'`); `category` is the app's name (`'tops'`).
 - `imageUrl` is a signed URL to the cutout (or original), valid for **5 minutes**.
 - With `lat`/`lon` on the first request, the day's forecast is fetched first, stored on the session, and given to every prompt.
@@ -51,5 +52,4 @@ Both routes:
 
 ## Not implemented
 - Memory from past sessions
-- Excluding items from suggestions
 - New garment types (romper, etc.)

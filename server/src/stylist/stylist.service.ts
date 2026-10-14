@@ -291,8 +291,9 @@ export class StylistService {
     while (queue.length > 0) {
       const next = queue.shift()!;
       if (next.itemIds.some((id) => ctx.banned.has(id)) || shownKeys.has(comboKey(next.itemIds))) continue;
-      const items = await this.loadPieces(ctx.userId, next.itemIds);
-      if (items.length !== next.itemIds.length) continue; // a piece was deleted from the closet
+      const items = await this.loadPieces(ctx.userId, next.itemIds, { suggestible: true });
+      // A piece was deleted from the closet, or marked excludeFromSuggestions.
+      if (items.length !== next.itemIds.length) continue;
       // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
       this.logger.log(`[DEBUG AI] reroll served from queue (no AI call); ${queue.length} left`);
       // ==================== END TEST / DEBUG ====================
@@ -501,7 +502,12 @@ export class StylistService {
     const fixed = input.fixed ?? [];
 
     // Checked on categories alone, before downloading photos or calling Gemini.
-    const pieces = ids.length > 0 ? await this.outfitPlanning.loadCategories(input.userId, ids) : [];
+    // Stored candidates and queued outfits can predate an item being marked
+    // excludeFromSuggestions, so it's checked again here. Fixed pieces aren't:
+    // the user chose to keep those.
+    const pieces = ids.length > 0
+      ? await this.outfitPlanning.loadCategories(input.userId, ids, { suggestible: true })
+      : [];
     const skip = (reason: string, missing: string | null): Selection => {
       this.aiLogger.warn({ message: 'outfit selection skipped', reason, categories: countCategories(pieces) });
       return { outfits: [], missing, sentIds: [] };
@@ -511,7 +517,9 @@ export class StylistService {
       return skip('nothing new', null);
     }
 
-    const candidates = ids.length > 0 ? await this.outfitPlanning.loadCandidates(input.userId, ids) : [];
+    const candidates = ids.length > 0
+      ? await this.outfitPlanning.loadCandidates(input.userId, ids, { suggestible: true })
+      : [];
     if (candidates.length === 0 && fixed.length === 0) return { outfits: [], missing: null, sentIds: [] };
 
     // AI (Gemini outfit selection): looks at the candidates' photos and details
@@ -575,11 +583,16 @@ export class StylistService {
   }
 
   // The user's items with what the response needs, in the order of ids.
-  // Deleted items are left out.
-  private async loadPieces(userId: string, ids: string[]): Promise<SuggestionPiece[]> {
+  // Deleted items are left out, and with suggestible, so are items marked
+  // excludeFromSuggestions.
+  private async loadPieces(
+    userId: string,
+    ids: string[],
+    opts: { suggestible?: boolean } = {},
+  ): Promise<SuggestionPiece[]> {
     if (ids.length === 0) return [];
     const rows = await this.prisma.item.findMany({
-      where: { id: { in: ids }, userId },
+      where: { id: { in: ids }, userId, ...(opts.suggestible ? { excludeFromSuggestions: false } : {}) },
       select: { id: true, name: true, category: true, type: true, imageKey: true, cutoutKey: true },
     });
     const byId = new Map(rows.map((row) => [row.id, row]));
