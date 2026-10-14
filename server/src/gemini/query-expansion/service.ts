@@ -7,7 +7,7 @@ import {
 } from '../constants';
 import type { Weather } from '../../weather/weather.service';
 import { AI_LOG_CONTEXT } from '../../logger.config';
-import { GeminiHelpers, describeWeather, seconds, tokenCounts } from '../helpers';
+import { GeminiHelpers, describeWeather, seconds, styleNotesText, tokenCounts } from '../helpers';
 import { QUERY_EXPANSION_PROMPT } from './prompt';
 import { QUERY_EXPANSION_RESPONSE_SCHEMA } from './schema';
 
@@ -23,8 +23,9 @@ export class QueryExpansionService {
   {}
 
   // weather is the forecast for the day the outfit is for, when known. It
-  // comes before the search so the types picked suit the day.
-  async expandQuery(userRequest: string, weather?: Weather | null)
+  // comes before the search so the types picked suit the day. styleNotes are
+  // the user's notes closest to the request.
+  async expandQuery(userRequest: string, weather?: Weather | null, styleNotes: string[] = [])
   {
     const promptWithTypes = QUERY_EXPANSION_PROMPT.replace(
       '{available_types}',
@@ -33,6 +34,7 @@ export class QueryExpansionService {
     const weatherLine = weather ? describeWeather(weather) : null;
     let fullPrompt = `${promptWithTypes}\n\nUser request: ${userRequest}`;
     if (weatherLine) fullPrompt += `\n${weatherLine}`;
+    if (styleNotes.length > 0) fullPrompt += `\n\n${styleNotesText(styleNotes)}`;
 
     const started = Date.now();
     let text = '';
@@ -72,9 +74,9 @@ export class QueryExpansionService {
 
   // Expands the request, then attaches each item's semantic_query embedding
   // to that item.
-  async expandAndEmbedQuery(userRequest: string, weather?: Weather | null)
+  async expandAndEmbedQuery(userRequest: string, weather?: Weather | null, styleNotes: string[] = [])
   {
-    const expanded = await this.expandQuery(userRequest, weather);
+    const expanded = await this.expandQuery(userRequest, weather, styleNotes);
     const vectors = await this.embedTexts(
       expanded.items.map((item) => item.semantic_query),
     );

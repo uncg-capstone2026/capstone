@@ -7,7 +7,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type { OutfitTurn } from '@prisma/client';
-import { CANDIDATES_SENT_PER_TYPE, MAX_TURNS_PER_SESSION } from '../gemini/constants';
+import { CANDIDATES_SENT_PER_TYPE, MAX_TURNS_PER_SESSION, STYLE_NOTES_IN_PROMPT } from '../gemini/constants';
 import { seconds } from '../gemini/helpers';
 import { HistorySummaryService } from '../gemini/history-summary/service';
 import {
@@ -27,6 +27,7 @@ import { TryOnService } from '../gemini/try-on/service';
 import { AI_LOG_CONTEXT } from '../logger.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
+import { StyleNotesService } from '../style-notes/style-notes.service';
 import { WeatherService, type Weather } from '../weather/weather.service';
 import { toSuggestion, type OutfitSuggestion, type SuggestionPiece } from './outfit-suggestion';
 import {
@@ -55,6 +56,7 @@ type RepromptContext = {
   current: SuggestionPiece[]; // its pieces that are still in the closet
   request: string; // the original request, with the date line
   weather: Weather | null; // stored on turn 1
+  styleNotes: string[]; // the user's notes closest to the original request
   message: string; // the user's feedback; '' for "Try another"
   banned: Set<string>;
   shownOutfits: string[][]; // every outfit shown, as item ids
@@ -96,6 +98,7 @@ export class StylistService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     private readonly weather: WeatherService,
+    private readonly styleNotes: StyleNotesService,
   ) {}
 
   // POST /outfit: expand the request, find matching closet items, have Gemini
@@ -108,18 +111,22 @@ export class StylistService {
     const started = Date.now();
     return this.withAiErrors('start', started, async () => {
       const request = requestText(input.occasion, input.date);
-      // Fetched first, so the expansion already picks clothes for the day.
-      const weather = await this.dayWeather(input.location, input.date);
+      // Fetched first, so the expansion already picks clothes for the day and
+      // the user's style.
+      const [weather, styleNotes] = await Promise.all([
+        this.dayWeather(input.location, input.date),
+        this.relevantNotes(userId, input.occasion),
+      ]);
 
-      // AI (Gemini query expansion + embedding): turns the request and the day's
-      // weather into garment types with photo-like descriptions, embedded so the
-      // closet can be searched by meaning.
-      const expanded = await this.queryExpansion.expandAndEmbedQuery(request, weather);
+      // AI (Gemini query expansion + embedding): turns the request, the day's
+      // weather and the user's style notes into garment types with photo-like
+      // descriptions, embedded so the closet can be searched by meaning.
+      const expanded = await this.queryExpansion.expandAndEmbedQuery(request, weather, styleNotes);
       const lists = await this.outfitPlanning.findCandidates(userId, expanded.items);
 
       // "Try another" goes through the reprompt route, which knows every outfit
       // shown in the session, so the first request starts with nothing shown.
-      const selection = await this.select({ userId, request, weather, lists });
+      const selection = await this.select({ userId, request, weather, styleNotes, lists });
       if (selection.outfits.length === 0) {
         throw new UnprocessableEntityException(selection.missing ?? NOT_ENOUGH_ITEMS);
       }
@@ -198,6 +205,7 @@ export class StylistService {
         current: latest.chosenItemIds.map((id) => byId.get(id)).filter((piece) => piece !== undefined),
         request: requestText(session.originalPrompt, session.date ?? undefined),
         weather: session.weather as unknown as Weather | null,
+        styleNotes: [],
         message,
         banned: new Set(session.bannedItemIds),
         shownOutfits: turns.map((turn) => turn.chosenItemIds),
@@ -207,11 +215,14 @@ export class StylistService {
 
       // AI (Gemini router + history summary, fast model): decides what the
       // feedback should change and, once turns fall out of the last 5,
-      // compresses them. Run together since neither needs the other.
-      const [decision, summary] = await Promise.all([
+      // compresses them. Run together with fetching the style notes, since
+      // none of them needs the others.
+      const [decision, summary, styleNotes] = await Promise.all([
         this.decideRoute(ctx),
         this.updateSummary(session, turns, window, byId),
+        this.relevantNotes(userId, session.originalPrompt),
       ]);
+      ctx.styleNotes = styleNotes;
       ctx.history = formatHistory({
         summary: summary.text,
         recent: window.recent,
@@ -435,7 +446,7 @@ export class StylistService {
     const request = ctx.message ? `${ctx.request}\nThe user then said: ${ctx.message}` : ctx.request;
     // AI (Gemini query expansion + embedding): same as the first request, with
     // the feedback included.
-    const expanded = await this.queryExpansion.expandAndEmbedQuery(request, ctx.weather);
+    const expanded = await this.queryExpansion.expandAndEmbedQuery(request, ctx.weather, ctx.styleNotes);
     const lists = await this.outfitPlanning.findCandidates(ctx.userId, expanded.items);
     const selection = await this.selectFor(ctx, { lists, request });
     return fromSelection(selection, { requirements: toRequirements(expanded.items), candidates: lists, banned: ctx.banned });
@@ -512,6 +523,7 @@ export class StylistService {
     userId: string;
     request: string;
     weather: Weather | null;
+    styleNotes?: string[];
     lists: CandidateLists;
     fixed?: OutfitCandidate[];
     alreadySent?: Set<string>;
@@ -555,6 +567,7 @@ export class StylistService {
     const { outfits, missing } = await this.outfitPlanning.selectOutfits({
       request: input.request,
       weather: input.weather,
+      styleNotes: input.styleNotes,
       candidates,
       fixed,
       history: input.history,
@@ -565,7 +578,8 @@ export class StylistService {
     return { outfits, missing, sentIds: candidates.map((c) => c.id) };
   }
 
-  // select() with this reprompt's request, weather, history and what's been shown.
+  // select() with this reprompt's request, weather, style notes, history and
+  // what's been shown.
   private selectFor(
     ctx: RepromptContext,
     opts: {
@@ -581,6 +595,7 @@ export class StylistService {
       userId: ctx.userId,
       request: opts.request ?? ctx.request,
       weather: ctx.weather,
+      styleNotes: ctx.styleNotes,
       lists: opts.lists,
       fixed: opts.fixed,
       alreadySent: opts.alreadySent,
@@ -590,6 +605,22 @@ export class StylistService {
       history: ctx.history,
       requireNewOutfit: opts.requireNewOutfit,
     });
+  }
+
+  // The user's style notes closest in meaning to the request, for the
+  // prompts. No embedding call when they have no notes; if anything fails,
+  // the outfit is picked without them.
+  private async relevantNotes(userId: string, request: string): Promise<string[]> {
+    try {
+      if ((await this.prisma.styleNote.count({ where: { userId } })) === 0) return [];
+      // AI (Gemini embedding): the request, to compare with the notes.
+      const [vector] = await this.queryExpansion.embedTexts([request]);
+      const notes = await this.styleNotes.findRelevant(userId, vector, { limit: STYLE_NOTES_IN_PROMPT });
+      return notes.map((note) => note.text);
+    } catch (err) {
+      this.logger.warn(`Suggesting without style notes: ${(err as Error).message}`);
+      return [];
+    }
   }
 
   // The first usable queued outfit that passes a test, trying each test in

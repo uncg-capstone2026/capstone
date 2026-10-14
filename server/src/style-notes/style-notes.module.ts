@@ -4,7 +4,8 @@ import { StyleNotesController } from './style-notes.controller';
 import { StyleNotesService } from './style-notes.service';
 
 // Style Preferences: /api/style-notes. StyleNotesService is exported so the
-// outfit prompt can read the notes (listForPrompt, findRelevant).
+// outfit prompts can read the notes (listForPrompt, findRelevant) and the
+// memory job can save what it learns (createLearned, embedMissing).
 // - GeminiHelpers (the Gemini client, no dependencies) is provided here for
 //   embedding notes, instead of importing GeminiModule: GeminiModule will
 //   import this module, and importing each other would be circular.

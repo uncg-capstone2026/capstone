@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import type { Weather } from '../../weather/weather.service';
 import { S3Service } from '../../s3/s3.service';
 import { CANDIDATES_STORED_PER_TYPE, MAIN_MODEL } from '../constants';
-import { GeminiHelpers, describeWeather, mimeTypeForKey, seconds, tokenCounts } from '../helpers';
+import { GeminiHelpers, describeWeather, mimeTypeForKey, seconds, styleNotesText, tokenCounts } from '../helpers';
 import {
   comboKey,
   validateOutfits,
@@ -45,6 +45,7 @@ export type SelectedOutfit = ValidOutfit<OutfitCandidate>;
 export type SelectionInput = {
   request: string; // the user's request (with the date line, if any)
   weather?: Weather | null;
+  styleNotes?: string[]; // the user's style notes closest to the request
   candidates: OutfitCandidate[]; // what Gemini may choose from
   fixed?: OutfitCandidate[]; // pieces every outfit keeps (swap / refine)
   history?: string | null; // the conversation so far, already formatted
@@ -235,14 +236,17 @@ export class OutfitPlanningService {
   // ---- Helpers ----
 
   // The request for Gemini: the prompt, request and weather; then whichever
-  // of history, outfits not to repeat and items shown before apply; then the
-  // fixed pieces and the candidates, each a details line followed by its photo.
+  // of style notes, history, outfits not to repeat and items shown before
+  // apply; then the fixed pieces and the candidates, each a details line
+  // followed by its photo.
   private buildSelectionParts(input: SelectionInput): Part[]
   {
     const fixed = input.fixed ?? [];
     let header = `${OUTFIT_SELECTION_PROMPT}\n\nUser request: ${input.request}`;
     if (input.weather) header += `\n${describeWeather(input.weather)}`;
     const parts: Part[] = [{ text: header }];
+
+    if (input.styleNotes?.length) parts.push({ text: styleNotesText(input.styleNotes) });
 
     if (input.history) parts.push({ text: input.history });
 

@@ -38,6 +38,8 @@ Both routes:
 - `type` is the garment type (`'t-shirt'`, `'jeans'`); `category` is the app's name (`'tops'`).
 - `imageUrl` is a signed URL to the cutout (or original), valid for **5 minutes**.
 - With `lat`/`lon` on the first request, the day's forecast is fetched first, stored on the session, and given to every prompt.
+- The user's style notes closest to the request (up to 10) are added to the prompts.
+- A session with no activity for 24 hours is marked abandoned; reprompting or accepting it is a 409, so start a new one.
 - Errors: 400 invalid body; 404 session not found; 409 session finished or another reprompt in progress; 422 not enough items / nothing new / 20-turn limit (show `serverMessage`); 503 AI unavailable (show `serverMessage`).
 
 `POST /api/stylist/outfit/accept` `{ sessionId, turnId, suggestionId, itemIds, name, eventName, date }` → `{ outfitId }`
@@ -51,6 +53,9 @@ Both routes:
 - Takes about 10–30s. `imageUrl` is a signed URL to a JPEG, valid for **24 hours**. Nothing is saved to the database, and the file is deleted by an S3 lifecycle rule (`tryon/` prefix), so it can't be fetched again later.
 - Errors: 400 invalid body; 404 no try-on photo yet, or an item isn't in the closet (show `serverMessage`); 422 the photo couldn't be used, e.g. it doesn't show one person (show `serverMessage`); 503 AI unavailable (show `serverMessage`).
 
+## Style memory
+An hourly job (also run at startup) learns from finished Stylist sessions (accepted, or abandoned after 24 hours) and saves up to 3 facts per session as style notes with `source: 'learned'`. They show up in `GET /api/style-notes` like any other note. Repeats of an existing note are skipped.
+- Notes are capped at 50. When a new note (the user's or a learned one) would go over, the oldest learned notes are deleted; the user's own notes never are. `POST /api/style-notes` is a 400 only when all 50 are the user's.
+
 ## Not implemented
-- Memory from past sessions
 - New garment types (romper, etc.)

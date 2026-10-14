@@ -18,7 +18,8 @@ export class StyleNotesController {
   }
 
   // POST /api/style-notes { text } -> 201, the new note
-  // 400 if the text is empty or over 200 characters, or the user has 50 notes.
+  // 400 if the text is empty or over 200 characters, or the user has 50 notes
+  // of their own (at 50, the oldest learned note is deleted to make room).
   @Post()
   create(
     @CurrentUserId() userId: User['id'],
