@@ -16,6 +16,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { WearTrackingModule } from './wear-tracking/wear-tracking.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { StyleNotesModule } from './style-notes/style-notes.module';
+import { MemoryModule } from './memory/memory.module';
 
 
 @Module({
@@ -35,6 +36,7 @@ import { StyleNotesModule } from './style-notes/style-notes.module';
     WearTrackingModule,
     CalendarModule,
     StyleNotesModule,
+    MemoryModule,
   ],
 
   controllers: [AppController],
