@@ -97,6 +97,7 @@ model User {
   outfitSessions       OutfitSession[]
   pushTokens           PushToken[]
   styleNotes           StyleNote[]
+  tryOnRenders         TryOnRender[]
 }
 
 model TryOnPhoto {
@@ -106,6 +107,26 @@ model TryOnPhoto {
   imageKey   String // S3 key
   isPrimary  Boolean  @default(false)
   capturedAt DateTime @default(now())
+  renders    TryOnRender[]
+}
+
+// Saved try-on images, so the same outfit on the same photo isn't generated
+// twice. Javier's code reads and writes these.
+model TryOnRender {
+  id            String     @id @default(uuid())
+  userId        String
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tryOnPhotoId  String
+  tryOnPhoto    TryOnPhoto @relation(fields: [tryOnPhotoId], references: [id], onDelete: Cascade)
+  itemIds       String[]
+  itemsHash     String
+  position      Int
+  imageKey      String // S3 key
+  invalidatedAt DateTime?
+  createdAt     DateTime   @default(now())
+
+  @@unique([tryOnPhotoId, itemsHash, position])
+  @@index([userId, itemsHash])
 }
 
 model Item {
