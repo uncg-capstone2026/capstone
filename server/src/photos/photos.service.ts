@@ -1,10 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 
 @Injectable()
 export class PhotosService {
+  private readonly logger = new Logger(PhotosService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
@@ -21,7 +23,9 @@ export class PhotosService {
     return { uploadUrl, key };
   }
 
-  // Step 3: save it as the user's primary try-on photo.
+  // Step 3: save it as the user's try-on photo. The new photo replaces the old
+  // one: the previous photos and their saved try-on images (TryOnRender) are
+  // deleted, since try-on only ever uses the current photo.
   async saveBodyPhoto(userId: User['id'], key: string) {
     // Must be in this user's own folder, and the upload must have finished.
     if (!key.startsWith(`users/${userId}/body/`) || !(await this.s3.objectExists(key))) {
@@ -32,17 +36,32 @@ export class PhotosService {
     const existing = await this.prisma.tryOnPhoto.findFirst({ where: { userId, imageKey: key } });
     if (existing) return { photoId: existing.id };
 
-    // The new photo becomes primary, and any previous primary photo stops being primary.
-    // In one transaction, so a user never ends up with two primaries or none.
-    const [, photo] = await this.prisma.$transaction([
-      this.prisma.tryOnPhoto.updateMany({
-        where: { userId, isPrimary: true },
-        data: { isPrimary: false },
-      }),
-      this.prisma.tryOnPhoto.create({
+    // In one transaction, so a user never ends up with two photos or none.
+    // Deleting the old photos also deletes their TryOnRender rows (cascade).
+    const { photo, oldKeys } = await this.prisma.$transaction(async (tx) => {
+      const oldPhotos = await tx.tryOnPhoto.findMany({
+        where: { userId },
+        select: { id: true, imageKey: true, renders: { select: { imageKey: true } } },
+      });
+      const photo = await tx.tryOnPhoto.create({
         data: { userId, imageKey: key, isPrimary: true },
-      }),
-    ]);
+      });
+      if (oldPhotos.length > 0) {
+        await tx.tryOnPhoto.deleteMany({ where: { id: { in: oldPhotos.map((old) => old.id) } } });
+      }
+      const oldKeys = oldPhotos.flatMap((old) => [old.imageKey, ...old.renders.map((render) => render.imageKey)]);
+      return { photo, oldKeys };
+    });
+
+    // The files go after the database succeeds. A failed S3 delete only leaves
+    // an unused file, so it's logged rather than failing the upload.
+    if (oldKeys.length > 0) {
+      const failed = await this.s3.deleteObjects([...new Set(oldKeys)]);
+      if (failed.length > 0) {
+        this.logger.warn(`New try-on photo saved for ${userId}, but ${failed.length} old S3 files weren't deleted: ${failed.join(', ')}`);
+      }
+    }
+
     return { photoId: photo.id };
   }
 
