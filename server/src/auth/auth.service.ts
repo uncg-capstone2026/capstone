@@ -146,20 +146,25 @@ export class AuthService {
   }
 
   // DELETE /api/auth/me -> 204. Deletes the account and everything in it: items,
-  // body photos, outfits (with their pieces, calendar days and collection
-  // entries), collections, Stylist sessions, feedback, notifications and push
-  // tokens, all through the schema's cascades. The photos in S3 go afterwards:
+  // body photos and their saved try-on images, outfits (with their pieces,
+  // calendar days and collection entries), collections, Stylist sessions,
+  // feedback, notifications and push tokens, all through the schema's cascades.
+  // The photos in S3 go afterwards:
   // the database comes first, so an S3 problem can never leave a half-deleted
   // account, and S3 failures are only logged.
   async deleteAccount(userId: User['id']) {
-    const [items, photos] = await Promise.all([
+    const [items, photos, renders] = await Promise.all([
       this.prisma.item.findMany({ where: { userId }, select: { imageKey: true, cutoutKey: true } }),
       this.prisma.tryOnPhoto.findMany({ where: { userId }, select: { imageKey: true } }),
+      this.prisma.tryOnRender.findMany({ where: { userId }, select: { imageKey: true } }),
     ]);
     const keys = [
       ...new Set(
-        [...items.flatMap((item) => [item.imageKey, item.cutoutKey]), ...photos.map((photo) => photo.imageKey)]
-          .filter((key): key is string => !!key),
+        [
+          ...items.flatMap((item) => [item.imageKey, item.cutoutKey]),
+          ...photos.map((photo) => photo.imageKey),
+          ...renders.map((render) => render.imageKey),
+        ].filter((key): key is string => !!key),
       ),
     ];
 
