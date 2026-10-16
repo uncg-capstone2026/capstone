@@ -50,7 +50,8 @@ Both routes:
 ## Try-on
 `POST /api/stylist/try-on` `{ itemIds: string[] /* 1–8 */ }` → `{ imageUrl: string }`
 - A photo of the user wearing those items, generated from their primary try-on photo. Send the pieces **on screen**, including swapped ones.
-- Takes about 10–30s. `imageUrl` is a signed URL to a JPEG, valid for **24 hours**. Nothing is saved to the database, and the file is deleted by an S3 lifecycle rule (`tryon/` prefix), so it can't be fetched again later.
+- Takes about 10–30s. `imageUrl` is a signed URL to a JPEG, valid for **24 hours**.
+- Each image is saved (`TryOnRender`), one per try-on photo and set of items, in any order. Trying on the same items again returns the saved image right away, with a new URL. Saved images are deleted when the user uploads a new try-on photo or deletes their account.
 - Errors: 400 invalid body; 404 no try-on photo yet, or an item isn't in the closet (show `serverMessage`); 422 the photo couldn't be used, e.g. it doesn't show one person (show `serverMessage`); 503 AI unavailable (show `serverMessage`).
 
 ## Style memory

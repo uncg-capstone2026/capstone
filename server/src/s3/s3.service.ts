@@ -34,15 +34,9 @@ export class S3Service {
   }
 
   // Builds a namespaced key so files are organized per user and never collide.
-  buildKey(userId: string, kind: 'clothing' | 'body', extension: string): string {
+  // Saved try-on images use 'tryon', outside the old "tryon/" lifecycle rule.
+  buildKey(userId: string, kind: 'clothing' | 'body' | 'tryon', extension: string): string {
     return `users/${userId}/${kind}/${randomUUID()}.${extension}`;
-  }
-
-  // Try-on results live under their own top-level folder, not users/, so one
-  // S3 lifecycle rule (prefix "tryon/") can delete them after a few days.
-  // Lifecycle prefixes can't have a wildcard, so users/*/tryon/ wouldn't work.
-  buildTryOnKey(userId: string): string {
-    return `tryon/${userId}/${randomUUID()}.jpg`;
   }
 
   // Returns a short-lived URL the client can PUT the file to directly.

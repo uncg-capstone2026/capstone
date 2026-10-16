@@ -1,5 +1,7 @@
 import { Injectable, Logger, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 import type { Part } from '@google/genai';
+import { Prisma, type TryOnRender } from '@prisma/client';
+import { createHash } from 'crypto';
 import sharp from 'sharp';
 import { AI_LOG_CONTEXT } from '../../logger.config';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -35,10 +37,23 @@ type TryOnItem = {
   mimeType: string;
 };
 
+// The unique key of a saved image: one per photo, set of items and angle.
+type RenderKey = { tryOnPhotoId: string; itemsHash: string; position: number };
+
+// Identifies a set of items whatever order they're in: the same items always
+// give the same hash. Used to find an outfit's saved try-on image.
+export function itemsHash(itemIds: string[]): string
+{
+  const ids = [...new Set(itemIds)].sort();
+  return createHash('sha256').update(ids.join(',')).digest('hex');
+}
+
 // Try-on: a photo of the user wearing the outfit on screen, made from their
-// primary try-on photo and the items' photos.
+// primary try-on photo and the items' photos. Each image is saved as a
+// TryOnRender, so trying on the same items with the same photo again reuses it.
 @Injectable()
 export class TryOnService {
+  private readonly logger = new Logger(TryOnService.name);
   // Summaries go to the terminal and logs/ai/.
   private readonly aiLogger = new Logger(AI_LOG_CONTEXT);
 
@@ -49,20 +64,48 @@ export class TryOnService {
   )
   {}
 
-  // Generates the photo, saves it to S3 as a JPEG and returns a signed URL to
-  // it. 404 when there's no try-on photo or an item isn't in the user's
-  // closet; 422 when Gemini declines (e.g. the photo doesn't show one person).
+  // Returns a signed URL to the photo: the saved one when these items were
+  // already tried on with this photo, otherwise a new one from Gemini, saved
+  // for next time. 404 when there's no try-on photo or an item isn't in the
+  // user's closet; 422 when Gemini declines (e.g. the photo doesn't show one person).
   async generate(userId: string, itemIds: string[]): Promise<{ imageUrl: string }>
   {
     const bodyPhoto = await this.prisma.tryOnPhoto.findFirst({
       where: { userId, isPrimary: true },
       orderBy: { capturedAt: 'desc' }, // newest, just in case there were ever two
-      select: { imageKey: true },
+      select: { id: true, imageKey: true },
     });
     if (!bodyPhoto) throw new NotFoundException({ message: NO_BODY_PHOTO });
 
+    // Checked before looking for a saved image, so a deleted item is still a 404.
+    const ids = [...new Set(itemIds)].sort();
+    const owned = await this.prisma.item.count({ where: { id: { in: ids }, userId } });
+    if (owned !== ids.length) throw new NotFoundException({ message: ITEMS_MISSING });
+
+    // Only the first angle for now.
+    const renderKey: RenderKey = { tryOnPhotoId: bodyPhoto.id, itemsHash: itemsHash(ids), position: 0 };
+    const saved = await this.prisma.tryOnRender.findUnique({
+      where: { tryOnPhotoId_itemsHash_position: renderKey },
+    });
+    if (saved && !saved.invalidatedAt) {
+      this.aiLogger.log({ message: 'try-on reused', items: ids.length });
+      return { imageUrl: await this.s3.getDownloadUrl(saved.imageKey) };
+    }
+
+    const jpeg = await this.render(userId, bodyPhoto.imageKey, itemIds);
+    const key = this.s3.buildKey(userId, 'tryon', 'jpg');
+    await this.s3.putObject(key, jpeg, 'image/jpeg');
+    const imageKey = await this.save(userId, renderKey, ids, key, saved);
+    return { imageUrl: await this.s3.getDownloadUrl(imageKey) };
+  }
+
+  // ---- Helpers ----
+
+  // The try-on photo from Gemini, as a JPEG.
+  private async render(userId: string, bodyKey: string, itemIds: string[]): Promise<Buffer>
+  {
     const items = await this.loadItems(userId, itemIds);
-    const body = await this.loadImage(bodyPhoto.imageKey);
+    const body = await this.loadImage(bodyKey);
     const aspectRatio = closestAspectRatio(await sharp(body.image).metadata());
 
     const parts = this.buildParts(body, items);
@@ -100,20 +143,70 @@ export class TryOnService {
         throw new UnprocessableEntityException({ message: reason || DECLINED });
       }
 
-      const jpeg = await sharp(Buffer.from(data, 'base64'))
+      return await sharp(Buffer.from(data, 'base64'))
         .flatten({ background: '#ffffff' })
         .jpeg({ quality: 85 })
         .toBuffer();
-      const key = this.s3.buildTryOnKey(userId);
-      await this.s3.putObject(key, jpeg, 'image/jpeg');
-      return { imageUrl: await this.s3.getDownloadUrl(key) };
     } catch (err) {
       this.aiLogger.error(`try-on failed: ${(err as Error).message}`, (err as Error).stack);
       throw err;
     }
   }
 
-  // ---- Helpers ----
+  // Saves the uploaded image (key) as the TryOnRender for renderKey and returns
+  // the key to serve. An invalidated row (`previous`) is replaced in place,
+  // since the unique key allows only one. If an identical request saved its
+  // image first, that one is kept and this file is deleted.
+  private async save(
+    userId: string,
+    renderKey: RenderKey,
+    ids: string[],
+    key: string,
+    previous: TryOnRender | null,
+  ): Promise<string>
+  {
+    if (previous) {
+      // Only while it still has the old image, in case another request replaced it first.
+      const { count } = await this.prisma.tryOnRender.updateMany({
+        where: { id: previous.id, imageKey: previous.imageKey },
+        data: { imageKey: key, invalidatedAt: null, createdAt: new Date() },
+      });
+      if (count > 0) {
+        await this.deleteFiles(userId, [previous.imageKey]);
+        return key;
+      }
+    } else {
+      try {
+        await this.prisma.tryOnRender.create({ data: { userId, ...renderKey, itemIds: ids, imageKey: key } });
+        return key;
+      } catch (err) {
+        // P2002: an identical request saved first. P2003: the try-on photo
+        // was replaced while this one was being made.
+        const lost = err instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2003'].includes(err.code);
+        if (!lost) throw err;
+      }
+    }
+
+    const winner = await this.prisma.tryOnRender.findUnique({
+      where: { tryOnPhotoId_itemsHash_position: renderKey },
+    });
+    if (!winner) {
+      // The photo was replaced: still show this image, but it isn't saved.
+      this.logger.warn(`Try-on for ${userId} not saved, its try-on photo was replaced: ${key}`);
+      return key;
+    }
+    await this.deleteFiles(userId, [key]);
+    return winner.imageKey;
+  }
+
+  // A failed S3 delete only leaves an unused file, so it's logged, not thrown.
+  private async deleteFiles(userId: string, keys: string[]): Promise<void>
+  {
+    const failed = await this.s3.deleteObjects(keys);
+    if (failed.length > 0) {
+      this.logger.warn(`${failed.length} old try-on files for ${userId} weren't deleted: ${failed.join(', ')}`);
+    }
+  }
 
   // Every item with its photo (the cutout when there is one, so Gemini sees
   // only the garment). Unlike outfit planning, a missing item is a 404 rather
