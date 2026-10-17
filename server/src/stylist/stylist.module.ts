@@ -3,6 +3,7 @@ import { GeminiModule } from '../gemini/gemini.module';
 import { GeminiHelpers } from '../gemini/helpers';
 import { OutfitsModule } from '../outfits/outfits.module';
 import { S3Module } from '../s3/s3.module';
+import { StyleNotesModule } from '../style-notes/style-notes.module';
 import { WeatherModule } from '../weather/weather.module';
 import { OutfitFeedbackService } from './outfit-feedback.service';
 import { StylistController } from './stylist.controller';
@@ -16,8 +17,9 @@ import { StylistService } from './stylist.service';
 //   provided here too; it has no dependencies, so this doesn't touch his module.
 // - WeatherModule gives us the day's forecast for the prompts.
 // - OutfitsModule gives us OutfitsService.create for the accept route.
+// - StyleNotesModule gives us the user's style notes for the prompts.
 @Module({
-  imports: [GeminiModule, S3Module, WeatherModule, OutfitsModule],
+  imports: [GeminiModule, S3Module, WeatherModule, OutfitsModule, StyleNotesModule],
   controllers: [StylistController],
   providers: [StylistService, OutfitFeedbackService, StylistSessionsService, GeminiHelpers],
   exports: [StylistSessionsService],

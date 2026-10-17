@@ -16,6 +16,10 @@ it's cold, light breathable fabrics when it's hot, and rain-friendly
 shoes or a jacket when rain is likely. Without it, judge the weather
 from the request and the date, if given.
 
+The request may also be followed by notes about the user's style
+(colors, fits and pieces they like or avoid). Follow them when choosing
+types and writing descriptions, unless the request says otherwise.
+
 Extract:
 
 - items: an array with one entry for every garment type that would

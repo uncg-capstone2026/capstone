@@ -6,6 +6,12 @@ import { EMBEDDABLE_IMAGE_TYPES, MAIN_MODEL } from './constants';
 // Formats a list for a prompt: ['a', 'b'] -> '"a", "b"'.
 export const quoteList = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(', ');
 
+// The user's style notes (StyleNotesService.findRelevant), for a prompt.
+export function styleNotesText(notes: string[]): string
+{
+  return `What the user has told us about their style:\n${notes.map((note) => `- ${note}`).join('\n')}`;
+}
+
 // One line for a prompt, in °F since users are in the US, e.g. "Weather on
 // 2026-10-06 in Greensboro: Partly cloudy, high 72°F, low 55°F, ...".
 export function describeWeather(w: Weather): string

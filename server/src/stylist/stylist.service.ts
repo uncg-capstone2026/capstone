@@ -7,13 +7,15 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type { OutfitTurn } from '@prisma/client';
-import { CANDIDATES_SENT_PER_TYPE, MAX_TURNS_PER_SESSION } from '../gemini/constants';
+import { CANDIDATES_SENT_PER_TYPE, MAX_TURNS_PER_SESSION, STYLE_NOTES_IN_PROMPT } from '../gemini/constants';
 import { seconds } from '../gemini/helpers';
 import { HistorySummaryService } from '../gemini/history-summary/service';
 import {
   canBuildNewOutfit,
   comboKey,
+  hasNoneOfTypes,
   isCompleteOutfit,
+  onlyChanges,
   pickToSend,
   type CandidateLists,
 } from '../gemini/outfit-planning/candidates';
@@ -21,10 +23,11 @@ import { OutfitPlanningService, type OutfitCandidate, type SelectedOutfit } from
 import { QueryExpansionService } from '../gemini/query-expansion/service';
 import type { RefineEdits, RouteDecision, SearchItem } from '../gemini/reprompt-router/sanitize';
 import { RepromptRouterService } from '../gemini/reprompt-router/service';
-import { TryOnService } from '../gemini/try-on/service';
+import { TryOnService, type TryOnResult } from '../gemini/try-on/service';
 import { AI_LOG_CONTEXT } from '../logger.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
+import { StyleNotesService } from '../style-notes/style-notes.service';
 import { WeatherService, type Weather } from '../weather/weather.service';
 import { toSuggestion, type OutfitSuggestion, type SuggestionPiece } from './outfit-suggestion';
 import {
@@ -53,6 +56,7 @@ type RepromptContext = {
   current: SuggestionPiece[]; // its pieces that are still in the closet
   request: string; // the original request, with the date line
   weather: Weather | null; // stored on turn 1
+  styleNotes: string[]; // the user's notes closest to the original request
   message: string; // the user's feedback; '' for "Try another"
   banned: Set<string>;
   shownOutfits: string[][]; // every outfit shown, as item ids
@@ -71,6 +75,9 @@ type RouteResult = {
 };
 
 type Selection = { outfits: SelectedOutfit[]; missing: string | null; sentIds: string[] };
+
+// A queued outfit taken by takeFromQueue, and the queue left after it.
+type FromQueue = { outfit: RouteResult['outfit']; queue: QueuedOutfit[]; test: number };
 
 // The Stylist tab: turns a request into an outfit from the user's closet, and
 // reacts to feedback on it (ai/repromptimplementation.md). The AI steps are
@@ -91,6 +98,7 @@ export class StylistService {
     private readonly prisma: PrismaService,
     private readonly s3: S3Service,
     private readonly weather: WeatherService,
+    private readonly styleNotes: StyleNotesService,
   ) {}
 
   // POST /outfit: expand the request, find matching closet items, have Gemini
@@ -103,18 +111,22 @@ export class StylistService {
     const started = Date.now();
     return this.withAiErrors('start', started, async () => {
       const request = requestText(input.occasion, input.date);
-      // Fetched first, so the expansion already picks clothes for the day.
-      const weather = await this.dayWeather(input.location, input.date);
+      // Fetched first, so the expansion already picks clothes for the day and
+      // the user's style.
+      const [weather, styleNotes] = await Promise.all([
+        this.dayWeather(input.location, input.date),
+        this.relevantNotes(userId, input.occasion),
+      ]);
 
-      // AI (Gemini query expansion + embedding): turns the request and the day's
-      // weather into garment types with photo-like descriptions, embedded so the
-      // closet can be searched by meaning.
-      const expanded = await this.queryExpansion.expandAndEmbedQuery(request, weather);
+      // AI (Gemini query expansion + embedding): turns the request, the day's
+      // weather and the user's style notes into garment types with photo-like
+      // descriptions, embedded so the closet can be searched by meaning.
+      const expanded = await this.queryExpansion.expandAndEmbedQuery(request, weather, styleNotes);
       const lists = await this.outfitPlanning.findCandidates(userId, expanded.items);
 
       // "Try another" goes through the reprompt route, which knows every outfit
       // shown in the session, so the first request starts with nothing shown.
-      const selection = await this.select({ userId, request, weather, lists });
+      const selection = await this.select({ userId, request, weather, styleNotes, lists });
       if (selection.outfits.length === 0) {
         throw new UnprocessableEntityException(selection.missing ?? NOT_ENOUGH_ITEMS);
       }
@@ -150,11 +162,11 @@ export class StylistService {
     });
   }
 
-  // POST /try-on: a photo of the user wearing the outfit on screen. Nest
-  // errors (404 no try-on photo or missing item, 422 Gemini declined) pass
-  // through; anything else is a 503 { message }. The failure itself is logged
-  // by TryOnService.
-  async tryOn(userId: string, itemIds: string[]): Promise<{ imageUrl: string }> {
+  // POST /try-on: the user wearing the outfit on screen, from 12 angles. Nest
+  // errors (404 no try-on photo, no back photo or missing item, 422 Gemini
+  // declined) pass through; anything else is a 503 { message }. The failure
+  // itself is logged by TryOnService.
+  async tryOn(userId: string, itemIds: string[]): Promise<TryOnResult> {
     try {
       return await this.tryOnService.generate(userId, itemIds);
     } catch (err) {
@@ -193,6 +205,7 @@ export class StylistService {
         current: latest.chosenItemIds.map((id) => byId.get(id)).filter((piece) => piece !== undefined),
         request: requestText(session.originalPrompt, session.date ?? undefined),
         weather: session.weather as unknown as Weather | null,
+        styleNotes: [],
         message,
         banned: new Set(session.bannedItemIds),
         shownOutfits: turns.map((turn) => turn.chosenItemIds),
@@ -202,11 +215,14 @@ export class StylistService {
 
       // AI (Gemini router + history summary, fast model): decides what the
       // feedback should change and, once turns fall out of the last 5,
-      // compresses them. Run together since neither needs the other.
-      const [decision, summary] = await Promise.all([
+      // compresses them. Run together with fetching the style notes, since
+      // none of them needs the others.
+      const [decision, summary, styleNotes] = await Promise.all([
         this.decideRoute(ctx),
         this.updateSummary(session, turns, window, byId),
+        this.relevantNotes(userId, session.originalPrompt),
       ]);
+      ctx.styleNotes = styleNotes;
       ctx.history = formatHistory({
         summary: summary.text,
         recent: window.recent,
@@ -285,25 +301,13 @@ export class StylistService {
   private async reroll(ctx: RepromptContext): Promise<RouteResult> {
     const requirements = ctx.latest.requirements as Requirements;
     let lists = ctx.latest.candidates as CandidateLists;
-    const shownKeys = new Set(ctx.shownOutfits.map(comboKey));
 
-    const queue = [...(ctx.session.queuedOutfits as QueuedOutfit[])];
-    while (queue.length > 0) {
-      const next = queue.shift()!;
-      if (next.itemIds.some((id) => ctx.banned.has(id)) || shownKeys.has(comboKey(next.itemIds))) continue;
-      const items = await this.loadPieces(ctx.userId, next.itemIds);
-      if (items.length !== next.itemIds.length) continue; // a piece was deleted from the closet
+    const taken = await this.takeFromQueue(ctx, ctx.banned, [() => true]);
+    if (taken) {
       // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-      this.logger.log(`[DEBUG AI] reroll served from queue (no AI call); ${queue.length} left`);
+      this.logger.log(`[DEBUG AI] reroll served from queue (no AI call); ${taken.queue.length} left`);
       // ==================== END TEST / DEBUG ====================
-      return {
-        outfit: { items, name: next.name, reasons: next.reasons },
-        queue,
-        requirements,
-        candidates: lists,
-        sentItemIds: ctx.latest.sentItemIds,
-        banned: ctx.banned,
-      };
+      return fromQueue(ctx, taken, { requirements, candidates: lists, banned: ctx.banned });
     }
 
     // Favor candidates that haven't been sent yet.
@@ -321,13 +325,32 @@ export class StylistService {
   }
 
   // "Different shoes": keep the other pieces, ban the ones being replaced,
-  // and choose new ones of the same types from the stored candidates.
+  // and choose new ones of the same types. A queued outfit is used first (no
+  // AI call): ideally one that only replaces those pieces, otherwise any
+  // other one, and the user can reprompt from there. Without one, Gemini
+  // chooses from the stored candidates.
   private async swap(ctx: RepromptContext, swapTypes: string[]): Promise<RouteResult> {
     const requirements = ctx.latest.requirements as Requirements;
     let lists = ctx.latest.candidates as CandidateLists;
     const swapping = new Set(swapTypes);
     const replaced = ctx.current.filter((piece) => piece.type !== null && swapping.has(piece.type));
     const banned = new Set([...ctx.banned, ...replaced.map((piece) => piece.id)]);
+    const kept = ctx.current.filter((piece) => !replaced.includes(piece));
+
+    if (replaced.length > 0) {
+      const keptIds = kept.map((piece) => piece.id);
+      const replacedTypes = [...new Set(replaced.map((piece) => piece.type!))];
+      const taken = await this.takeFromQueue(ctx, banned, [
+        (pieces) => onlyChanges(pieces, keptIds, replacedTypes),
+        () => true,
+      ]);
+      if (taken) {
+        // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+        this.logger.log(`[DEBUG AI] swap served from queue (${taken.test === 0 ? 'strict' : 'loose'}, no AI call)`);
+        // ==================== END TEST / DEBUG ====================
+        return fromQueue(ctx, taken, { requirements, candidates: lists, banned });
+      }
+    }
 
     if (!hasChoices(onlyTypes(lists, swapTypes), banned)) {
       lists = await this.searchFurther(ctx.userId, requirements.items.filter((item) => swapping.has(item.type)), lists);
@@ -336,10 +359,7 @@ export class StylistService {
       }
     }
 
-    const fixed = await this.outfitPlanning.loadCandidates(
-      ctx.userId,
-      ctx.current.filter((piece) => !replaced.includes(piece)).map((piece) => piece.id),
-    );
+    const fixed = await this.outfitPlanning.loadCandidates(ctx.userId, kept.map((piece) => piece.id));
     const selection = await this.selectFor(ctx, { lists: onlyTypes(lists, swapTypes), fixed, banned });
     return fromSelection(selection, { requirements, candidates: lists, banned });
   }
@@ -347,6 +367,10 @@ export class StylistService {
   // "Add a jacket", "no hat", "blue shoes instead", "more formal": edit the
   // requirements, search again for the added or changed types, then either
   // build around the rest of the outfit (keepRest) or pick a whole new one.
+  // A plain removal ("no hat") uses a queued outfit first, like swap: ideally
+  // the current outfit without those pieces, otherwise any queued outfit
+  // without them. Adds and changes always search, since the queue was picked
+  // before the new description existed.
   private async refine(ctx: RepromptContext, edits: RefineEdits): Promise<RouteResult> {
     const before = ctx.latest.requirements as Requirements;
     const searchItems = [...edits.change, ...edits.add];
@@ -361,6 +385,21 @@ export class StylistService {
     };
     let lists: CandidateLists = { ...(ctx.latest.candidates as CandidateLists) };
     for (const type of [...removed, ...searchTypes]) delete lists[type];
+
+    const removing = ctx.current.filter((piece) => piece.type !== null && removed.has(piece.type));
+    if (searchItems.length === 0 && removing.length > 0) {
+      const keptIds = ctx.current.filter((piece) => !removing.includes(piece)).map((piece) => piece.id);
+      const taken = await this.takeFromQueue(ctx, ctx.banned, [
+        (pieces) => onlyChanges(pieces, keptIds, []),
+        (pieces) => hasNoneOfTypes(pieces, edits.remove),
+      ]);
+      if (taken) {
+        // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
+        this.logger.log(`[DEBUG AI] refine served from queue (${taken.test === 0 ? 'strict' : 'loose'}, no AI call)`);
+        // ==================== END TEST / DEBUG ====================
+        return fromQueue(ctx, taken, { requirements, candidates: lists, banned: ctx.banned });
+      }
+    }
 
     if (searchItems.length > 0) {
       // AI (Gemini embedding): embeds the new descriptions so the closet can be
@@ -407,7 +446,7 @@ export class StylistService {
     const request = ctx.message ? `${ctx.request}\nThe user then said: ${ctx.message}` : ctx.request;
     // AI (Gemini query expansion + embedding): same as the first request, with
     // the feedback included.
-    const expanded = await this.queryExpansion.expandAndEmbedQuery(request, ctx.weather);
+    const expanded = await this.queryExpansion.expandAndEmbedQuery(request, ctx.weather, ctx.styleNotes);
     const lists = await this.outfitPlanning.findCandidates(ctx.userId, expanded.items);
     const selection = await this.selectFor(ctx, { lists, request });
     return fromSelection(selection, { requirements: toRequirements(expanded.items), candidates: lists, banned: ctx.banned });
@@ -484,6 +523,7 @@ export class StylistService {
     userId: string;
     request: string;
     weather: Weather | null;
+    styleNotes?: string[];
     lists: CandidateLists;
     fixed?: OutfitCandidate[];
     alreadySent?: Set<string>;
@@ -501,7 +541,12 @@ export class StylistService {
     const fixed = input.fixed ?? [];
 
     // Checked on categories alone, before downloading photos or calling Gemini.
-    const pieces = ids.length > 0 ? await this.outfitPlanning.loadCategories(input.userId, ids) : [];
+    // Stored candidates and queued outfits can predate an item being marked
+    // excludeFromSuggestions, so it's checked again here. Fixed pieces aren't:
+    // the user chose to keep those.
+    const pieces = ids.length > 0
+      ? await this.outfitPlanning.loadCategories(input.userId, ids, { suggestible: true })
+      : [];
     const skip = (reason: string, missing: string | null): Selection => {
       this.aiLogger.warn({ message: 'outfit selection skipped', reason, categories: countCategories(pieces) });
       return { outfits: [], missing, sentIds: [] };
@@ -511,7 +556,9 @@ export class StylistService {
       return skip('nothing new', null);
     }
 
-    const candidates = ids.length > 0 ? await this.outfitPlanning.loadCandidates(input.userId, ids) : [];
+    const candidates = ids.length > 0
+      ? await this.outfitPlanning.loadCandidates(input.userId, ids, { suggestible: true })
+      : [];
     if (candidates.length === 0 && fixed.length === 0) return { outfits: [], missing: null, sentIds: [] };
 
     // AI (Gemini outfit selection): looks at the candidates' photos and details
@@ -520,6 +567,7 @@ export class StylistService {
     const { outfits, missing } = await this.outfitPlanning.selectOutfits({
       request: input.request,
       weather: input.weather,
+      styleNotes: input.styleNotes,
       candidates,
       fixed,
       history: input.history,
@@ -530,7 +578,8 @@ export class StylistService {
     return { outfits, missing, sentIds: candidates.map((c) => c.id) };
   }
 
-  // select() with this reprompt's request, weather, history and what's been shown.
+  // select() with this reprompt's request, weather, style notes, history and
+  // what's been shown.
   private selectFor(
     ctx: RepromptContext,
     opts: {
@@ -546,6 +595,7 @@ export class StylistService {
       userId: ctx.userId,
       request: opts.request ?? ctx.request,
       weather: ctx.weather,
+      styleNotes: ctx.styleNotes,
       lists: opts.lists,
       fixed: opts.fixed,
       alreadySent: opts.alreadySent,
@@ -555,6 +605,55 @@ export class StylistService {
       history: ctx.history,
       requireNewOutfit: opts.requireNewOutfit,
     });
+  }
+
+  // The user's style notes closest in meaning to the request, for the
+  // prompts. No embedding call when they have no notes; if anything fails,
+  // the outfit is picked without them.
+  private async relevantNotes(userId: string, request: string): Promise<string[]> {
+    try {
+      if ((await this.prisma.styleNote.count({ where: { userId } })) === 0) return [];
+      // AI (Gemini embedding): the request, to compare with the notes.
+      const [vector] = await this.queryExpansion.embedTexts([request]);
+      const notes = await this.styleNotes.findRelevant(userId, vector, { limit: STYLE_NOTES_IN_PROMPT });
+      return notes.map((note) => note.text);
+    } catch (err) {
+      this.logger.warn(`Suggesting without style notes: ${(err as Error).message}`);
+      return [];
+    }
+  }
+
+  // The first usable queued outfit that passes a test, trying each test in
+  // turn over the whole queue (e.g. a strict match, then anything). Usable:
+  // no banned item, not shown before, and every piece still in the closet
+  // and not marked excludeFromSuggestions. The queue left is the other usable
+  // outfits. null when none passes.
+  private async takeFromQueue(
+    ctx: RepromptContext,
+    banned: Set<string>,
+    tests: ((pieces: SuggestionPiece[]) => boolean)[],
+  ): Promise<FromQueue | null> {
+    const shownKeys = new Set(ctx.shownOutfits.map(comboKey));
+    const queued = (ctx.session.queuedOutfits as QueuedOutfit[])
+      .filter((next) => !next.itemIds.some((id) => banned.has(id)) && !shownKeys.has(comboKey(next.itemIds)));
+    if (queued.length === 0) return null;
+
+    const pieces = await this.loadPieces(ctx.userId, [...new Set(queued.flatMap((next) => next.itemIds))], { suggestible: true });
+    const byId = new Map(pieces.map((piece) => [piece.id, piece]));
+    const usable = queued
+      .map((next) => ({ next, items: next.itemIds.map((id) => byId.get(id)).filter((piece) => piece !== undefined) }))
+      .filter(({ next, items }) => items.length === next.itemIds.length);
+
+    for (const [test, passes] of tests.entries()) {
+      const found = usable.find(({ items }) => passes(items));
+      if (!found) continue;
+      return {
+        outfit: { items: found.items, name: found.next.name, reasons: found.next.reasons },
+        queue: usable.filter((option) => option !== found).map((option) => option.next),
+        test,
+      };
+    }
+    return null;
   }
 
   // Searches again for these items, skipping everything already found, and
@@ -575,11 +674,16 @@ export class StylistService {
   }
 
   // The user's items with what the response needs, in the order of ids.
-  // Deleted items are left out.
-  private async loadPieces(userId: string, ids: string[]): Promise<SuggestionPiece[]> {
+  // Deleted items are left out, and with suggestible, so are items marked
+  // excludeFromSuggestions.
+  private async loadPieces(
+    userId: string,
+    ids: string[],
+    opts: { suggestible?: boolean } = {},
+  ): Promise<SuggestionPiece[]> {
     if (ids.length === 0) return [];
     const rows = await this.prisma.item.findMany({
-      where: { id: { in: ids }, userId },
+      where: { id: { in: ids }, userId, ...(opts.suggestible ? { excludeFromSuggestions: false } : {}) },
       select: { id: true, name: true, category: true, type: true, imageKey: true, cutoutKey: true },
     });
     const byId = new Map(rows.map((row) => [row.id, row]));
@@ -624,6 +728,16 @@ function fromSelection(
   const [first, ...others] = selection.outfits;
   if (!first) throw new UnprocessableEntityException(selection.missing ?? NO_NEW_OUTFITS);
   return { ...rest, outfit: first, queue: others.map(toQueued), sentItemIds: selection.sentIds };
+}
+
+// A queued outfit becomes the turn, with no AI call: nothing new was sent to
+// Gemini, so sentItemIds stays the latest turn's.
+function fromQueue(
+  ctx: RepromptContext,
+  taken: FromQueue,
+  rest: Pick<RouteResult, 'requirements' | 'candidates' | 'banned'>,
+): RouteResult {
+  return { ...rest, outfit: taken.outfit, queue: taken.queue, sentItemIds: ctx.latest.sentItemIds };
 }
 
 // Just these types' candidate lists.

@@ -1,7 +1,9 @@
 import {
   canBuildNewOutfit,
   comboKey,
+  hasNoneOfTypes,
   isCompleteOutfit,
+  onlyChanges,
   pickToSend,
   validateOutfits,
   type CandidateLists,
@@ -25,6 +27,59 @@ describe('comboKey', () => {
 
   it('matches the old suggestionId encoding', () => {
     expect(comboKey(['b', 'a'])).toBe(Buffer.from('a,b').toString('base64url'));
+  });
+});
+
+const typed = (id: string, type: string | null) => ({ id, type });
+const tee = typed('tee1', 't-shirt');
+const denim = typed('jeans1', 'jeans');
+const sneakers = typed('sneakers1', 'sneakers');
+const boots = typed('boots1', 'boots');
+const hat = typed('hat1', 'hat');
+const jacket = typed('jacket1', 'jacket');
+
+describe('onlyChanges', () => {
+  const kept = [tee.id, denim.id];
+
+  it('accepts the kept pieces with a new piece of the swapped type', () => {
+    expect(onlyChanges([tee, denim, typed('sneakers2', 'sneakers')], kept, ['sneakers'])).toBe(true);
+    expect(onlyChanges([denim, boots, tee], kept, ['boots'])).toBe(true);
+  });
+
+  it('rejects a new piece of a different type', () => {
+    expect(onlyChanges([tee, denim, boots], kept, ['sneakers'])).toBe(false);
+  });
+
+  it('rejects an outfit missing a kept piece', () => {
+    expect(onlyChanges([tee, boots], kept, ['boots'])).toBe(false);
+  });
+
+  it('rejects an outfit that also changes another type', () => {
+    expect(onlyChanges([tee, denim, boots, jacket], kept, ['boots'])).toBe(false);
+  });
+
+  it('needs every swapped type replaced', () => {
+    expect(onlyChanges([tee, denim, boots], kept, ['boots', 'hat'])).toBe(false);
+    expect(onlyChanges([tee, denim, boots, hat], kept, ['boots', 'hat'])).toBe(true);
+  });
+
+  it('with no types, is exactly the kept pieces', () => {
+    expect(onlyChanges([tee, denim], kept, [])).toBe(true);
+    expect(onlyChanges([tee, denim, sneakers], kept, [])).toBe(false);
+  });
+
+  it('never counts an untagged piece as a swapped type', () => {
+    expect(onlyChanges([tee, denim, typed('x', null)], kept, ['boots'])).toBe(false);
+  });
+});
+
+describe('hasNoneOfTypes', () => {
+  it('is false when a piece has one of the types', () => {
+    expect(hasNoneOfTypes([tee, denim, hat], ['hat'])).toBe(false);
+  });
+
+  it('is true otherwise, including untagged pieces', () => {
+    expect(hasNoneOfTypes([tee, denim, typed('x', null)], ['hat'])).toBe(true);
   });
 });
 

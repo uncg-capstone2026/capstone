@@ -16,6 +16,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { WearTrackingModule } from './wear-tracking/wear-tracking.module';
 import { CalendarModule } from './calendar/calendar.module';
 import { StyleNotesModule } from './style-notes/style-notes.module';
+import { MemoryModule } from './memory/memory.module';
+import { TryOn360Module } from './try-on-360/try-on-360.module'; // test routes for the 360° try-on
 
 
 @Module({
@@ -35,6 +37,8 @@ import { StyleNotesModule } from './style-notes/style-notes.module';
     WearTrackingModule,
     CalendarModule,
     StyleNotesModule,
+    MemoryModule,
+    TryOn360Module,
   ],
 
   controllers: [AppController],

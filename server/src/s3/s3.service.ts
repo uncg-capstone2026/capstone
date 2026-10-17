@@ -34,15 +34,9 @@ export class S3Service {
   }
 
   // Builds a namespaced key so files are organized per user and never collide.
-  buildKey(userId: string, kind: 'clothing' | 'body', extension: string): string {
+  // Saved try-on images use 'tryon', outside the old "tryon/" lifecycle rule.
+  buildKey(userId: string, kind: 'clothing' | 'body' | 'tryon', extension: string): string {
     return `users/${userId}/${kind}/${randomUUID()}.${extension}`;
-  }
-
-  // Try-on results live under their own top-level folder, not users/, so one
-  // S3 lifecycle rule (prefix "tryon/") can delete them after a few days.
-  // Lifecycle prefixes can't have a wildcard, so users/*/tryon/ wouldn't work.
-  buildTryOnKey(userId: string): string {
-    return `tryon/${userId}/${randomUUID()}.jpg`;
   }
 
   // Returns a short-lived URL the client can PUT the file to directly.
@@ -98,6 +92,9 @@ export class S3Service {
   }
 
   // True if the file is actually in the bucket (the app finished uploading).
+  // A missing file is a 404 only when our AWS user may list the bucket
+  // (s3:ListBucket). Without that permission, S3 answers 403 instead, so it
+  // doesn't reveal which files exist. Both mean "not there".
   async objectExists(key: string): Promise<boolean> {
     try {
       await this.client.send(
@@ -105,7 +102,8 @@ export class S3Service {
       );
       return true;
     } catch (err: any) {
-      if (err?.$metadata?.httpStatusCode === 404) return false;
+      const status = err?.$metadata?.httpStatusCode;
+      if (status === 404 || status === 403) return false;
       throw err;
     }
   }

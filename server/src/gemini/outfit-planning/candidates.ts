@@ -24,6 +24,31 @@ export function comboKey(itemIds: string[]): string
   return Buffer.from([...itemIds].sort().join(',')).toString('base64url');
 }
 
+// A piece of a queued outfit, with its garment type.
+type TypedPiece = { id: string; type: string | null };
+
+// Whether a queued outfit is the current one with only the given types
+// changed: it has every kept piece, each of its other pieces is one of those
+// types, and each of those types is there. With no types, it's exactly the
+// kept pieces (e.g. the current outfit minus the hat).
+export function onlyChanges(pieces: TypedPiece[], keptIds: string[], types: string[]): boolean
+{
+  const ids = new Set(pieces.map((piece) => piece.id));
+  if (!keptIds.every((id) => ids.has(id))) return false;
+  const kept = new Set(keptIds);
+  const changed = pieces.filter((piece) => !kept.has(piece.id));
+  const allowed = new Set(types);
+  return changed.every((piece) => piece.type !== null && allowed.has(piece.type))
+    && types.every((type) => changed.some((piece) => piece.type === type));
+}
+
+// Whether none of the pieces is one of these types.
+export function hasNoneOfTypes(pieces: TypedPiece[], types: string[]): boolean
+{
+  const excluded = new Set(types);
+  return pieces.every((piece) => piece.type === null || !excluded.has(piece.type));
+}
+
 // Complete means a OnePiece, or a Top and Bottoms. Everything else is optional.
 export function isCompleteOutfit(items: OutfitPiece[]): boolean
 {
