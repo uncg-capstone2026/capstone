@@ -67,10 +67,15 @@ export class StylistController {
     return this.stylist.reprompt(userId, body.sessionId, body.message ?? '');
   }
 
-  // POST /api/stylist/try-on { itemIds } -> { imageUrl }
-  // A photo of the user wearing the outfit on screen, from their try-on photo.
-  // imageUrl is a signed URL valid for 24 hours. 404 when they haven't
-  // uploaded a try-on photo, or an item isn't in their closet (show message).
+  // POST /api/stylist/try-on { itemIds }
+  //   -> { imageUrl, frames: [{ position, angle, imageUrl }] }
+  // The user wearing the outfit on screen, from 12 angles (TryOnResult in
+  // gemini/try-on/service.ts). imageUrl is frame 0 (the front). Frames are
+  // positions 0-11, angle = position x 30; a frame's imageUrl is null when that
+  // angle isn't ready yet or failed. URLs are signed for 24 hours. Saved images
+  // are reused when the same items are tried on again.
+  // 404 when they haven't uploaded try-on photos, only have an old front photo
+  // (retake front and back), or an item isn't in their closet (show message).
   // 422 when the photo can't be used (show message). 503 when the AI is unavailable.
   @Post('try-on')
   @HttpCode(200)

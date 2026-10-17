@@ -92,6 +92,9 @@ export class S3Service {
   }
 
   // True if the file is actually in the bucket (the app finished uploading).
+  // A missing file is a 404 only when our AWS user may list the bucket
+  // (s3:ListBucket). Without that permission, S3 answers 403 instead, so it
+  // doesn't reveal which files exist. Both mean "not there".
   async objectExists(key: string): Promise<boolean> {
     try {
       await this.client.send(
@@ -99,7 +102,8 @@ export class S3Service {
       );
       return true;
     } catch (err: any) {
-      if (err?.$metadata?.httpStatusCode === 404) return false;
+      const status = err?.$metadata?.httpStatusCode;
+      if (status === 404 || status === 403) return false;
       throw err;
     }
   }
