@@ -2,32 +2,40 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { OVERLAY_BG } from '@/components/suggestion/outfit-stage';
 import { StylingLoader } from '@/components/suggestion/styling-loader';
+import { TryOnSpinner } from '@/components/try-on/try-on-spinner';
 import { SessionExpiredError } from '@/services/api';
-import { hasBodyPhoto } from '@/services/photos';
-import { tryOn, TryOnError } from '@/services/stylist';
+import { getBodyPhoto } from '@/services/photos';
+import { tryOn, TryOnError, type TryOnResult } from '@/services/stylist';
 
 const LOADER_STATUSES = [
   'Looking at your photo',
   'Laying out the pieces',
   'Dressing you up',
+  'Turning you around',
   'Adding the finishing touches',
 ];
 
-// The outfit on the user's try-on photo, opened from "See it on your photo" on a suggestion
+// How often to check whether the server has made the user's other angles.
+const ANGLES_POLL_MS = 5000;
+
+// A 360° spin of the user wearing the outfit, opened from "See it on your photo" on a suggestion
 // or "Try on" on a saved outfit. `itemIds` are the pieces on that screen, comma-separated.
-// The photo isn't saved anywhere, so each visit generates a new one (one AI request).
+// The server saves the frames, so the first visit for an outfit is slow and later ones are quick.
+// Just after a new photo upload the server is still making the other angles: the front shows
+// on its own until they're ready, then the spin is fetched and swapped in.
 export default function TryOnScreen() {
   const params = useLocalSearchParams<{ itemIds?: string; name?: string }>();
   const itemIdsParam = params.itemIds ?? '';
   const name = params.name;
   const itemIds = useMemo(() => itemIdsParam.split(',').filter(Boolean), [itemIdsParam]);
 
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [result, setResult] = useState<TryOnResult | null>(null);
+  const [isMakingSpin, setIsMakingSpin] = useState(false); // the front is showing, the angles aren't ready yet
   const [error, setError] = useState<TryOnError | null>(null);
   const [attempt, setAttempt] = useState(0); // restarts the loader on each try
   const [isLoaderDone, setIsLoaderDone] = useState(false);
@@ -49,15 +57,20 @@ export default function TryOnScreen() {
     setAttempt((n) => n + 1);
     try {
       if (!itemIds.length) throw new TryOnError('There are no pieces to try on.', 'other');
-      // Checked first so a missing photo doesn't cost an AI request.
-      if (!(await hasBodyPhoto())) {
-        throw new TryOnError('Add a try-on photo to see outfits on you.', 'no-photo');
+      // Checked first so a missing or old photo doesn't cost an AI request.
+      const bodyPhoto = await getBodyPhoto();
+      if (!bodyPhoto) throw new TryOnError('Add try-on photos to see outfits on you.', 'no-photo');
+      if (bodyPhoto.needsRetake) {
+        throw new TryOnError(
+          'Try-on now shows outfits from every angle. Retake your try-on photos, front and back, to use it.',
+          'needs-retake',
+        );
       }
-      const result = await tryOn(itemIds);
-      await Image.prefetch(result.imageUrl).catch(() => {
-        // Shows it as it loads instead.
-      });
-      if (mounted.current) setImageUrl(result.imageUrl);
+      const next = await tryOn(itemIds);
+      await preloadFrames(next);
+      if (!mounted.current) return;
+      setResult(next);
+      setIsMakingSpin(!bodyPhoto.anglesReady);
     } catch (e) {
       if (!mounted.current || e instanceof SessionExpiredError) return;
       setError(
@@ -73,9 +86,38 @@ export default function TryOnScreen() {
   // Generates on first view, and again on coming back after a failure, e.g. from adding a try-on photo.
   useFocusEffect(
     useCallback(() => {
-      if (!imageUrl) generate();
-    }, [imageUrl, generate]),
+      if (!result) generate();
+    }, [result, generate]),
   );
+
+  // Once the angles are ready, fetches the spin (generating the other frames) and swaps it in.
+  // Any failure leaves the front showing.
+  useEffect(() => {
+    if (!isMakingSpin) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    async function check() {
+      try {
+        const bodyPhoto = await getBodyPhoto();
+        if (cancelled) return;
+        if (!bodyPhoto?.anglesReady) {
+          timer = setTimeout(check, ANGLES_POLL_MS);
+          return;
+        }
+        const next = await tryOn(itemIds);
+        await preloadFrames(next);
+        if (!cancelled) setResult(next);
+      } catch {
+        // Keeps the front.
+      }
+      if (!cancelled) setIsMakingSpin(false);
+    }
+    timer = setTimeout(check, ANGLES_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [isMakingSpin, itemIds]);
 
   function goBack() {
     if (router.canGoBack()) router.back();
@@ -86,17 +128,17 @@ export default function TryOnScreen() {
     router.push({ pathname: '/body-photo', params: { from: 'try-on' } });
   }
 
-  if (!imageUrl || !isLoaderDone) {
+  if (!result || !isLoaderDone) {
     const errorAction =
       error?.reason === 'no-photo'
-        ? { label: 'Add a try-on photo', onPress: openBodyPhoto }
-        : error?.reason === 'photo-unusable'
-          ? { label: 'Retake your photo', onPress: openBodyPhoto }
+        ? { label: 'Add try-on photos', onPress: openBodyPhoto }
+        : error?.reason === 'needs-retake' || error?.reason === 'photo-unusable'
+          ? { label: 'Retake your photos', onPress: openBodyPhoto }
           : undefined;
     return (
       <StylingLoader
         key={attempt}
-        ready={!!imageUrl}
+        ready={!!result}
         error={error?.message ?? null}
         onRetry={generate}
         onBack={goBack}
@@ -107,6 +149,8 @@ export default function TryOnScreen() {
       />
     );
   }
+
+  const hasSpin = result.frames.filter((frame) => frame.imageUrl).length > 1;
 
   return (
     <SafeAreaView className="flex-1 bg-cream-100">
@@ -125,16 +169,18 @@ export default function TryOnScreen() {
       </View>
 
       <View className="mx-[22px] mt-2 flex-1 overflow-hidden rounded-3xl bg-cream-200">
-        <Image
-          source={{ uri: imageUrl }}
-          contentFit="contain"
-          transition={200}
+        <TryOnSpinner
+          frames={result.frames}
           accessibilityLabel={name ? `You wearing ${name}` : 'You wearing this outfit'}
-          accessibilityIgnoresInvertColors
-          style={{ flex: 1 }}
         />
-        <View style={{ backgroundColor: OVERLAY_BG }} className="absolute right-3 top-3 rounded-full px-3 py-1.5">
-          <Text className="font-label text-[11px] uppercase tracking-widest text-sage-500">On your photo</Text>
+        <View
+          pointerEvents="none"
+          style={{ backgroundColor: OVERLAY_BG }}
+          className="absolute right-3 top-3 flex-row items-center gap-1.5 rounded-full px-3 py-1.5">
+          {isMakingSpin ? <ActivityIndicator size="small" color="#7a9264" /> : null}
+          <Text className="font-label text-[11px] uppercase tracking-widest text-sage-500">
+            {isMakingSpin ? 'Making your 360° view' : hasSpin ? 'Drag to turn' : 'On your photo'}
+          </Text>
         </View>
       </View>
 
@@ -153,4 +199,11 @@ export default function TryOnScreen() {
       </View>
     </SafeAreaView>
   );
+}
+
+// Loads every frame's image before the spin shows, so it doesn't flicker as each one loads.
+// If any fail, the spin shows anyway and those frames load as they're reached.
+async function preloadFrames(result: TryOnResult): Promise<void> {
+  const urls = result.frames.flatMap((frame) => (frame.imageUrl ? [frame.imageUrl] : []));
+  await Image.prefetch(urls, 'memory-disk').catch(() => false);
 }

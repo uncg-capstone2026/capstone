@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNotificationsEnabled } from '@/hooks/use-notifications-enabled';
 import { useTemperatureUnit } from '@/hooks/use-temperature-unit';
 import { getMe, signOut, type PublicUser } from '@/services/auth';
-import { hasBodyPhoto } from '@/services/photos';
+import { getBodyPhoto, type BodyPhoto } from '@/services/photos';
 import {
   cancelReminders,
   ensureNotificationPermission,
@@ -22,7 +22,7 @@ const CHEVRON_COLOR = '#93aa7d'; // sage-400
 export default function SettingsScreen() {
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [user, setUser] = useState<PublicUser | null>(null);
-  const [hasPhoto, setHasPhoto] = useState<boolean | null>(null); // null until known
+  const [bodyPhoto, setBodyPhoto] = useState<BodyPhoto | null | undefined>(undefined); // undefined until known
   const { unit, setUnit } = useTemperatureUnit();
   const { enabled: notificationsEnabled, setEnabled: setNotificationsEnabled } = useNotificationsEnabled();
   const [permission, setPermission] = useState<NotificationPermission | null>(null);
@@ -46,9 +46,9 @@ export default function SettingsScreen() {
           if (!cancelled) setUser(next);
         })
         .catch(() => {});
-      hasBodyPhoto()
+      getBodyPhoto()
         .then((next) => {
-          if (!cancelled) setHasPhoto(next);
+          if (!cancelled) setBodyPhoto(next);
         })
         .catch(() => {});
       return () => {
@@ -86,6 +86,24 @@ export default function SettingsScreen() {
       { text: 'Not now', style: 'cancel' },
       { text: 'Open Settings', onPress: () => void Linking.openSettings() },
     ]);
+  }
+
+  // New photos replace the current ones and every saved try-on made from them, so warn first.
+  // No warning when there's nothing usable to lose: no photo yet, or an old one that needs retaking.
+  function changeBodyPhoto() {
+    const open = () => router.push({ pathname: '/body-photo', params: { from: 'settings' } });
+    if (!bodyPhoto || bodyPhoto.needsRetake) {
+      open();
+      return;
+    }
+    Alert.alert(
+      'Change your try-on photos?',
+      'Your saved try-ons will be redone with the new photos, so trying on an outfit will take longer the first time.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Change Photos', onPress: open },
+      ],
+    );
   }
 
   const name = user ? (user.displayName ?? user.name) : '';
@@ -129,8 +147,8 @@ export default function SettingsScreen() {
           <SettingsRow
             icon="body-outline"
             label="Try-On Photo"
-            value={hasPhoto === null ? undefined : hasPhoto ? 'Set' : 'Not set'}
-            onPress={() => router.push({ pathname: '/body-photo', params: { from: 'settings' } })}
+            value={bodyPhoto === undefined ? undefined : !bodyPhoto ? 'Not set' : bodyPhoto.needsRetake ? 'Retake' : 'Set'}
+            onPress={changeBodyPhoto}
           />
           <SettingsRow
             icon="color-palette-outline"

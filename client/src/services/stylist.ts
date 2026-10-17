@@ -105,22 +105,34 @@ export async function acceptOutfit(request: AcceptOutfitRequest): Promise<{ outf
   }
 }
 
-export type TryOnResult = { imageUrl: string };
+export type TryOnFrame = {
+  position: number; // 0–11; 0 = front, 6 = back
+  angle: number; // position × 30, the person turned to their right
+  imageUrl: string | null; // signed, valid 24h; null if that angle isn't ready or failed
+};
 
-// Why a try-on failed, so the screen can offer the right next step: adding a try-on photo,
-// retaking one the AI couldn't use, or trying again.
+export type TryOnResult = {
+  imageUrl: string; // frame 0
+  frames: TryOnFrame[]; // always 12, sorted by position. Frame 0 is never null.
+};
+
+// Why a try-on failed, so the screen can offer the right next step: adding try-on photos,
+// retaking old single-photo ones as front + back, retaking ones the AI couldn't use, or trying again.
 export class TryOnError extends Error {
   constructor(
     message: string,
-    readonly reason: 'no-photo' | 'photo-unusable' | 'other',
+    readonly reason: 'no-photo' | 'needs-retake' | 'photo-unusable' | 'other',
   ) {
     super(message);
     this.name = 'TryOnError';
   }
 }
 
-// POST /api/stylist/try-on: a photo of the user wearing these items, from their try-on photo.
-// Takes 10–30s. The URL lasts 24 hours and can't be fetched again, so don't keep it.
+// POST /api/stylist/try-on: the 12 frames of a 360° spin of the user wearing these items.
+// The first try-on of an outfit generates every frame, so it takes a while (no timeout here);
+// trying on the same items again returns the saved frames quickly. Until the user's angles
+// are ready (`anglesReady` on GET /api/photos/body) only frame 0 is filled in.
+// The URLs last 24 hours, so don't keep them longer.
 export async function tryOn(itemIds: string[]): Promise<TryOnResult> {
   try {
     return await apiPost<TryOnResult>('/api/stylist/try-on', { itemIds });
@@ -128,8 +140,12 @@ export async function tryOn(itemIds: string[]): Promise<TryOnResult> {
     if (e instanceof SessionExpiredError) throw e;
     if (__DEV__) console.warn('Try-on failed:', e instanceof ApiError ? `${e.status} ${e.serverMessage}` : e);
     if (e instanceof ApiError && e.serverMessage) {
-      // 404 is either no try-on photo yet or an item no longer in the closet. 422 is the AI
-      // not being able to use the photo, and its message is written for the user.
+      // 404 is no try-on photo yet, an old one without a back photo, or an item no longer in
+      // the closet. 422 is the AI not being able to use the photo, and its message is written
+      // for the user.
+      if (e.status === 404 && /front and back/i.test(e.serverMessage)) {
+        throw new TryOnError(e.serverMessage, 'needs-retake');
+      }
       if (e.status === 404 && /try-on photo/i.test(e.serverMessage)) {
         throw new TryOnError(e.serverMessage, 'no-photo');
       }
