@@ -23,7 +23,7 @@ import { OutfitPlanningService, type OutfitCandidate, type SelectedOutfit } from
 import { QueryExpansionService } from '../gemini/query-expansion/service';
 import type { RefineEdits, RouteDecision, SearchItem } from '../gemini/reprompt-router/sanitize';
 import { RepromptRouterService } from '../gemini/reprompt-router/service';
-import { TryOnService } from '../gemini/try-on/service';
+import { TryOnService, type TryOnResult } from '../gemini/try-on/service';
 import { AI_LOG_CONTEXT } from '../logger.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
@@ -162,11 +162,11 @@ export class StylistService {
     });
   }
 
-  // POST /try-on: a photo of the user wearing the outfit on screen. Nest
-  // errors (404 no try-on photo or missing item, 422 Gemini declined) pass
-  // through; anything else is a 503 { message }. The failure itself is logged
-  // by TryOnService.
-  async tryOn(userId: string, itemIds: string[]): Promise<{ imageUrl: string }> {
+  // POST /try-on: the user wearing the outfit on screen, from 12 angles. Nest
+  // errors (404 no try-on photo, no back photo or missing item, 422 Gemini
+  // declined) pass through; anything else is a 503 { message }. The failure
+  // itself is logged by TryOnService.
+  async tryOn(userId: string, itemIds: string[]): Promise<TryOnResult> {
     try {
       return await this.tryOnService.generate(userId, itemIds);
     } catch (err) {
