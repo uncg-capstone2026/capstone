@@ -69,13 +69,10 @@ The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The 
 ### Client
 The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" opens it, and it shows one outfit at a time as a flat-lay, with "Not for me" and "Looks right". It calls the live `POST /api/stylist/outfit` (`USE_OUTFIT_FIXTURE` is off). "Looks right" calls `POST /api/stylist/outfit/accept` with the `sessionId` and `turnId`, which saves the outfit with a calendar entry for the day and closes the session. "Not for me" sends the answer to `POST /api/stylist/outfit/reprompt` and goes straight to the next outfit in the same session (`USE_ACCEPT_FEEDBACK_FIXTURE` is off).
 
-- [ ] Test Style Preferences (`src/app/style-preferences.tsx`) on a device against the live `/api/style-notes` routes (PR #58; `USE_STYLE_NOTES_FIXTURE` is off): adding, the 200-character and 50-note limits (400 messages), and deleting. Notes saved on the device while the fixture was on aren't carried over.
 
 ### Server
 Outfit suggestions are sessions of turns (`ai/repromptimplementation.md`, API in `server/CLAUDE.md`). `POST /api/stylist/outfit { occasion, date?, lat?, lon? }` starts a session and returns `OutfitSuggestion` plus `sessionId` and `turnId`. `POST /api/stylist/outfit/reprompt { sessionId, message? }` returns the next outfit, and `POST /api/stylist/outfit/accept` closes the session. `POST /api/stylist/try-on` is done too.
 
-- [ ] Add style notes to the prompts. `StyleNotesService.listForPrompt(userId)` (`server/src/style-notes/style-notes.service.ts`) returns the user's notes (and `findRelevant` searches them by similarity, since PR #62 embeds each note), but nothing calls either yet. Import `StyleNotesModule` into the Stylist module, and have `startSession` and `reprompt` add a "What the user has told StyleMe about their style" block to the query expansion and outfit selection prompts. The request on screen still takes priority.
-- [ ] Learned notes: the memory job (section 8) saves short preferences from accepted and rejected outfits as `Learned` notes, skipping ones already covered.
 
 The remaining Gemini work is in section 8.
 
@@ -96,8 +93,6 @@ Everything that touches Gemini, the embeddings or the pgvector search: setup, it
 - [ ] Add `cut` to AI tagging. `extractImageAttributes` fills every other tag but not `cut`, so it's always empty until the user picks one. Add it to the image-attributes schema, prompt and result type (`server/src/gemini/image-processing/`), and save it in `ItemsService.createFromPhoto` with the other tags. Pick from the cuts the app offers for the item's category (`COMMON_CUTS` in `client/src/services/items.ts`; copy the list into `server/src/gemini/constants.ts`, since the server can't import from the client), or `null` if it can't tell or the category has no cuts. The confirm screen already shows `cut` and marks AI-filled fields, so the app needs no change.
 
 ### Outfit suggestions (`POST /api/stylist/outfit`, section 7)
-- [ ] Server: make "Exclude from future outfit suggestions" work. `findClosestItems` in `server/src/gemini/outfit-planning/service.ts` is where all Stylist candidates come from, but it doesn't check `excludeFromSuggestions` yet (its "Later" comment says it's waiting for the column, which exists now). Add `AND "excludeFromSuggestions" = false` to its `WHERE`, and update the comment. Also check the two Oct 7 migrations have run on Railway (`build` and `start` don't run `prisma migrate deploy`). To test: exclude an item, ask the Stylist for an outfit it would suit, and check it's never suggested. (See "Wear tracking" in section 4.)
-- [ ] Later: the memory job. Read sessions with `memoryProcessed = false`, pull out what the user liked and turned down, and save it as `Learned` style notes (section 7), so later suggestions use it.
 
 ### Prompts
 - [ ] `ai/Prompts.md` has older drafts that differ from the prompts in `server/src/gemini/*/prompt.ts`. Update or delete it so there's one source.
@@ -136,8 +131,6 @@ What the client needs, split by whether it can be done now.
 
 ### Can do now
 - [ ] Test adding by link on a device (section 4).
-- [ ] Test Style Preferences on a device (section 7).
-- [ ] Test "Didn't wear it" and Undo on the Calendar tab on a device (section 9): on a past day, check the outfit's times worn and last worn go down, and that Undo counts it again within the hour. The Oct 13 `notWorn` migration has to have run on Railway first.
 
 ### Needs a server decision first
 
