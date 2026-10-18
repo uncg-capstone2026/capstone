@@ -69,13 +69,10 @@ The Stylist tab (`src/app/(tabs)/stylist.tsx`) is the start of the AI chat. The 
 ### Client
 The suggestion screen (`src/app/suggestion.tsx`) is built. "Style my outfit" opens it, and it shows one outfit at a time as a flat-lay, with "Not for me" and "Looks right". It calls the live `POST /api/stylist/outfit` (`USE_OUTFIT_FIXTURE` is off). "Looks right" calls `POST /api/stylist/outfit/accept` with the `sessionId` and `turnId`, which saves the outfit with a calendar entry for the day and closes the session. "Not for me" sends the answer to `POST /api/stylist/outfit/reprompt` and goes straight to the next outfit in the same session (`USE_ACCEPT_FEEDBACK_FIXTURE` is off).
 
-- [ ] Test Style Preferences (`src/app/style-preferences.tsx`) on a device against the live `/api/style-notes` routes (PR #58; `USE_STYLE_NOTES_FIXTURE` is off): adding, the 200-character and 50-note limits (400 messages), and deleting. Notes saved on the device while the fixture was on aren't carried over.
 
 ### Server
 Outfit suggestions are sessions of turns (`ai/repromptimplementation.md`, API in `server/CLAUDE.md`). `POST /api/stylist/outfit { occasion, date?, lat?, lon? }` starts a session and returns `OutfitSuggestion` plus `sessionId` and `turnId`. `POST /api/stylist/outfit/reprompt { sessionId, message? }` returns the next outfit, and `POST /api/stylist/outfit/accept` closes the session. `POST /api/stylist/try-on` is done too.
 
-- [ ] Add style notes to the prompts. `StyleNotesService.listForPrompt(userId)` (`server/src/style-notes/style-notes.service.ts`) returns the user's notes, but nothing calls it yet. Import `StyleNotesModule` into the Stylist module, and have `startSession` and `reprompt` add a "What the user has told StyleMe about their style" block to the query expansion and outfit selection prompts. The request on screen still takes priority.
-- [ ] Learned notes: the memory job (section 8) saves short preferences from accepted and rejected outfits as `Learned` notes, skipping ones already covered.
 
 The remaining Gemini work is in section 8.
 
@@ -96,8 +93,6 @@ Everything that touches Gemini, the embeddings or the pgvector search: setup, it
 - [ ] Add `cut` to AI tagging. `extractImageAttributes` fills every other tag but not `cut`, so it's always empty until the user picks one. Add it to the image-attributes schema, prompt and result type (`server/src/gemini/image-processing/`), and save it in `ItemsService.createFromPhoto` with the other tags. Pick from the cuts the app offers for the item's category (`COMMON_CUTS` in `client/src/services/items.ts`; copy the list into `server/src/gemini/constants.ts`, since the server can't import from the client), or `null` if it can't tell or the category has no cuts. The confirm screen already shows `cut` and marks AI-filled fields, so the app needs no change.
 
 ### Outfit suggestions (`POST /api/stylist/outfit`, section 7)
-- [ ] Server: make "Exclude from future outfit suggestions" work. `findClosestItems` in `server/src/gemini/outfit-planning/service.ts` is where all Stylist candidates come from, but it doesn't check `excludeFromSuggestions` yet (its "Later" comment says it's waiting for the column, which exists now). Add `AND "excludeFromSuggestions" = false` to its `WHERE`, and update the comment. Also check the two Oct 7 migrations have run on Railway (`build` and `start` don't run `prisma migrate deploy`). To test: exclude an item, ask the Stylist for an outfit it would suit, and check it's never suggested. (See "Wear tracking" in section 4.)
-- [ ] Later: the memory job. Read sessions with `memoryProcessed = false`, pull out what the user liked and turned down, and save it as `Learned` style notes (section 7), so later suggestions use it.
 
 ### Prompts
 - [ ] `ai/Prompts.md` has older drafts that differ from the prompts in `server/src/gemini/*/prompt.ts`. Update or delete it so there's one source.
@@ -111,7 +106,9 @@ Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where
 
 ### Server
 - [ ] Optional cleanup: outfit reminders are local notifications scheduled by the app, so `notificationsEnabled` on `User`, `POST /api/auth/me/push-token`, the `PushToken` model and the `Notification` model are unused. Remove them, or keep them for server-sent push later (which would need an Apple Developer account and APNs key). `marketingOptIn` is no longer sent at sign-up either.
-- [ ] Later: let the user say they didn't wear a planned outfit (e.g. "Didn't wear it" on a past calendar day). That would undo the counts for that entry, rolling `lastWorn` back to the outfit's previous worn entry.
+- [ ] "Didn't wear it" fix: Undo on an older day adds a wear to the wrong 30-day period. If the day was counted in an item's earlier period, `markNotWorn` correctly leaves `timesWornThisMonth` alone, but after Undo the hourly job counts the day again and adds 1 to the current period. Have `countEntry` (`server/src/wear-tracking/wear-tracking.service.ts`) only add to `timesWornThisMonth` when the entry's `date` falls in the item's current period (`date >= wearPeriodStart`), and keep adding to `timesWorn` as now. This also fixes old days that get counted late.
+- [ ] "Didn't wear it" fix: `recomputeLastWorn` (`server/src/outfits/outfits.service.ts`) only looks at calendar entries that still exist. A counted entry that was deleted keeps its wear in `timesWorn` but no longer counts toward `lastWorn`, so marking another day can move `lastWorn` back too far, or set it to `null` while `timesWorn` is above 0. Options: when marking, only recompute if the marked day was the current `lastWorn`, and otherwise leave it; or keep deleted counted entries (soft delete) so their dates still count.
+- [ ] Optional "Didn't wear it" fix: `uncountWear` takes the wear off the outfit's current pieces. If the pieces were edited after the day was counted, the wrong items lose a wear. To fix it, record which items were counted for each entry when the job counts it (for example a `countedItemIds String[]` on `CalendarEntry`), and subtract from those.
 
 ### Client
 The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45). So are `GET /api/calendar`, `PATCH /api/auth/me` with `name`, `displayName`, `phone` and `notificationsEnabled`, and `POST /api/auth/me/push-token { token }`.
@@ -134,7 +131,6 @@ What the client needs, split by whether it can be done now.
 
 ### Can do now
 - [ ] Test adding by link on a device (section 4).
-- [ ] Test Style Preferences on a device (section 7).
 
 ### Needs a server decision first
 

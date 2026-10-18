@@ -7,40 +7,46 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MascotMessage } from '@/components/mascot-message';
 import { choosePhotoSource, pickPhoto } from '@/components/photo-picker';
-import { uploadBodyPhoto, type PickedPhoto } from '@/services/photos';
+import { uploadBodyPhotos, type PickedPhoto } from '@/services/photos';
+
+type Side = 'front' | 'back';
 
 // Shown once during onboarding, and again from Settings → Try-On Photo (`?from=settings`) or
 // the try-on screen (`?from=try-on`), where it has a back button instead of "Skip for now"
 // and goes back to that screen after Submit.
+// Takes a front and a back photo; the server makes the other angles of the 360° try-on from them.
 export default function BodyPhotoScreen() {
   const { from } = useLocalSearchParams<{ from?: string }>();
   const fromApp = from === 'settings' || from === 'try-on';
-  const [photo, setPhoto] = useState<PickedPhoto | null>(null);
+  const [photos, setPhotos] = useState<Record<Side, PickedPhoto | null>>({ front: null, back: null });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [photoArea, setPhotoArea] = useState<{ width: number; height: number } | null>(null);
 
-  // Largest 3:4 box that fits the space left over, so the screen doesn't need to scroll.
-  const photoHeight = photoArea ? Math.min(photoArea.height, (photoArea.width * 4) / 3) : 0;
+  // Largest pair of 3:4 boxes (side by side, 12px apart, with a ~24px label under each) that fits
+  // the space left over, so the screen doesn't need to scroll.
+  const photoHeight = photoArea
+    ? Math.min(photoArea.height - 24, ((photoArea.width - 12) / 2) * (4 / 3))
+    : 0;
 
-  async function handleAddPhoto() {
+  async function handleAddPhoto(side: Side) {
     setError(null);
     const source = await choosePhotoSource();
     if (!source) return;
     try {
       const picked = await pickPhoto(source);
-      if (picked) setPhoto(picked);
+      if (picked) setPhotos((current) => ({ ...current, [side]: picked }));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     }
   }
 
   async function handleSubmit() {
-    if (!photo) return;
+    if (!photos.front || !photos.back) return;
     setError(null);
     setIsSubmitting(true);
     try {
-      await uploadBodyPhoto(photo);
+      await uploadBodyPhotos(photos.front, photos.back);
       if (fromApp) router.back();
       else router.replace('/closet');
     } catch (e) {
@@ -77,43 +83,31 @@ export default function BodyPhotoScreen() {
               adjustsFontSizeToFit // shrinks to fit one line on narrow phones
               minimumFontScale={0.6}
               className="text-center font-heading text-4xl text-sage-800">
-              Add a full-body photo
+              Add full-body photos
             </Text>
           </View>
 
           <MascotMessage>
-            Stand back, face the camera, and keep your whole body in frame. Outfits get previewed on this
-            photo.
+            Stand back and keep your whole body in frame. Take one facing the camera, then one facing away
+            from the same spot. Outfits get previewed on you from every angle.
           </MascotMessage>
 
           <View
             onLayout={(e) => setPhotoArea(e.nativeEvent.layout)}
             className="min-h-[200px] flex-1 items-center justify-center">
             {photoArea ? (
-              <Pressable
-                onPress={handleAddPhoto}
-                disabled={isSubmitting}
-                accessibilityRole="button"
-                accessibilityLabel={photo ? 'Change photo' : 'Add photo'}
-                style={{ height: photoHeight, width: (photoHeight * 3) / 4 }}
-                className="items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-sage-300 bg-cream-50">
-                {photo ? (
-                  <>
-                    <Image source={{ uri: photo.uri }} contentFit="cover" style={{ width: '100%', height: '100%' }} />
-                    <View className="absolute bottom-3 right-3 flex-row items-center gap-1 rounded-full bg-sage-700/80 px-3 py-1.5">
-                      <Ionicons name="camera-outline" size={14} color="#fffdf9" />
-                      <Text className="font-label text-xs text-cream-50">Change</Text>
-                    </View>
-                  </>
-                ) : (
-                  <View className="items-center gap-3">
-                    <View className="h-14 w-14 items-center justify-center rounded-full bg-sage-500">
-                      <Ionicons name="add" size={30} color="#fffdf9" />
-                    </View>
-                    <Text className="font-label text-base text-sage-700">Add Photo</Text>
-                  </View>
-                )}
-              </Pressable>
+              <View className="flex-row gap-3">
+                {(['front', 'back'] as const).map((side) => (
+                  <PhotoSlot
+                    key={side}
+                    label={side === 'front' ? 'Front' : 'Back'}
+                    photo={photos[side]}
+                    height={photoHeight}
+                    disabled={isSubmitting}
+                    onPress={() => handleAddPhoto(side)}
+                  />
+                ))}
+              </View>
             ) : null}
           </View>
 
@@ -122,7 +116,7 @@ export default function BodyPhotoScreen() {
 
             <Pressable
               onPress={handleSubmit}
-              disabled={!photo || isSubmitting}
+              disabled={!photos.front || !photos.back || isSubmitting}
               className="flex-row items-center justify-center rounded-xl bg-sage-500 py-3 disabled:opacity-60">
               {isSubmitting ? (
                 <ActivityIndicator color="#fffdf9" />
@@ -145,12 +139,56 @@ export default function BodyPhotoScreen() {
           <View className="flex-row items-start justify-center gap-2 px-2">
             <Ionicons name="lock-closed-outline" size={14} color="#7a9264" style={{ marginTop: 2 }} />
             <Text className="flex-1 font-body text-xs text-sage-500">
-              Your photo is kept private. It is only used to preview outfits on you, and is never shared
-              or shown to anyone else.
+              Your photos are kept private. They are only used to preview outfits on you, and are never
+              shared or shown to anyone else.
             </Text>
           </View>
         </View>
       </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function PhotoSlot({
+  label,
+  photo,
+  height,
+  disabled,
+  onPress,
+}: {
+  label: string;
+  photo: PickedPhoto | null;
+  height: number;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <View className="items-center gap-1.5">
+      <Pressable
+        onPress={onPress}
+        disabled={disabled}
+        accessibilityRole="button"
+        accessibilityLabel={photo ? `Change ${label.toLowerCase()} photo` : `Add ${label.toLowerCase()} photo`}
+        style={{ height, width: (height * 3) / 4 }}
+        className="items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-sage-300 bg-cream-50">
+        {photo ? (
+          <>
+            <Image source={{ uri: photo.uri }} contentFit="cover" style={{ width: '100%', height: '100%' }} />
+            <View className="absolute bottom-2 right-2 flex-row items-center gap-1 rounded-full bg-sage-700/80 px-2.5 py-1">
+              <Ionicons name="camera-outline" size={13} color="#fffdf9" />
+              <Text className="font-label text-xs text-cream-50">Change</Text>
+            </View>
+          </>
+        ) : (
+          <View className="items-center gap-2">
+            <View className="h-12 w-12 items-center justify-center rounded-full bg-sage-500">
+              <Ionicons name="add" size={26} color="#fffdf9" />
+            </View>
+            <Text className="font-label text-sm text-sage-700">Add Photo</Text>
+          </View>
+        )}
+      </Pressable>
+      <Text className="font-label text-[11px] uppercase tracking-[0.14em] text-sage-800">{label}</Text>
+    </View>
   );
 }

@@ -30,6 +30,7 @@ export type ScheduledDate = {
   id: string; // the calendar entry's id
   date: string; // YYYY-MM-DD
   eventName: string | null;
+  notWorn: boolean; // the user said they didn't wear it that day, so it isn't counted
 };
 
 // GET /api/outfits
@@ -289,7 +290,7 @@ export async function scheduleOutfit(
 ): Promise<ScheduledDate> {
   if (USE_OUTFIT_EDITS_FIXTURE) {
     await wait(300);
-    const created = { id: `fixture-entry-${Date.now()}`, ...entry };
+    const created = { id: `fixture-entry-${Date.now()}`, ...entry, notWorn: false };
     fixtureSchedules[outfitId] = [...(fixtureSchedules[outfitId] ?? []), created];
     return created;
   }
@@ -315,6 +316,26 @@ export async function unscheduleOutfit(outfitId: string, entryId: string): Promi
     throw collectionsError(e, 'Could not remove this date. Please try again.');
   }
   void syncReminders();
+}
+
+// POST (or DELETE, to undo) /api/outfits/:id/schedule/:entryId/not-worn: "Didn't wear it" on a
+// day that has passed. The server takes that day's wear back off the outfit and its pieces; on
+// undo it counts it again within the hour.
+export async function setNotWorn(outfitId: string, entryId: string, notWorn: boolean): Promise<void> {
+  if (USE_OUTFIT_EDITS_FIXTURE) {
+    await wait(300);
+    fixtureSchedules[outfitId] = (fixtureSchedules[outfitId] ?? []).map((entry) =>
+      entry.id === entryId ? { ...entry, notWorn } : entry,
+    );
+    return;
+  }
+  const path = `/api/outfits/${outfitId}/schedule/${entryId}/not-worn`;
+  try {
+    if (notWorn) await apiPost(path, {});
+    else await apiDelete(path);
+  } catch (e) {
+    throw collectionsError(e, 'Could not update this day. Please try again.');
+  }
 }
 
 export function formatOutfitCount(count: number): string {

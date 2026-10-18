@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DayEvents } from '@/components/calendar/day-events';
@@ -8,6 +8,7 @@ import { MonthGrid, type DayMark } from '@/components/calendar/month-grid';
 import { WeatherCard } from '@/components/stylist/weather-card';
 import { SessionExpiredError } from '@/services/api';
 import { getCalendarEntries, type CalendarEntry } from '@/services/calendar';
+import { setNotWorn } from '@/services/outfits';
 import { formatDayLabel, startOfToday, toDateKey } from '@/utils/dates';
 
 // A month of planned outfits. Opens on today; tapping a day shows its weather (within the
@@ -18,6 +19,7 @@ export default function CalendarScreen() {
   const [entries, setEntries] = useState<CalendarEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   // The visible month's entries. Returns a cleanup that ignores a reply that comes in late.
   const load = useCallback(() => {
@@ -62,6 +64,21 @@ export default function CalendarScreen() {
   const selectedKey = toDateKey(selected);
   const dayEntries = entries.filter((entry) => entry.date === selectedKey);
 
+  // "Didn't wear it" (or Undo) on a past day.
+  async function changeNotWorn(entry: CalendarEntry, notWorn: boolean) {
+    setUpdatingId(entry.id);
+    try {
+      await setNotWorn(entry.outfit.id, entry.id, notWorn);
+      setEntries((current) => current.map((e) => (e.id === entry.id ? { ...e, notWorn } : e)));
+    } catch (e) {
+      if (!(e instanceof SessionExpiredError)) {
+        Alert.alert("Couldn't update this day", e instanceof Error ? e.message : 'Please try again.');
+      }
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
   function selectDay(date: Date) {
     setSelected(date);
     if (date.getMonth() !== month.getMonth() || date.getFullYear() !== month.getFullYear()) {
@@ -100,7 +117,7 @@ export default function CalendarScreen() {
               </Pressable>
             </View>
           ) : (
-            <DayEvents entries={dayEntries} />
+            <DayEvents entries={dayEntries} updatingId={updatingId} onSetNotWorn={changeNotWorn} />
           )}
         </View>
       </ScrollView>

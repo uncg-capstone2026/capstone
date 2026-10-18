@@ -12,21 +12,28 @@ type UploadUrlResponse = {
   key: string; // S3 object key the backend will store on the user
 };
 
-// Try-on (body) photo upload flow. The app never holds AWS credentials:
-//   1. POST /api/photos/body/upload-url { contentType, fileName } -> { uploadUrl, key }
-//   2. PUT the image bytes straight to S3 at uploadUrl
-//   3. POST /api/photos/body { key } -> { photoId }  (saved as the user's primary try-on photo)
+// Try-on (body) photo upload flow: a front and a back photo. The app never holds AWS credentials:
+//   1. POST /api/photos/body/upload-url { contentType, fileName } -> { uploadUrl, key }  (per photo)
+//   2. PUT each image's bytes straight to S3 at its uploadUrl
+//   3. POST /api/photos/body { frontKey, backKey } -> { photoId }
+// The server makes the other angles in the background afterwards (see `anglesReady` on GET).
+// A new upload replaces all of the user's try-on photos and the saved try-ons made from them.
 // Resolves to the new photo's id.
 // Until EXPO_PUBLIC_API_URL is set, this resolves locally so the flow stays walkable.
-export async function uploadBodyPhoto(photo: PickedPhoto): Promise<string> {
+export async function uploadBodyPhotos(front: PickedPhoto, back: PickedPhoto): Promise<string> {
   if (!isBackendConfigured) {
     await new Promise((resolve) => setTimeout(resolve, 600));
     return 'local-placeholder';
   }
 
+  const [frontKey, backKey] = await Promise.all([uploadOne(front), uploadOne(back)]);
+  return confirmBodyPhotoUpload(frontKey, backKey);
+}
+
+async function uploadOne(photo: PickedPhoto): Promise<string> {
   const { uploadUrl, key } = await requestBodyPhotoUploadUrl(photo);
   await uploadToS3(uploadUrl, photo);
-  return confirmBodyPhotoUpload(key);
+  return key;
 }
 
 // The server only accepts JPEG, PNG and WebP (400 otherwise).
@@ -50,20 +57,25 @@ export async function uploadToS3(uploadUrl: string, photo: PickedPhoto): Promise
   }
 }
 
-// The server checks the upload finished (404 otherwise) and returns the existing
-// photo if the same key is sent twice.
-export async function confirmBodyPhotoUpload(key: string): Promise<string> {
-  const result = await apiPost<{ photoId: string }>('/api/photos/body', { key });
+// The server checks both uploads finished (404 otherwise) and that the keys differ (400).
+export async function confirmBodyPhotoUpload(frontKey: string, backKey: string): Promise<string> {
+  const result = await apiPost<{ photoId: string }>('/api/photos/body', { frontKey, backKey });
   return result.photoId;
 }
 
-// GET /api/photos/body: whether the user has a try-on photo (404 when they don't).
-export async function hasBodyPhoto(): Promise<boolean> {
+export type BodyPhoto = {
+  photoId: string;
+  imageUrl: string; // the front photo
+  anglesReady: boolean; // the server has made the other angles, so the 360° spin is complete
+  needsRetake: boolean; // an old single-photo upload: they need to take front + back to use try-on
+};
+
+// GET /api/photos/body: the user's try-on photos, or null if they haven't added any (404).
+export async function getBodyPhoto(): Promise<BodyPhoto | null> {
   try {
-    await apiGet<{ photoId: string; imageUrl: string }>('/api/photos/body');
-    return true;
+    return await apiGet<BodyPhoto>('/api/photos/body');
   } catch (e) {
-    if (e instanceof ApiError && e.status === 404) return false;
+    if (e instanceof ApiError && e.status === 404) return null;
     throw e;
   }
 }

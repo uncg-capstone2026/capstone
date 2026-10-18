@@ -6,11 +6,11 @@ export type CalendarEntry = {
   id: string; // the calendar entry's id
   date: string; // YYYY-MM-DD
   eventName: string | null;
+  notWorn: boolean; // the user said they didn't wear it ("Didn't wear it")
   outfit: SavedOutfit;
 };
 
 // GET /api/calendar?from=&to= (both YYYY-MM-DD, inclusive), earliest first.
-// Not on the server yet (see PLAN.md section 9).
 export async function getCalendarEntries(from: string, to: string): Promise<CalendarEntry[]> {
   try {
     return await apiGet<CalendarEntry[]>(`/api/calendar?from=${from}&to=${to}`);
