@@ -41,7 +41,7 @@ type BodyPhoto = {
 ```
 - 404 still means no try-on photo at all.
 - **`needsRetake: true`:** send them to the front + back flow. Try-on returns 404 for them until they do.
-- **`anglesReady: false`:** try-on still works, but only frame 0 (the front) is filled in. Wait for `anglesReady`, polling every few seconds, before showing the spin, or show just the front for now.
+- **`anglesReady: false`:** try-on still works, but only frame 0 (the front) is filled in. Wait for `anglesReady`, polling every few seconds, before showing the spin, or show just the front for now. Making the angles after an upload takes a while (7 image generations in parallel, plus a retry for any that fail). When the app asks for the try-on again once `anglesReady` is true, the front comes back saved and only the other 7 are dressed, so that second wait is about one image generation.
 
 ## 3. The try-on response
 `POST /api/stylist/try-on { itemIds }`. The request is the same; the response has the frames now:
@@ -57,7 +57,9 @@ export type TryOnResult = {
   frames: TryOnFrame[]; // always 8, sorted by position
 };
 ```
-- It returns **all frames at once**. The first try-on of an outfit generates them all, so it's a long wait: show progress and don't time out early. Trying on the same items again returns the saved frames quickly.
+- **One response with every frame.** The app doesn't get the front early (except while `anglesReady` is false, above). The first try-on of an outfit generates all 8 frames at the same time, so the wait is about one image generation (the slowest of the 8). Show progress and don't time out early. Trying on the same items again returns the saved frames quickly.
+- **Retries are cheap.** Every frame that finishes is saved, even when the request fails (frame 0 failing gives a 422 or 503). Trying the same items again only generates what's missing, so a "Try again" button only redoes the failed frames.
+- **Null frames fill in on a retry.** A frame that failed comes back `null`; the next try-on of the same items generates just those.
 
 ## 4. Showing it
 - Show `frames` in order as a spinner: dragging steps through positions 0 → 7 → 0. Start on position 0.
