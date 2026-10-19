@@ -4,7 +4,7 @@ import { GeminiHelpers } from '../helpers';
 import { HISTORY_SUMMARY_PROMPT } from './prompt';
 
 // An older turn, as the summary sees it.
-export type SummaryTurn = {
+type SummaryTurn = {
   turnNumber: number;
   outfitName: string | null;
   itemNames: string[];

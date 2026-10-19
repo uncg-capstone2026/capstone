@@ -266,23 +266,13 @@ export class ItemsService {
   // saves it to Item.embedding. If anything fails, the item is saved without one
   // and the Stylist skips it.
   private async addEmbedding(itemId: Item['id'], { image, mimeType }: AiImage) {
-    // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-    const debugStartedAt = Date.now();
-    this.logger.log(`[DEBUG AI] embedding start item=${itemId} mimeType=${mimeType} size=${Math.round(image.length / 1024)}KB`);
-    // ==================== END TEST / DEBUG ====================
     try {
       const embedding = await this.imageProcessing.embedImage(image, mimeType);
-      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-      this.logger.log(`[DEBUG AI] embedding ok item=${itemId} in ${Date.now() - debugStartedAt}ms (dimensions=${embedding.length})`);
-      // ==================== END TEST / DEBUG ====================
       // Prisma can't write the vector type, so it goes in as '[0.1,...]' text and is cast in SQL.
       const vector = `[${embedding.join(',')}]`;
       await this.prisma.$executeRaw`UPDATE "Item" SET embedding = ${vector}::vector WHERE id = ${itemId}`;
     } catch (err) {
       this.logger.warn(`Embedding failed for item ${itemId}: ${(err as Error).message}`);
-      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-      this.debugLogAiError('embedding', itemId, err, debugStartedAt);
-      // ==================== END TEST / DEBUG ====================
     }
   }
 
@@ -292,15 +282,8 @@ export class ItemsService {
   // its defaults and the user (or a backfill) fills them in. keepName: leave the
   // item's current name (e.g. a store's product name from a link import).
   private async addAttributes(itemId: Item['id'], { image, mimeType }: AiImage, { keepName = false } = {}) {
-    // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-    const debugStartedAt = Date.now();
-    this.logger.log(`[DEBUG AI] tagging start item=${itemId} mimeType=${mimeType} size=${Math.round(image.length / 1024)}KB`);
-    // ==================== END TEST / DEBUG ====================
     try {
       const attrs = await this.imageProcessing.extractImageAttributes(image, mimeType);
-      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-      this.logger.log(`[DEBUG AI] tagging ok item=${itemId} in ${Date.now() - debugStartedAt}ms: ${JSON.stringify(attrs)}`);
-      // ==================== END TEST / DEBUG ====================
 
       // Same length limits as editing an item (items.dto.ts).
       const name = attrs.name?.trim().slice(0, 60);
@@ -322,9 +305,6 @@ export class ItemsService {
       });
     } catch (err) {
       this.logger.warn(`Tagging failed for item ${itemId}: ${(err as Error).message}`);
-      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-      this.debugLogAiError('tagging', itemId, err, debugStartedAt);
-      // ==================== END TEST / DEBUG ====================
     }
   }
 
@@ -383,42 +363,6 @@ export class ItemsService {
       outfits,
     };
   }
-
-  // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-
-  // GET /api/items/:id/embedding — whether the item has an embedding saved.
-  // Prisma can't read the vector column, so this checks it with raw SQL.
-  async hasEmbedding(userId: User['id'], id: string) {
-    await this.findOwned(userId, id);
-    const [row] = await this.prisma.$queryRaw<{ hasEmbedding: boolean }[]>`
-      SELECT embedding IS NOT NULL AS "hasEmbedding" FROM "Item" WHERE id = ${id}`;
-    return { itemId: id, hasEmbedding: row.hasEmbedding };
-  }
-
-  // Logs everything about a failed AI step: timing, HTTP status, the full
-  // err.cause chain (where "fetch failed" hides ECONNRESET etc.) and the stack.
-  // Never logs the image or request body.
-  private debugLogAiError(step: string, itemId: Item['id'], err: unknown, startedAt: number) {
-    const e = err as Error & { status?: unknown; code?: unknown };
-    const lines = [
-      `[DEBUG AI] ${step} FAILED item=${itemId} after ${Date.now() - startedAt}ms`,
-      `  error: ${e?.name}: ${e?.message} (status=${e?.status ?? '-'}, code=${e?.code ?? '-'})`,
-    ];
-
-    let cause = (err as { cause?: unknown })?.cause;
-    for (let depth = 0; cause && depth < 5; depth++) {
-      const c = cause as Error & Record<string, unknown>;
-      const details = ['code', 'errno', 'syscall', 'address', 'port']
-        .filter((k) => c[k] !== undefined)
-        .map((k) => `${k}=${String(c[k])}`)
-        .join(', ');
-      lines.push(`  cause[${depth}]: ${c.name ?? typeof cause}: ${c.message ?? String(cause)}${details ? ` (${details})` : ''}`);
-      cause = c.cause;
-    }
-
-    this.logger.error(lines.join('\n'), e?.stack);
-  }
-  // ==================== END TEST / DEBUG ====================
 }
 
 // Any image format (WebP, AVIF, GIF...) -> a JPEG of at most 2000px, which the

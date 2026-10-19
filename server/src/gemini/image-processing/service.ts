@@ -17,7 +17,7 @@ import { IMAGE_ATTRIBUTES_RESPONSE_SCHEMA } from './schema';
 
 // What extractImageAttributes returns. Each field lines up with a column on
 // the Item model in prisma/schema.prisma (category and fit use its enum names).
-export type ImageAttributes = {
+type ImageAttributes = {
   name: string;
   type: ClothingType;
   category: Category;

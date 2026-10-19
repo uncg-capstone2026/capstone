@@ -42,7 +42,7 @@ export type OutfitCandidate = {
 // One checked outfit: fixed pieces first, then the ones Gemini chose.
 export type SelectedOutfit = ValidOutfit<OutfitCandidate>;
 
-export type SelectionInput = {
+type SelectionInput = {
   request: string; // the user's request (with the date line, if any)
   weather?: Weather | null;
   styleNotes?: string[]; // the user's style notes closest to the request

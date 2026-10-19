@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { GeminiModule } from '../gemini/gemini.module';
-import { GeminiHelpers } from '../gemini/helpers';
 import { OutfitsModule } from '../outfits/outfits.module';
 import { S3Module } from '../s3/s3.module';
 import { StyleNotesModule } from '../style-notes/style-notes.module';
@@ -13,15 +12,13 @@ import { StylistService } from './stylist.service';
 // The Stylist tab: /api/stylist/outfit and /outfit/reprompt, plus accept and feedback.
 // StylistSessionsService is exported for the accept route (acceptTurn).
 // - GeminiModule gives us QueryExpansionService and OutfitPlanningService.
-// - GeminiHelpers (the Gemini client) isn't exported from GeminiModule, so it's
-//   provided here too; it has no dependencies, so this doesn't touch his module.
 // - WeatherModule gives us the day's forecast for the prompts.
 // - OutfitsModule gives us OutfitsService.create for the accept route.
 // - StyleNotesModule gives us the user's style notes for the prompts.
 @Module({
   imports: [GeminiModule, S3Module, WeatherModule, OutfitsModule, StyleNotesModule],
   controllers: [StylistController],
-  providers: [StylistService, OutfitFeedbackService, StylistSessionsService, GeminiHelpers],
+  providers: [StylistService, OutfitFeedbackService, StylistSessionsService],
   exports: [StylistSessionsService],
 })
 export class StylistModule {}

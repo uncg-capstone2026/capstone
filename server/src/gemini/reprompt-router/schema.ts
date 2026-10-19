@@ -1,7 +1,7 @@
 import { Type, type Schema } from '@google/genai';
 import { CLOTHING_TYPES } from '../constants';
 
-export const REPROMPT_ROUTES = ['reroll', 'swap', 'refine', 'restart'] as const;
+const REPROMPT_ROUTES = ['reroll', 'swap', 'refine', 'restart'] as const;
 
 const searchItem: Schema = {
   type: Type.OBJECT,
