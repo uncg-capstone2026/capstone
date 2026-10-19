@@ -1,14 +1,19 @@
-// Prompts for the 360° try-on (12 frames, 30° apart). Frame 0 uses TRY_ON_PROMPT
+// Prompts for the 360° try-on (8 frames, 45° apart). Frame 0 uses TRY_ON_PROMPT
 // from prompt.ts as is.
 
 export const FRONT_VIEW_LABEL = 'FRONT VIEW:';
 export const BACK_PHOTO_LABEL = 'BACK PHOTO:';
 export const BASE_VIEW_LABEL = 'BASE VIEW:';
-export const DRESSED_FRONT_LABEL = 'DRESSED FRONT VIEW:';
 
-const ANGLES = `Angles count how far the person has turned in place to their right,
-with the camera fixed: 0° is the front, 90° shows their left side, 180°
-is the back, 270° shows their right side.`;
+// The turn direction, in image terms only: "to their left" was read from the
+// viewer's side, so the frame nearest the front turned the wrong way.
+const ANGLES = `Angles count how far the person has turned in place, with the
+camera fixed. They always turn the same way: their face moves toward the
+LEFT side of the image. At 45° they face toward the left of the image; at
+90° they face the left edge of the image, with their left side toward the
+camera; 180° is the back; at 270° they face the right edge of the image,
+with their right side toward the camera; at 315° they face toward the
+right of the image. Even for a small angle, turn them this way.`;
 
 const RULES = `Rules:
 - Use the item photos for the garment only; ignore any person,
@@ -29,21 +34,55 @@ const BASE_RULES = `Rules:
 - Output exactly one image, with no text, captions, watermarks,
   collages, or before/after comparisons.`;
 
-// Where the person faces at `angle`, in words, so the turn direction is clear.
+// What each angle looks like, in concrete details Gemini can check. One per
+// frame. Turning clockwise (seen from above), they face the left of the image first.
+const VIEWS: Record<number, string> = {
+  45: `This is a three-quarter front view, exactly halfway between the front
+and the side profile, facing toward the left of the image. Both eyes
+show, but their right eye is close to the bridge of the nose and partly
+hidden. About as much of their left side shows as of their front.
+Their left shoulder is nearer the camera; their right shoulder is partly
+behind their chest.`,
+  90: `This is an exact side profile, facing the left edge of the image.
+Only their left side shows: one eye, one ear, and the nose in
+silhouette. Their right arm is hidden behind their body. Neither their
+chest nor their back faces the camera.`,
+  135: `This is a three-quarter back view, exactly halfway between the side
+profile and the back, facing away toward the left of the image. Their
+face is hidden except for the edge of their left cheek and jaw; their
+left ear and the back of their head show. About as much of their back
+shows as of their left side. Their left shoulder is nearer the
+camera; their right shoulder shows behind them.`,
+  180: `This is straight from behind. Their back fully faces the camera, their
+face is not visible, and both shoulders are level and equally visible.`,
+  225: `This is a three-quarter back view, exactly halfway between the back
+and the side profile, facing away toward the right of the image. Their
+face is hidden except for the edge of their right cheek and jaw; their
+right ear and the back of their head show. About as much of their back
+shows as of their right side. Their right shoulder is nearer the camera;
+their left shoulder shows behind them.`,
+  270: `This is an exact side profile, facing the right edge of the image.
+Only their right side shows: one eye, one ear, and the nose in
+silhouette. Their left arm is hidden behind their body. Neither their
+chest nor their back faces the camera.`,
+  315: `This is a three-quarter front view, exactly halfway between the side
+profile and the front, facing toward the right of the image. Both eyes
+show, but their left eye is close to the bridge of the nose and partly
+hidden. About as much of their right side shows as of their front.
+Their right shoulder is nearer the camera; their left shoulder is
+partly behind their chest.`,
+};
+
+// Where the person faces at `angle` and what that looks like, in words.
 function direction(angle: number): string
 {
-  if (angle === 90) return 'This is a side view: they face the left edge of the image, and their left side is toward the camera.';
-  if (angle === 270) return 'This is a side view: they face the right edge of the image, and their right side is toward the camera.';
-  if (angle < 90) return 'This is a three-quarter front view: they face toward the left of the image, showing their front and their left side.';
-  if (angle < 180) return 'This is a three-quarter back view: their back is mostly toward the camera, and their left side shows; they face away, toward the left of the image.';
-  if (angle < 270) return 'This is a three-quarter back view: their back is mostly toward the camera, and their right side shows; they face away, toward the right of the image.';
-  return 'This is a three-quarter front view: they face toward the right of the image, showing their front and their right side.';
+  return VIEWS[angle];
 }
 
 // ---- Base angles: the user in their own clothes, no outfit ----
 
-// Base frame 6: the back, made from the front photo (frame 0) and the back
-// photo, in the front photo's pose.
+// Base back frame (BACK, 180°): made from the front photo (frame 0) and the
+// back photo, in the front photo's pose.
 export const BASE_BACK_PROMPT = `You are making a 360° turnaround of a person for a closet app's
 virtual try-on. You will be given:
 - FRONT VIEW: a photo of the person from the front.
@@ -71,7 +110,7 @@ Keep the person the same:
 
 ${BASE_RULES}`;
 
-// Other base frames: the person turned `angle`° to their right, made from
+// Other base frames: the person turned `angle`° (see ANGLES), made from
 // the front photo (frame 0) and the back photo.
 export function baseTurnPrompt(angle: number): string
 {
@@ -80,9 +119,11 @@ virtual try-on. You will be given:
 - FRONT VIEW: a photo of the person from the front.
 - BACK PHOTO: a photo of the same person from behind.
 
-Generate one photorealistic photo of the same person, turned ${angle}° to
-their right. ${direction(angle)} ${ANGLES} It is one frame of a
-turntable spin.
+Generate one photorealistic photo of the same person, turned ${angle}°.
+${ANGLES} It is one frame of a turntable spin.
+
+How ${angle}° looks:
+${direction(angle)}
 
 Keep everything else the same as FRONT VIEW:
 - Same face, hair, skin tone, body shape and size. Do not slim,
@@ -104,23 +145,24 @@ ${BASE_RULES}`;
 
 // ---- Dressing the base angles ----
 
-// Dressed frames other than 0: BASE VIEW at `angle`, dressed in the outfit
-// as it's worn in the dressed front (frame 0).
+// Dressed frames other than 0: BASE VIEW at `angle`, dressed in the outfit.
+// Every frame is made at the same time as the front, so this one can't see
+// the dressed front; the item photos and the shared styling notes keep the
+// frames consistent.
 export function dressPrompt(angle: number): string
 {
   return `You are a virtual try-on tool for a closet app, dressing one frame of a
 360° turnaround. You will be given:
-- BASE VIEW: the person turned ${angle}° to their right. ${direction(angle)}
+- BASE VIEW: the person turned ${angle}°. ${direction(angle)}
   ${ANGLES}
-- DRESSED FRONT VIEW: the same person from the front (0°), already
-  wearing the outfit.
 - the outfit: one or more clothing items. Each is a details line
   (name, category, type, and fit if known) followed by a photo of
   that item.
 
 Generate one photorealistic photo of BASE VIEW with the person wearing
-the outfit exactly as it's worn in DRESSED FRONT VIEW, as it would look
-from ${angle}°. It is one frame of a turntable spin.
+the outfit, as it would look from ${angle}°. It is one frame of a
+turntable spin; every frame is dressed separately, so dress them exactly
+as described below.
 
 Keep everything in BASE VIEW the same: the person (face, hair, skin
 tone, body shape and size), the angle, the pose, the background, the
@@ -128,11 +170,8 @@ lighting, and the framing. Do not crop, zoom, turn, or move them, and
 do not slim, reshape, retouch, or beautify them.
 
 Dress them in the outfit:
-- The same items in the same colors, tucked, layered, and fitted the
-  same way, with the same lengths as in DRESSED FRONT VIEW, as they'd
-  look from this angle.
-- If "How to wear the outfit" is given, follow it exactly. It wins
-  over anything in DRESSED FRONT VIEW that disagrees.
+- If "How to wear the outfit" is given, follow it exactly (tucked,
+  layered, open, and so on).
 - Each item replaces what they're wearing in its category: a Top
   replaces their top, Bottoms their bottoms, a OnePiece replaces both,
   Shoes their shoes. Outerwear goes over the top. An Accessory is
@@ -140,90 +179,11 @@ Dress them in the outfit:
 - Copy every detail faithfully: color, pattern, print, logos,
   texture, material, length, neckline, and sleeves. Check them
   against the item photos. Do not redesign, recolor, or add details.
-- Do not add any clothing, accessories, or jewelry that isn't in
-  DRESSED FRONT VIEW.
-
-${RULES}`;
-}
-
-// ---- Test routes only (POST /try-on-360/direct) ----
-
-// Frame 6: the back, made from the generated front and the back photo.
-export const BACK_VIEW_PROMPT = `You are a virtual try-on tool for a closet app, making a 360° turnaround
-of one outfit. You will be given:
-- FRONT VIEW: a photo of the user wearing the outfit, from the front.
-- BACK PHOTO: a photo of the same user from behind.
-- the outfit: one or more clothing items. Each is a details line
-  (name, category, type, and fit if known) followed by a photo of
-  that item.
-
-Generate one photorealistic photo of the user from behind (turned 180°
-from FRONT VIEW), wearing exactly the outfit in FRONT VIEW.
-
-Keep the person the same:
-- Use BACK PHOTO only for how they look from behind: hair, the back
-  of their head, skin tone, and body shape and size. Do not slim,
-  reshape, retouch, or beautify them.
-- Copy the pose exactly from FRONT VIEW, as it would look from
-  behind: where each hand and arm is (a hand in a pocket or on a hip
-  stays on the same side of their body), how they stand and where
-  their weight is, and the tilt of their head. If BACK PHOTO shows a
-  different pose, ignore it. Seen from behind, the person's right hand
-  is on the right side of the image.
-- Use FRONT VIEW for the background, lighting, camera height, and
-  framing, with the person the same size and in the same place in the
-  frame, so the two photos line up.
-
-Dress them in the outfit:
-- Exactly as it's worn in FRONT VIEW: the same items, tucked, layered,
-  and fitted the same way, with the same lengths.
-- Copy the back of each item faithfully from its photo: color,
-  pattern, print, texture, material, and length. Where the back isn't
-  shown, continue the front's color, pattern, and material naturally;
-  don't invent logos, prints, or details.
-- Do not add any clothing, accessories, or jewelry that isn't in
-  FRONT VIEW.
-
-${RULES}`;
-
-// Frames other than 0 and 6: the person turned `angle`° to their right,
-// made from the dressed front (frame 0) and the back photo.
-export function turnPrompt(angle: number): string
-{
-  return `You are a virtual try-on tool for a closet app, making a 360° turnaround
-of one outfit. You will be given:
-- FRONT VIEW: a photo of the user wearing the outfit, from the front.
-- BACK PHOTO: a photo of the same user from behind, in other clothes.
-- the outfit: one or more clothing items. Each is a details line
-  (name, category, type, and fit if known) followed by a photo of
-  that item.
-
-Generate one photorealistic photo of the same person in the same
-outfit as FRONT VIEW, turned ${angle}° to their right. ${direction(angle)}
-${ANGLES} It is one frame of a turntable spin.
-
-Keep everything else the same as FRONT VIEW:
-- Same face, hair, skin tone, body shape and size. Do not slim,
-  reshape, retouch, or beautify them. Use BACK PHOTO only for how
-  they look from behind (hair, the back of their head, body shape),
-  never for their clothes or pose.
-- Exactly the pose in FRONT VIEW, with the whole body turned in place
-  as on a turntable: each hand and arm in the same position on the
-  same side of their body, the same stance and weight, and the same
-  head tilt.
-- Same background, lighting, camera height, and framing, with the
-  person the same size and in the same place in the frame (feet and
-  head at the same height).
-
-Dress them exactly as in FRONT VIEW:
-- The same items, worn the same way, as they'd look from this angle.
-- Copy every detail faithfully: color, pattern, print, logos,
-  texture, material, length, neckline, and sleeves. Check them
-  against the item photos. Where a side or the back isn't shown,
-  continue the front's color, pattern, and material naturally. Do
-  not redesign, recolor, or add details.
-- Do not add any clothing, accessories, or jewelry that isn't in
-  FRONT VIEW.
+- Where an item photo doesn't show the side seen from this angle (for
+  example the back), continue its color, pattern, and material
+  naturally; don't invent logos, prints, or details.
+- Do not add any clothing, accessories, or jewelry that isn't in the
+  outfit.
 
 ${RULES}`;
 }

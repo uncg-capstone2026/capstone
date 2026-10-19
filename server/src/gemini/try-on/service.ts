@@ -37,9 +37,9 @@ export type TryOnItem = {
   mimeType: string;
 };
 
-export type TryOnFrame = {
-  position: number; // 0–11; 0 is the front, 6 the back
-  angle: number; // position × 30, turned to the person's right
+type TryOnFrame = {
+  position: number; // 0–7; 0 is the front, 4 the back
+  angle: number; // position × 30, turned clockwise, facing the left of the image first
   imageUrl: string | null; // signed, 24 hours; null when the angle isn't ready or failed
 };
 
@@ -55,13 +55,13 @@ type RenderKey = { tryOnPhotoId: string; itemsHash: string; position: number };
 
 // Identifies a set of items whatever order they're in: the same items always
 // give the same hash. Used to find an outfit's saved try-on image.
-export function itemsHash(itemIds: string[]): string
+function itemsHash(itemIds: string[]): string
 {
   const ids = [...new Set(itemIds)].sort();
   return createHash('sha256').update(ids.join(',')).digest('hex');
 }
 
-// Try-on: the user wearing the outfit on screen from 12 angles (see
+// Try-on: the user wearing the outfit on screen from 8 angles (see
 // turnaround.ts). The user uploads a front and a back photo; generateAngles
 // makes the other angles from them once, in the background. Each dressed
 // frame is saved as a TryOnRender, so trying on the same items again reuses it.
@@ -78,7 +78,7 @@ export class TryOnService {
   )
   {}
 
-  // All 12 frames, with signed URLs: the saved ones when these items were
+  // All 8 frames, with signed URLs: the saved ones when these items were
   // already tried on, the rest generated and saved for next time. 404 when
   // there's no try-on photo, only an old front one (no back), or an item isn't
   // in the user's closet; 422 when Gemini declines frame 0. Any other frame
@@ -140,8 +140,10 @@ export class TryOnService {
   // ---- Helpers ----
 
   // Generates the frames in `missing` and saves each one, adding its key to
-  // `keys`. Frame 0 first (unless it's saved), since every other frame is made
-  // from it; it failing fails the request. Any other failed frame is skipped.
+  // `keys`. All in one parallel round, for speed: the other frames don't wait
+  // for the dressed front, so they're dressed from the item photos and the
+  // styling notes. Frame 0 failing fails the request, since the result needs
+  // it; any other failed frame is skipped.
   private async dress(
     userId: string,
     itemIds: string[],
@@ -168,27 +170,23 @@ export class TryOnService {
       keys.set(angle.position, await this.save(userId, renderKey, ids, key, saved.get(angle.position) ?? null));
     };
 
-    let dressedFront: Image;
-    if (keys.has(0)) {
-      dressedFront = { image: await this.s3.getObjectBuffer(keys.get(0)!), mimeType: 'image/jpeg' };
-    } else {
-      dressedFront = await generateFrame(this.helpers, this.aiLogger, {
-        label: 'try-on', position: 0, round: 1, aspectRatio, parts: dressParts(0, frontPhoto, undefined, items, notes),
-      });
-      await store(front, dressedFront);
-    }
+    // A saved dressed front (only some angles missing) still sets the colors
+    // the new frames are matched to.
+    const reference: Image | undefined = keys.has(0)
+      ? { image: await this.s3.getObjectBuffer(keys.get(0)!), mimeType: 'image/jpeg' }
+      : undefined;
 
-    const others = new Map(missing.filter((angle) => angle.position !== 0).map((angle) => [angle.position, angle]));
-    const { failed } = await runRound([...others.keys()], async (position) => {
-      const angle = others.get(position)!;
-      const base = await this.loadImage(angle.imageKey);
+    const angles = new Map(missing.map((angle) => [angle.position, angle]));
+    const { failed } = await runRound([...angles.keys()], async (position) => {
+      const angle = angles.get(position)!;
+      const base = position === 0 ? frontPhoto : await this.loadImage(angle.imageKey);
       const frame = await generateFrame(this.helpers, this.aiLogger, {
         label: 'try-on',
         position,
-        round: 2,
+        round: 1,
         aspectRatio,
-        parts: dressParts(position, base, dressedFront, items, notes),
-        reference: dressedFront,
+        parts: dressParts(position, base, items, notes),
+        reference,
       });
       await store(angle, frame);
     });
@@ -202,9 +200,13 @@ export class TryOnService {
       durationMs,
       seconds: seconds(durationMs),
     });
+
+    // The result needs frame 0 (422 when Gemini declined it).
+    const frontError = failed.get(0);
+    if (frontError) throw frontError;
   }
 
-  // generateAngles: one round of the 11 other angles, each from the front
+  // generateAngles: one round of the 7 other angles, each from the front
   // and back photos, then a second try for any that failed. They're saved
   // all at once, so a try-on never sees half of them.
   private async makeAngles(userId: string, frontPhotoId: string): Promise<void>
@@ -345,9 +347,8 @@ export class TryOnService {
 
   // Every item with its photo (the cutout when there is one, so Gemini sees
   // only the garment). Unlike outfit planning, a missing item is a 404 rather
-  // than skipped, or the photo would quietly leave out a piece. Public so the
-  // test routes (try-on-360) can use it.
-  async loadItems(userId: string, itemIds: string[]): Promise<TryOnItem[]>
+  // than skipped, or the photo would quietly leave out a piece.
+  private async loadItems(userId: string, itemIds: string[]): Promise<TryOnItem[]>
   {
     const ids = [...new Set(itemIds)];
     const items = await this.prisma.item.findMany({
@@ -402,7 +403,7 @@ export function describeItem(item: TryOnItem): string
 
 // The supported aspect ratio closest to the photo's. EXIF orientation 5-8
 // means the photo is shown rotated 90°, so width and height swap.
-export function closestAspectRatio(meta: sharp.Metadata): string
+function closestAspectRatio(meta: sharp.Metadata): string
 {
   if (!meta.width || !meta.height) return '3:4';
   const rotated = (meta.orientation ?? 1) >= 5;

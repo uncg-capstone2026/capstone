@@ -3,7 +3,7 @@
 // unit tested directly.
 
 // One closet item found by the search; score is cosine distance (lower is closer).
-export type ScoredCandidate = { itemId: string; score: number };
+type ScoredCandidate = { itemId: string; score: number };
 
 // Search results by garment type, closest first. Stored on each turn.
 export type CandidateLists = Record<string, ScoredCandidate[]>;

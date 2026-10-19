@@ -69,9 +69,9 @@ export class StylistController {
 
   // POST /api/stylist/try-on { itemIds }
   //   -> { imageUrl, frames: [{ position, angle, imageUrl }] }
-  // The user wearing the outfit on screen, from 12 angles (TryOnResult in
+  // The user wearing the outfit on screen, from 8 angles (TryOnResult in
   // gemini/try-on/service.ts). imageUrl is frame 0 (the front). Frames are
-  // positions 0-11, angle = position x 30; a frame's imageUrl is null when that
+  // positions 0-7, angle = position x 45; a frame's imageUrl is null when that
   // angle isn't ready yet or failed. URLs are signed for 24 hours. Saved images
   // are reused when the same items are tried on again.
   // 404 when they haven't uploaded try-on photos, only have an old front photo

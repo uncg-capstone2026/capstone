@@ -229,9 +229,6 @@ export class StylistService {
         itemNames: new Map(pieces.map((piece) => [piece.id, piece.name])),
         message,
       });
-      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-      this.logger.log(`[DEBUG AI] reprompt session=${session.id} turn=${turnNumber} route=${JSON.stringify(decision)}`);
-      // ==================== END TEST / DEBUG ====================
 
       try {
         const result = await this.runRoute(ctx, decision);
@@ -304,9 +301,6 @@ export class StylistService {
 
     const taken = await this.takeFromQueue(ctx, ctx.banned, [() => true]);
     if (taken) {
-      // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-      this.logger.log(`[DEBUG AI] reroll served from queue (no AI call); ${taken.queue.length} left`);
-      // ==================== END TEST / DEBUG ====================
       return fromQueue(ctx, taken, { requirements, candidates: lists, banned: ctx.banned });
     }
 
@@ -345,9 +339,6 @@ export class StylistService {
         () => true,
       ]);
       if (taken) {
-        // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-        this.logger.log(`[DEBUG AI] swap served from queue (${taken.test === 0 ? 'strict' : 'loose'}, no AI call)`);
-        // ==================== END TEST / DEBUG ====================
         return fromQueue(ctx, taken, { requirements, candidates: lists, banned });
       }
     }
@@ -394,9 +385,6 @@ export class StylistService {
         (pieces) => hasNoneOfTypes(pieces, edits.remove),
       ]);
       if (taken) {
-        // ==================== TEST / DEBUG ONLY (DELETE LATER) ====================
-        this.logger.log(`[DEBUG AI] refine served from queue (${taken.test === 0 ? 'strict' : 'loose'}, no AI call)`);
-        // ==================== END TEST / DEBUG ====================
         return fromQueue(ctx, taken, { requirements, candidates: lists, banned: ctx.banned });
       }
     }
