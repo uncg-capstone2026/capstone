@@ -162,7 +162,7 @@ export class StylistService {
     });
   }
 
-  // POST /try-on: the user wearing the outfit on screen, from 12 angles. Nest
+  // POST /try-on: the user wearing the outfit on screen, from 8 angles. Nest
   // errors (404 no try-on photo, no back photo or missing item, 422 Gemini
   // declined) pass through; anything else is a 503 { message }. The failure
   // itself is logged by TryOnService.
