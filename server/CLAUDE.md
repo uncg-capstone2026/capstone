@@ -15,7 +15,6 @@ Design: `ai/repromptimplementation.md`. Every outfit shown is saved as a turn in
 type StyleOutfitRequest = {
   occasion: string /* 1–300 chars */; date?: string /* 'YYYY-MM-DD' */;
   lat?: number; lon?: number;        // optional; enables weather-aware picks
-  excludeSuggestionIds?: string[];   // old "Try another"; remove once the app uses /reprompt
 };
 
 type OutfitSuggestion = {
@@ -53,18 +52,17 @@ Both routes:
 type TryOnResult = {
   imageUrl: string;  // frame 0 (the front), same as frames[0].imageUrl
   frames: {
-    position: number;        // 0–11; 0 = front, 3 = their left side, 6 = back, 9 = their right side
-    angle: number;           // position × 30, the person turned to their right
+    position: number;        // 0–7; 0 = front, 2 = their left side, 4 = back, 6 = their right side
+    angle: number;           // position × 45, the person turned clockwise (facing the image's left first)
     imageUrl: string | null; // null when that angle isn't ready yet or failed
-  }[];                       // always 12, sorted by position
+  }[];                       // always 8, sorted by position
 };
 ```
 - A 360° spin of the user wearing those items, made from their try-on photos. Send the pieces **on screen**, including swapped ones.
-- Try-on photos are a front and a back. After they're uploaded, the server generates the other 10 angles in the background, all saved at once. Until then, only frame 0 is filled in.
-- Frame 0 is made first, then the other frames together from it. A first try-on waits for all of them. URLs are signed JPEGs, valid for **24 hours**.
+- Try-on photos are a front and a back. After they're uploaded, the server generates the other 6 angles in the background, all saved at once. Until then, only frame 0 is filled in.
+- All frames are made at once, each from its own angle and the item photos (no frame waits for another), so a first try-on takes about as long as one frame. If frame 0 fails the request fails; any other frame that fails is `null`. URLs are signed JPEGs, valid for **24 hours**.
 - Each frame is saved (`TryOnRender`), one per angle and set of items, in any order. Trying on the same items again returns the saved frames right away, with new URLs, and only generates the missing ones. Saved frames are deleted when the user uploads new try-on photos or deletes their account.
 - Errors: 400 invalid body; 404 no try-on photo yet, only an old front photo (retake front and back), or an item isn't in the closet (show `serverMessage`); 422 the photo couldn't be used, e.g. it doesn't show one person (show `serverMessage`); 503 AI unavailable (show `serverMessage`).
-- Test routes (not for the app): `POST /api/stylist/try-on-360`, `/try-on-360/base`, `/try-on-360/direct` (`server/src/try-on-360/`) run the same generation on photos sent with the request.
 
 ## Style memory
 An hourly job (also run at startup) learns from finished Stylist sessions (accepted, or abandoned after 24 hours) and saves up to 3 facts per session as style notes with `source: 'learned'`. They show up in `GET /api/style-notes` like any other note. Repeats of an existing note are skipped.
