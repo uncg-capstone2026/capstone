@@ -6,7 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 
 // TryOnPhoto positions: the two the user uploads, the front (0) and the back
-// (BACK). Javier's generateAngles adds the other angles, and replaces the back
+// (BACK). GenerateAngles adds the other angles, and replaces the back
 // with one that lines up with the front.
 const FRONT = 0;
 
@@ -69,7 +69,14 @@ export class PhotosService {
         data: { userId, imageKey: backKey, position: BACK },
       });
 
-      const oldKeys = oldPhotos.flatMap((old) => [old.imageKey, ...old.renders.map((render) => render.imageKey)]);
+      // The old files to delete from S3: every old photo and saved try-on image,
+      // except the new front and back. Before, if the app sent a key that an old
+      // photo already used (e.g. re-sending the current front as the new back),
+      // that file was on the delete list too, so the new photo would point to a
+      // file that no longer existed.
+      const oldKeys = oldPhotos
+        .flatMap((old) => [old.imageKey, ...old.renders.map((render) => render.imageKey)])
+        .filter((key) => key !== frontKey && key !== backKey);
       return { front, oldKeys };
     });
 
