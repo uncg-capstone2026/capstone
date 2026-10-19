@@ -13,8 +13,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
-import { continueWithGoogle, loginWithPassword, type LoginMode } from '@/services/auth';
+import { AuthTextInput } from '@/components/auth/auth-ui';
+import { loginWithPassword, type LoginMode } from '@/services/auth';
 import { formatPhone, toE164 } from '@/utils/validation';
 
 const CLOTHESLINE_SIDE_PADDING = 16; // 8px each side, matches the row's px-2
@@ -74,16 +74,6 @@ export default function LoginScreen() {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
       setIsSubmitting(false);
-    }
-  }
-
-  async function handleGoogleLogin() {
-    setError(null);
-    try {
-      await continueWithGoogle();
-      router.replace('/closet');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
     }
   }
 
@@ -184,13 +174,6 @@ export default function LoginScreen() {
                 )}
               </Pressable>
             </View>
-
-            <AuthDivider />
-
-            <SocialButtons
-              label="Continue with"
-              onGooglePress={handleGoogleLogin}
-            />
 
             <View className="flex-row items-center justify-center gap-1">
               <Text className="font-body text-sage-600">New to StyleMe?</Text>
