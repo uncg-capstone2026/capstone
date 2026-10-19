@@ -5,23 +5,24 @@ import { IMAGE_MODEL } from '../constants';
 import { GeminiHelpers, seconds, tokenCounts } from '../helpers';
 import { OUTFIT_HEADER, TRY_ON_PROMPT, USER_PHOTO_LABEL } from './prompt';
 import {
-  BACK_PHOTO_LABEL, BASE_BACK_PROMPT, BASE_VIEW_LABEL, baseTurnPrompt, DRESSED_FRONT_LABEL, dressPrompt,
+  BACK_PHOTO_LABEL, BASE_BACK_PROMPT, BASE_VIEW_LABEL, baseTurnPrompt, dressPrompt,
   FRONT_VIEW_LABEL,
 } from './turnaround-prompt';
 import { describeItem, type TryOnItem } from './service';
 
-// The 360° try-on: 12 frames, 30° apart, of the person turned in place to
-// their right. 0 is the front, 3 their left side, 6 the back, 9 their right
-// side. Frame 0 is made first; every other frame is made from it.
+// The 360° try-on: 8 frames, 45° apart, of the person turned in place
+// clockwise (seen from above), facing the left of the image first. 0 is the
+// front, 2 their left side, 4 the back, 6 their right side. The base angles
+// are made from the front and back photos; dressing makes every frame at once.
 
-export const FRAMES = 12;
-export const STEP = 360 / FRAMES; // 30° between frames
-export const BACK = 6;
+export const FRAMES = 8;
+export const STEP = 360 / FRAMES; // 45° between frames
+export const BACK = FRAMES / 2;
 
 // Every frame but the front.
 export const OTHERS = Array.from({ length: FRAMES - 1 }, (_, i) => i + 1);
 
-export const DECLINED = "StyleMe couldn't create a try-on with this photo.";
+const DECLINED = "StyleMe couldn't create a try-on with this photo.";
 
 // How far a frame's contrast can be scaled to match frame 0. Kept close to 1
 // so a frame that really looks different (e.g. the back, with more hair)
@@ -31,8 +32,8 @@ const MAX_GAIN = 1.25;
 
 export type Image = { image: Buffer; mimeType: string };
 
-export type FrameRequest = {
-  label: string; // for the logs, e.g. 'try-on-360'
+type FrameRequest = {
+  label: string; // for the logs, e.g. 'try-on-angles'
   position: number;
   round: number;
   aspectRatio: string;
@@ -126,18 +127,14 @@ export function baseParts(position: number, front: Image, back: Image): Part[]
   ];
 }
 
-// Dressing: the front like a normal try-on; every other frame from its base
-// angle and the dressed front. All get the same styling notes (tucked, open,
-// ...), so every frame wears the outfit the same way.
-export function dressParts(position: number, base: Image, dressedFront: Image | undefined, items: TryOnItem[], notes: string[]): Part[]
+// Dressing, all frames at once: the front like a normal try-on; every other
+// frame from its base angle and the item photos. All get the same styling
+// notes (tucked, open, ...), so every frame wears the outfit the same way.
+export function dressParts(position: number, base: Image, items: TryOnItem[], notes: string[]): Part[]
 {
   const parts: Part[] = position === 0
     ? [{ text: TRY_ON_PROMPT }, { text: USER_PHOTO_LABEL }, inline(base)]
-    : [
-      { text: dressPrompt(position * STEP) },
-      { text: BASE_VIEW_LABEL }, inline(base),
-      { text: DRESSED_FRONT_LABEL }, inline(dressedFront!),
-    ];
+    : [{ text: dressPrompt(position * STEP) }, { text: BASE_VIEW_LABEL }, inline(base)];
   const styling: Part[] = notes.length > 0
     ? [{ text: `How to wear the outfit (the same in every frame):\n${notes.map((note) => `- ${note}`).join('\n')}` }]
     : [];
@@ -145,12 +142,12 @@ export function dressParts(position: number, base: Image, dressedFront: Image | 
 }
 
 // The outfit, after the photos: a header, then each item's details and photo.
-export function outfitParts(items: TryOnItem[]): Part[]
+function outfitParts(items: TryOnItem[]): Part[]
 {
   return [{ text: OUTFIT_HEADER }, ...items.flatMap((item) => [{ text: describeItem(item) }, inline(item)])];
 }
 
-export function inline(image: Image): Part
+function inline(image: Image): Part
 {
   return { inlineData: { mimeType: image.mimeType, data: image.image.toString('base64') } };
 }

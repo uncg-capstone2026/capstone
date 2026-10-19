@@ -1,14 +1,14 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import { TryOnService } from '../gemini/try-on/service';
+import { BACK } from '../gemini/try-on/turnaround';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 
-// TryOnPhoto positions: the two the user uploads. Javier's generateAngles adds
-// the other ten (1-5 and 7-11), and replaces the back with one that lines up
-// with the front.
+// TryOnPhoto positions: the two the user uploads, the front (0) and the back
+// (BACK). Javier's generateAngles adds the other angles, and replaces the back
+// with one that lines up with the front.
 const FRONT = 0;
-const BACK = 6;
 
 @Injectable()
 export class PhotosService {

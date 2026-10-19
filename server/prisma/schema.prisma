@@ -107,7 +107,7 @@ model TryOnPhoto {
   imageKey   String // S3 key
   isPrimary  Boolean  @default(false)
   capturedAt DateTime @default(now())
-  position   Int      @default(0) // 0 = front, 6 = back, the rest are angles Javier's code generates
+  position   Int      @default(0) // 0 = front, 4 = back, the rest are angles Javier's code generates
   renders    TryOnRender[]
 
   @@unique([userId, position])
