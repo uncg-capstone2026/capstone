@@ -181,7 +181,3 @@ function toAuthError(e: unknown): Error {
   if (e instanceof ApiError) return e;
   return new Error("Couldn't reach StyleMe. Check your connection and try again.");
 }
-
-export async function continueWithGoogle(): Promise<void> {
-  throw new Error('Sign in with Google is not wired up to a backend yet.');
-}

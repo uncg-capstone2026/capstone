@@ -11,14 +11,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AuthDivider, AuthTextInput, SocialButtons } from '@/components/auth/auth-ui';
+import { AuthTextInput } from '@/components/auth/auth-ui';
 import { PasswordStrength } from '@/components/auth/password-strength';
 import { saveNotificationsEnabled } from '@/hooks/use-notifications-enabled';
-import {
-  TakenFieldError,
-  continueWithGoogle,
-  signUpWithPassword,
-} from '@/services/auth';
+import { TakenFieldError, signUpWithPassword } from '@/services/auth';
 import { ensureNotificationPermission } from '@/services/reminders';
 import {
   formatPhone,
@@ -89,15 +85,6 @@ export default function SignUpScreen() {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
       setIsSubmitting(false);
-    }
-  }
-
-  async function handleGoogleSignUp() {
-    setError(null);
-    try {
-      await continueWithGoogle();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Something went wrong.');
     }
   }
 
@@ -188,13 +175,6 @@ export default function SignUpScreen() {
                 )}
               </Pressable>
             </View>
-
-            <AuthDivider />
-
-            <SocialButtons
-              label="Sign up with"
-              onGooglePress={handleGoogleSignUp}
-            />
 
             <View className="flex-row items-center justify-center gap-1">
               <Text className="font-body text-sage-600">Already have an account?</Text>

@@ -7,7 +7,7 @@ import type { TryOnFrame } from '@/services/stylist';
 // How far a drag moves before stepping to the next frame.
 const STEP_PX = 24;
 
-// A 360° spin of the try-on frames: dragging steps through positions 0 → 11 → 0, starting
+// A 360° spin of the try-on frames: dragging steps through positions 0 → 7 → 0, starting
 // on the front. Frames without an image are skipped. Every frame is mounted and stacked,
 // with only the current one visible, so stepping never waits on an image load; preload the
 // URLs (Image.prefetch) before showing this.
@@ -77,6 +77,6 @@ function wrap(i: number, n: number): number {
 
 function angleLabel(frame: TryOnFrame): string {
   if (frame.position === 0) return 'Front';
-  if (frame.position === 6) return 'Back';
+  if (frame.position === 4) return 'Back';
   return `Turned ${frame.angle}°`;
 }

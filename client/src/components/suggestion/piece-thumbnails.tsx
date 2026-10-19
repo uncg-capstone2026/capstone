@@ -15,7 +15,6 @@ type PieceThumbnailsProps = {
   selectedId: string | null; // null = the whole outfit
   stageColor: string;
   onSelect: (id: string | null) => void;
-  flatLayItems?: SuggestedPiece[]; // the whole-outfit tile's pieces, if not all of `items`
   // The outfit details screen: a dashed "+" tile at the end, and a × on the selected piece.
   onAdd?: () => void;
   onRemove?: (id: string) => void;
@@ -28,7 +27,6 @@ export function PieceThumbnails({
   selectedId,
   stageColor,
   onSelect,
-  flatLayItems = items,
   onAdd,
   onRemove,
   canRemove,
@@ -43,7 +41,7 @@ export function PieceThumbnails({
       contentContainerStyle={{ paddingTop: BADGE_ROOM, paddingRight: BADGE_ROOM }}
       contentContainerClassName="gap-2.5">
       <Tile isActive={selectedId === null} label="Whole outfit" onPress={() => onSelect(null)} color={stageColor}>
-        <FlatLay items={flatLayItems} width={inner} height={inner} />
+        <FlatLay items={items} width={inner} height={inner} />
       </Tile>
       {items.map((item) => {
         const isActive = selectedId === item.id;

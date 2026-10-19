@@ -45,8 +45,6 @@ export default function OutfitDetailsScreen() {
   const [selectedId, setSelectedId] = useState<string | null>(null); // null = whole outfit
   const [color, setColor] = useState(DEFAULT_STAGE_COLOR);
   const [isColorPopoverOpen, setIsColorPopoverOpen] = useState(false);
-  // Pieces added on this screen show in the strip only, not in the flat-lay.
-  const [addedIds, setAddedIds] = useState<string[]>([]);
   const [picker, setPicker] = useState<Picker | null>(null);
   const [closet, setCloset] = useState<SuggestedPiece[] | null>(null);
   const [isScheduling, setIsScheduling] = useState(false);
@@ -111,7 +109,6 @@ export default function OutfitDetailsScreen() {
 
   const pieces = outfit.items;
   const selectedPiece = pieces.find((piece) => piece.id === selectedId) ?? null;
-  const flatLayPieces = pieces.filter((piece) => !addedIds.includes(piece.id));
 
   // Shows the change straight away, then saves it. Reverts and shows the error if it fails.
   async function toggleFavorite() {
@@ -143,7 +140,6 @@ export default function OutfitDetailsScreen() {
     try {
       await savePieces(pieces.filter((piece) => piece.id !== pieceId));
       setSelectedId(null);
-      setAddedIds((ids) => ids.filter((addedId) => addedId !== pieceId));
     } catch (e) {
       showError(e);
     }
@@ -187,12 +183,9 @@ export default function OutfitDetailsScreen() {
     if (!picker) return;
     if (picker.kind === 'add') {
       await savePieces([...pieces, piece]);
-      setAddedIds((ids) => [...ids, piece.id]);
     } else {
       const replaced = picker.piece.id;
       await savePieces(pieces.map((p) => (p.id === replaced ? piece : p)));
-      // A piece swapped in for an added one is still an added one.
-      setAddedIds((ids) => ids.map((addedId) => (addedId === replaced ? piece.id : addedId)));
       setSelectedId(piece.id);
     }
     setPicker(null);
@@ -250,7 +243,7 @@ export default function OutfitDetailsScreen() {
         contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false}>
         <OutfitStage
-          items={flatLayPieces}
+          items={pieces}
           selectedPiece={selectedPiece}
           topRight={
             <Pressable
@@ -292,7 +285,6 @@ export default function OutfitDetailsScreen() {
 
           <PieceThumbnails
             items={pieces}
-            flatLayItems={flatLayPieces}
             selectedId={selectedId}
             stageColor={color}
             onSelect={setSelectedId}

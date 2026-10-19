@@ -1,5 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Pressable, Text, View, type TextInputProps } from 'react-native';
+import { Text, View, type TextInputProps } from 'react-native';
 
 import { TextField } from '@/components/text-field';
 
@@ -29,24 +28,6 @@ export function AuthDivider({ label = 'or continue with' }: { label?: string }) 
       <View className="h-px flex-1 bg-sage-200" />
       <Text className="font-body text-xs uppercase text-sage-400">{label}</Text>
       <View className="h-px flex-1 bg-sage-200" />
-    </View>
-  );
-}
-
-type SocialButtonsProps = {
-  label: string;
-  onGooglePress: () => void;
-};
-
-export function SocialButtons({ label, onGooglePress }: SocialButtonsProps) {
-  return (
-    <View className="gap-3">
-      <Pressable
-        onPress={onGooglePress}
-        className="flex-row items-center justify-center gap-2 rounded-xl border border-sage-200 bg-cream-50 py-3">
-        <Ionicons name="logo-google" size={18} color="#4d5d3f" />
-        <Text className="font-label text-base text-sage-700">{label} Google</Text>
-      </Pressable>
     </View>
   );
 }

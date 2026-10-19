@@ -106,14 +106,14 @@ export async function acceptOutfit(request: AcceptOutfitRequest): Promise<{ outf
 }
 
 export type TryOnFrame = {
-  position: number; // 0–11; 0 = front, 6 = back
-  angle: number; // position × 30, the person turned to their right
+  position: number; // 0–7; 0 = front, 4 = back
+  angle: number; // position × 45, the person turned to their right
   imageUrl: string | null; // signed, valid 24h; null if that angle isn't ready or failed
 };
 
 export type TryOnResult = {
   imageUrl: string; // frame 0
-  frames: TryOnFrame[]; // always 12, sorted by position. Frame 0 is never null.
+  frames: TryOnFrame[]; // always 8, sorted by position. Frame 0 is never null.
 };
 
 // Why a try-on failed, so the screen can offer the right next step: adding try-on photos,
@@ -128,10 +128,11 @@ export class TryOnError extends Error {
   }
 }
 
-// POST /api/stylist/try-on: the 12 frames of a 360° spin of the user wearing these items.
-// The first try-on of an outfit generates every frame, so it takes a while (no timeout here);
-// trying on the same items again returns the saved frames quickly. Until the user's angles
-// are ready (`anglesReady` on GET /api/photos/body) only frame 0 is filled in.
+// POST /api/stylist/try-on: the 8 frames of a 360° spin of the user wearing these items.
+// The first try-on of an outfit generates all 8 frames at once, so it waits about as long as
+// one image generation (no timeout here); trying on the same items again returns the saved
+// frames quickly. Frames that finish are saved even if the request fails, so a retry only
+// redoes the missing ones. Until the user's angles are ready (`anglesReady` on GET /api/photos/body) only frame 0 is filled in.
 // The URLs last 24 hours, so don't keep them longer.
 export async function tryOn(itemIds: string[]): Promise<TryOnResult> {
   try {
