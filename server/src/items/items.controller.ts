@@ -17,6 +17,14 @@ export class ItemsController {
     return this.items.listForUser(userId);
   }
 
+  // GET /api/items/types -> [{ type, category }], e.g. { type: 't-shirt', category: 'tops' }.
+  // The types an item can have (PATCH only accepts these). Must stay above
+  // @Get(':id'), or "types" would be read as an item id.
+  @Get('types')
+  types() {
+    return this.items.listTypes();
+  }
+
   // GET /api/items/:id -> the full item
   @Get(':id')
   details(@CurrentUserId() userId: User['id'], @Param('id') id: string) {
@@ -29,7 +37,8 @@ export class ItemsController {
     return this.items.getColorGrid(userId, id);
   }
 
-  // PATCH /api/items/:id { ...fields to change } -> the updated item
+  // PATCH /api/items/:id { ...fields to change } -> the updated item.
+  // 400 if type isn't one from GET /api/items/types.
   @Patch(':id')
   update(
     @CurrentUserId() userId: User['id'],
@@ -65,7 +74,7 @@ export class ItemsController {
     return this.items.createFromPhoto(userId, body.key);
   }
 
-  // POST /api/items/link { url } -> { itemId, isNew }. 400 with a message if it can't be imported.  
+  // POST /api/items/link { url } -> { itemId, isNew }. 400 with a message if it can't be imported.
   @Post('link')
   importLink(
     @CurrentUserId() userId: User['id'],
