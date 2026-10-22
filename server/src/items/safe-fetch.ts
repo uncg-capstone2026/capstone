@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import * as dns from 'node:dns';
 import * as http from 'node:http';
 import * as https from 'node:https';
@@ -21,6 +22,8 @@ type Options = {
   accept: string;
   timeoutMs?: number; // whole request, including redirects
 };
+
+const logger = new Logger('LinkFetch');
 
 const MAX_REDIRECTS = 5;
 const USER_AGENT =
@@ -133,7 +136,14 @@ function request(url: URL, options: Options, deadline: number): Promise<RawRespo
         }
         if (status < 200 || status >= 300) {
           res.resume();
-          return reject(new LinkFetchError("Couldn't open that page. The store may block apps from reading it."));
+          // Shown in the server terminal, so a failed link can be traced to its cause.
+          logger.warn(`Link fetch got ${status} from ${url.host}${url.pathname}`);
+          // 404/410: the page is gone (e.g. the product was discontinued).
+          if (status === 404 || status === 410) {
+            return reject(new LinkFetchError("That product page doesn't exist anymore. Check the link, or add a photo instead."));
+          }
+          // Anything else (usually 403, 429 or 503): the store blocks apps.
+          return reject(new LinkFetchError("This store doesn't let apps read its pages. Try adding a photo of the item instead."));
         }
         const declared = Number(res.headers['content-length']);
         if (Number.isFinite(declared) && declared > options.maxBytes) {
