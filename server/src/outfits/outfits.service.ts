@@ -4,7 +4,7 @@ import type { Category, Item, OutfitSlot } from '@prisma/client';
 import { CATEGORY_TO_CLIENT } from '../items/item-mappings';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
-import { dateToDay, dayToDate } from './calendar-day';
+import { dateToDay, dayToDate, inCurrentWearPeriod } from './calendar-day';
 
 // One piece of an outfit, as the app shows it. Matches SuggestedPiece in
 // client/src/services/stylist.ts (and the closet's item shape).
@@ -108,6 +108,7 @@ export class OutfitsService {
       include: {
         ...WITH_PIECES,
         calendarEntries: {
+          where: { removedAt: null },
           orderBy: { date: 'asc' },
           select: { id: true, date: true, eventName: true, notWorn: true },
         },
@@ -185,9 +186,13 @@ export class OutfitsService {
 
   // DELETE /api/outfits/:id/schedule/:entryId. 404 if no such entry on the
   // user's outfit. Wear counts already added for it stay.
+  // The row is kept, marked removed (removedAt), rather than deleted: it's
+  // hidden everywhere and the hourly job won't count it, but if it was already
+  // counted, its date still counts toward lastWorn (recomputeLastWorn).
   async unschedule(userId: string, id: string, entryId: string): Promise<void> {
-    const { count } = await this.prisma.calendarEntry.deleteMany({
-      where: { id: entryId, outfitId: id, outfit: { userId } },
+    const { count } = await this.prisma.calendarEntry.updateMany({
+      where: { id: entryId, outfitId: id, outfit: { userId }, removedAt: null },
+      data: { removedAt: new Date() },
     });
     if (count === 0) throw new NotFoundException({ message: 'Scheduled day not found' });
   }
@@ -220,7 +225,7 @@ export class OutfitsService {
         select: { wornCountedAt: true },
       });
       if (wornCountedAt) {
-        await this.uncountWear(tx, id, wornCountedAt);
+        await this.uncountWear(tx, id, entry.date);
         // Uncounted again, so undoing "Didn't wear it" lets the job count it.
         await tx.calendarEntry.update({ where: { id: entryId }, data: { wornCountedAt: null } });
       }
@@ -279,10 +284,10 @@ export class OutfitsService {
       .map((piece, zIndex) => ({ ...piece, zIndex }));
   }
 
-  // One of the user's outfit's calendar days. 404 otherwise.
+  // One of the user's outfit's calendar days (not unscheduled). 404 otherwise.
   private async findOwnedEntry(userId: string, outfitId: string, entryId: string) {
     const entry = await this.prisma.calendarEntry.findFirst({
-      where: { id: entryId, outfitId, outfit: { userId } },
+      where: { id: entryId, outfitId, outfit: { userId }, removedAt: null },
       select: { id: true, date: true },
     });
     if (!entry) throw new NotFoundException({ message: 'Scheduled day not found' });
@@ -300,12 +305,13 @@ export class OutfitsService {
   }
 
   // Takes one counted wear back off the outfit and each of its items (never
-  // below 0). An item's "this month" count only goes down if the wear was
-  // counted in its current 30-day period (wearPeriodStart <= when it was
-  // counted); a wear from an earlier period was already reset away.
+  // below 0). An item's "this month" count only goes down if the day is in
+  // its current 30-day period: the same rule the hourly job uses when it
+  // counts (inCurrentWearPeriod), so only a wear that was added this period
+  // is taken back off.
   // Uses the outfit's pieces as they are now, so if they were edited after the
   // day was counted, the current pieces are the ones taken off.
-  private async uncountWear(tx: Prisma.TransactionClient, outfitId: string, countedAt: Date): Promise<void> {
+  private async uncountWear(tx: Prisma.TransactionClient, outfitId: string, day: Date): Promise<void> {
     await tx.$executeRaw`
       UPDATE "Outfit" SET "timesWorn" = GREATEST("timesWorn" - 1, 0) WHERE id = ${outfitId}
     `;
@@ -316,7 +322,7 @@ export class OutfitsService {
       UPDATE "Item"
       SET "timesWorn" = GREATEST("timesWorn" - 1, 0),
           "timesWornThisMonth" = CASE
-            WHEN "wearPeriodStart" <= ${countedAt} THEN GREATEST("timesWornThisMonth" - 1, 0)
+            WHEN ${inCurrentWearPeriod(day)} THEN GREATEST("timesWornThisMonth" - 1, 0)
             ELSE "timesWornThisMonth"
           END
       WHERE id IN (${Prisma.join(itemIds)})
@@ -324,7 +330,8 @@ export class OutfitsService {
   }
 
   // lastWorn = the latest day that's been counted and isn't marked not worn,
-  // or null if there's none left.
+  // or null if there's none left. Unscheduled days that were counted are still
+  // included (no removedAt filter), since their wear still counts.
   private async recomputeLastWorn(tx: Prisma.TransactionClient, outfitId: string): Promise<void> {
     await tx.$executeRaw`
       UPDATE "Outfit"
