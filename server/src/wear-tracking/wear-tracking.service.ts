@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
+import { inCurrentWearPeriod } from '../outfits/calendar-day';
 import { PrismaService } from '../prisma/prisma.service';
 
 // How many calendar entries to look at per batch, and the most batches per run,
@@ -67,7 +68,7 @@ export class WearTrackingService implements OnApplicationBootstrap {
 
   // Counts every calendar entry whose day is before today in its user's time
   // zone and hasn't been counted yet, skipping days the user marked "Didn't
-  // wear it". Returns how many were counted.
+  // wear it" and days they unscheduled. Returns how many were counted.
   private async countPastEntries(): Promise<number> {
     let counted = 0;
     for (let batch = 0; batch < MAX_BATCHES; batch++) {
@@ -80,6 +81,7 @@ export class WearTrackingService implements OnApplicationBootstrap {
         JOIN "User" u ON u.id = o."userId"
         WHERE ce."wornCountedAt" IS NULL
           AND ce."notWorn" = false
+          AND ce."removedAt" IS NULL
           AND ce."date"::date < (now() AT TIME ZONE u."timeZone")::date
         ORDER BY ce."date"
         LIMIT ${BATCH_SIZE}
@@ -102,9 +104,9 @@ export class WearTrackingService implements OnApplicationBootstrap {
   private countEntry(entryId: string): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
       // 1. Claim it. 0 rows updated means someone else already counted it, or
-      // the user marked it "Didn't wear it" in the meantime.
+      // the user marked it "Didn't wear it" or unscheduled it in the meantime.
       const claimed = await tx.calendarEntry.updateMany({
-        where: { id: entryId, wornCountedAt: null, notWorn: false },
+        where: { id: entryId, wornCountedAt: null, notWorn: false, removedAt: null },
         data: { wornCountedAt: new Date() },
       });
       if (claimed.count === 0) return false;
@@ -123,7 +125,10 @@ export class WearTrackingService implements OnApplicationBootstrap {
         WHERE id = ${entry.outfitId}
       `;
 
-      // 3. Each of its items once, even if an item is in the outfit twice.
+      // 3. Each of its items once, even if an item is in the outfit twice:
+      // one more wear in total, and one more this month only if the day is in
+      // the item's current 30-day period. An older day counted late (e.g. after
+      // undoing "Didn't wear it") belongs to a period that's already over.
       const itemIds = [...new Set(entry.outfit.items.map((piece) => piece.itemId))];
       if (itemIds.length > 0) {
         // Roll any expired period forward first, so the wear lands in the current one.
@@ -134,10 +139,12 @@ export class WearTrackingService implements OnApplicationBootstrap {
           WHERE id IN (${Prisma.join(itemIds)})
             AND "wearPeriodStart" <= ${NOW_UTC} - interval '30 days'
         `;
-        await tx.item.updateMany({
-          where: { id: { in: itemIds } },
-          data: { timesWorn: { increment: 1 }, timesWornThisMonth: { increment: 1 } },
-        });
+        await tx.$executeRaw`
+          UPDATE "Item"
+          SET "timesWorn" = "timesWorn" + 1,
+              "timesWornThisMonth" = "timesWornThisMonth" + CASE WHEN ${inCurrentWearPeriod(entry.date)} THEN 1 ELSE 0 END
+          WHERE id IN (${Prisma.join(itemIds)})
+        `;
       }
       return true;
     });

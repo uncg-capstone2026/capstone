@@ -38,6 +38,7 @@ export class CalendarService {
     const entries = await this.prisma.calendarEntry.findMany({
       where: {
         outfit: { userId },
+        removedAt: null, // unscheduled days stay hidden
         date: { gte: start, lt: new Date(end.getTime() + DAY_MS) },
       },
       orderBy: [{ date: 'asc' }, { createdAt: 'asc' }],
