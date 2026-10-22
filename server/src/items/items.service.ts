@@ -11,6 +11,7 @@ import { CATEGORY_TO_CLIENT, FIT_TO_CLIENT, categoryFromClient, fitFromClient, f
 import { buildColorGrid } from './color-grid';
 import { findProduct } from './product-page';
 import { LinkFetchError, checkUrl, safeFetch } from './safe-fetch';
+import { cleanLink } from './clean-link';
 
 // The image the AI steps send to Gemini.
 type AiImage = { image: Buffer; mimeType: string };
@@ -167,7 +168,9 @@ export class ItemsService {
   // a message the app shows.
   async createFromLink(userId: User['id'], rawUrl: string) {
     try {
-      const pageUrl = checkUrl(rawUrl.trim());
+      // Without ad tracking (?gclid=, ?utm_source= ...), so the same product
+      // pasted from different ads is saved once and found again as a duplicate.
+      const pageUrl = cleanLink(checkUrl(rawUrl.trim()));
 
       // If the app retries, or the same link is pasted twice, don't make a duplicate.
       const existing = await this.prisma.item.findFirst({
