@@ -2,6 +2,7 @@ import {
   ArrayMaxSize, IsArray, IsBoolean, IsIn, IsOptional, IsString,
   Length, Matches, MaxLength, ValidateIf,
 } from 'class-validator';
+import { CLOTHING_TYPES } from '../gemini/constants';
 import { CLIENT_CATEGORIES, CLIENT_FITS } from './item-mappings';
 
 export class PhotoUploadUrlDto {
@@ -56,7 +57,11 @@ export class UpdateItemDto {
   @IsOptional() @IsIn(CLIENT_FITS)
   fit?: string | null;
 
-  @IsOptional() @IsString() @MaxLength(50) type?: string | null;
+  // One of the Stylist's clothing types (GET /api/items/types), since its
+  // search matches type exactly. Anything else would hide the item from it.
+  @IsOptional() @IsIn(CLOTHING_TYPES, { message: 'type must be one of the types from GET /api/items/types' })
+  type?: string | null;
+
   @IsOptional() @IsString() @MaxLength(50) cut?: string | null;
   @IsOptional() @IsString() @MaxLength(50) pattern?: string | null;
   @IsOptional() @IsString() @MaxLength(50) material?: string | null;

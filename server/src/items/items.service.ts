@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
 import { ImageProcessingService } from '../gemini/image-processing/service';
+import { CATEGORY_BY_TYPE, CLOTHING_TYPES } from '../gemini/constants';
 import { mimeTypeForKey } from '../gemini/helpers';
 import { CutoutService } from './cutout.service';
 import type { UpdateItemDto } from './items.dto';
@@ -34,6 +35,13 @@ export class ItemsService {
     private readonly cutout: CutoutService,
     private readonly imageProcessing: ImageProcessingService,
   ) {}
+
+  // GET /api/items/types: every clothing type the Stylist knows, in a fixed
+  // order, each with the category it belongs to (the app's names, e.g. 'tops').
+  // PATCH /api/items/:id only accepts a type from this list.
+  listTypes() {
+    return CLOTHING_TYPES.map((type) => ({ type, category: CATEGORY_TO_CLIENT[CATEGORY_BY_TYPE[type]] }));
+  }
 
   // Only the signed-in user's items, newest first.
   async listForUser(userId: User['id']) {
@@ -217,6 +225,46 @@ export class ItemsService {
     }
   }
 
+  // For scripts/backfill-items.ts: fills in what an item added before tagging
+  // and embedding existed is missing, so the Stylist search can find it.
+  // Only fills gaps: the embedding if there's none, and type (plus category
+  // if that's empty too) if there's no type. Nothing the user may have edited
+  // (name, colors, fit...) is changed. Returns what it filled in.
+  async backfillAi(itemId: Item['id']): Promise<{ embedding: boolean; type: boolean }> {
+    const item = await this.prisma.item.findUniqueOrThrow({ where: { id: itemId } });
+    const [{ missing }] = await this.prisma.$queryRaw<{ missing: boolean }[]>`
+      SELECT embedding IS NULL AS missing FROM "Item" WHERE id = ${itemId}
+    `;
+    const done = { embedding: false, type: false };
+    if (!missing && item.type) return done;
+
+    let cutoutPng: Buffer | null = null;
+    if (item.cutoutKey) {
+      try {
+        cutoutPng = await this.s3.getObjectBuffer(item.cutoutKey);
+      } catch {
+        // Falls back to the original photo.
+      }
+    }
+    const aiImage = await this.loadAiImage(item.id, item.imageKey, cutoutPng);
+    if (!aiImage) return done;
+
+    if (missing) done.embedding = await this.addEmbedding(item.id, aiImage);
+    if (!item.type) {
+      try {
+        const attrs = await this.imageProcessing.extractImageAttributes(aiImage.image, aiImage.mimeType);
+        await this.prisma.item.update({
+          where: { id: item.id },
+          data: { type: attrs.type, ...(item.category ? {} : { category: attrs.category }) },
+        });
+        done.type = true;
+      } catch (err) {
+        this.logger.warn(`Backfill tagging failed for item ${item.id}: ${(err as Error).message}`);
+      }
+    }
+    return done;
+  }
+
   // The item, but only if it belongs to this user. 404 otherwise, so ids can't be probed.
   private async findOwned(userId: User['id'], id: string): Promise<Item> {
     const item = await this.prisma.item.findFirst({ where: { id, userId } });
@@ -242,8 +290,9 @@ export class ItemsService {
   }
 
   // AI (shared input): the image both AI steps read. The cutout if there is one
-  // (already in memory), otherwise the original if it's PNG/JPEG. null means
-  // there's nothing Gemini accepts, so both AI steps are skipped.
+  // (already in memory), otherwise the original. Gemini only takes PNG and
+  // JPEG, so any other original (e.g. a WebP upload) is converted to JPEG
+  // first. null means the photo couldn't be read, so both AI steps are skipped.
   private async loadAiImage(
     itemId: Item['id'],
     key: string,
@@ -251,13 +300,11 @@ export class ItemsService {
   ): Promise<AiImage | null> {
     if (cutoutPng) return { image: cutoutPng, mimeType: 'image/png' };
 
-    const mimeType = mimeTypeForKey(key);
-    if (!mimeType) {
-      this.logger.warn(`AI steps skipped for item ${itemId}: ${key} is not PNG or JPEG`);
-      return null;
-    }
     try {
-      return { image: await this.s3.getObjectBuffer(key), mimeType };
+      const image = await this.s3.getObjectBuffer(key);
+      const mimeType = mimeTypeForKey(key);
+      if (mimeType) return { image, mimeType };
+      return { image: await toJpeg(image), mimeType: 'image/jpeg' };
     } catch (err) {
       this.logger.warn(`AI steps skipped for item ${itemId}: ${(err as Error).message}`);
       return null;
@@ -267,15 +314,17 @@ export class ItemsService {
   // AI (Gemini embedding): turns the item's photo into a 768-number vector so the
   // Stylist can find it by meaning, via ImageProcessingService.embedImage, and
   // saves it to Item.embedding. If anything fails, the item is saved without one
-  // and the Stylist skips it.
-  private async addEmbedding(itemId: Item['id'], { image, mimeType }: AiImage) {
+  // and the Stylist skips it. Returns whether it was saved.
+  private async addEmbedding(itemId: Item['id'], { image, mimeType }: AiImage): Promise<boolean> {
     try {
       const embedding = await this.imageProcessing.embedImage(image, mimeType);
       // Prisma can't write the vector type, so it goes in as '[0.1,...]' text and is cast in SQL.
       const vector = `[${embedding.join(',')}]`;
       await this.prisma.$executeRaw`UPDATE "Item" SET embedding = ${vector}::vector WHERE id = ${itemId}`;
+      return true;
     } catch (err) {
       this.logger.warn(`Embedding failed for item ${itemId}: ${(err as Error).message}`);
+      return false;
     }
   }
 
@@ -369,8 +418,8 @@ export class ItemsService {
 }
 
 // Any image format (WebP, AVIF, GIF...) -> a JPEG of at most 2000px, which the
-// cutout and Gemini both accept. A LinkFetchError (so a 400) if it isn't a
-// readable image.
+// cutout and Gemini both accept. A LinkFetchError if it isn't a readable image
+// (a 400 for link imports; loadAiImage catches and logs it).
 async function toJpeg(image: Buffer): Promise<Buffer> {
   try {
     return await sharp(image, { animated: false })
