@@ -100,13 +100,29 @@ export const PATTERNS = [
 export type Pattern = (typeof PATTERNS)[number];
 
 // Matches the Fit enum in prisma/schema.prisma.
-export const FITS = ['Slim', 'Regular', 'Relaxed', 'Oversized'] as const;
+export const FITS = ['Fitted', 'Slim', 'Regular', 'Loose', 'Oversized'] as const;
 
 export type FitValue = (typeof FITS)[number];
 
 // Matches the Category enum in prisma/schema.prisma.
 export type Category =
   'Top' | 'Bottoms' | 'Outerwear' | 'Shoes' | 'Accessory' | 'OnePiece';
+
+// The cuts the AI may tag each category with. A copy of COMMON_CUTS (and
+// GENERAL_CUTS) in client/src/services/items.ts, using the server's category
+// names: keep the two in sync, word for word.
+const GENERAL_CUTS = ['Classic', 'Cropped', 'Longline', 'Asymmetric'] as const;
+export const CUTS_BY_CATEGORY: Record<Category, readonly string[]> = {
+  Top: ['Crew neck', 'V-neck', 'Scoop neck', 'Turtleneck', 'Mock neck', 'Collared', 'Henley', 'Off-shoulder', 'Halter', 'Cropped', 'Longline'],
+  Bottoms: ['Straight leg', 'Skinny', 'Slim', 'Wide leg', 'Bootcut', 'Flare', 'Tapered', 'Barrel', 'A-line', 'Pencil', 'Pleated'],
+  Outerwear: ['Single-breasted', 'Double-breasted', 'Cropped', 'Longline', 'Hooded', 'Bomber', 'Trench', 'Shacket'],
+  Shoes: ['Low-top', 'High-top', 'Ankle', 'Knee-high', 'Slip-on', 'Lace-up', 'Platform', 'Pointed toe'],
+  Accessory: GENERAL_CUTS,
+  OnePiece: ['A-line', 'Bodycon', 'Shift', 'Wrap', 'Slip', 'Fit and flare', 'Shirt dress', 'Jumpsuit', 'Romper'],
+};
+
+// Every cut above once, for the response schema (which can't vary by category).
+export const ALL_CUTS = [...new Set(Object.values(CUTS_BY_CATEGORY).flat())];
 
 export const CATEGORY_BY_TYPE: Record<ClothingType, Category> = {
   't-shirt': 'Top',

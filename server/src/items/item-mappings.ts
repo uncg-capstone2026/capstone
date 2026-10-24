@@ -34,9 +34,9 @@ function fromClient<K extends string>(map: Record<K, string>, value: string): K 
 export const categoryFromClient = (value: string) => fromClient(CATEGORY_TO_CLIENT, value);
 export const fitFromClient = (value: string) => fromClient(FIT_TO_CLIENT, value);
 
-// The AI's fit tag -> database value. Also accepts the older 'Relaxed' (now
-// 'Loose'), so tagging works whether or not FITS in gemini/constants.ts has
-// been updated yet. Anything unknown becomes null.
+// The AI's fit tag (FITS in gemini/constants.ts) -> database value. Also
+// accepts the older 'Relaxed' (now 'Loose'), from before FITS matched the
+// enum. Anything unknown becomes null.
 const FIT_FROM_AI: Record<string, Fit> = {
   Fitted: 'Fitted',
   Slim: 'Slim',
