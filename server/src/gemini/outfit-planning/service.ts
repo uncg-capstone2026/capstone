@@ -3,6 +3,7 @@ import type { Part } from '@google/genai';
 import { AI_LOG_CONTEXT } from '../../logger.config';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { Weather } from '../../weather/weather.service';
+import type { PromptNote } from '../../style-notes/style-notes.service';
 import { S3Service } from '../../s3/s3.service';
 import { CANDIDATES_STORED_PER_TYPE, MAIN_MODEL } from '../constants';
 import { GeminiHelpers, describeWeather, mimeTypeForKey, seconds, styleNotesText, tokenCounts } from '../helpers';
@@ -45,7 +46,7 @@ export type SelectedOutfit = ValidOutfit<OutfitCandidate>;
 type SelectionInput = {
   request: string; // the user's request (with the date line, if any)
   weather?: Weather | null;
-  styleNotes?: string[]; // the user's style notes closest to the request
+  styleNotes?: PromptNote[]; // all the user's style notes, newest first
   candidates: OutfitCandidate[]; // what Gemini may choose from
   fixed?: OutfitCandidate[]; // pieces every outfit keeps (swap / refine)
   history?: string | null; // the conversation so far, already formatted

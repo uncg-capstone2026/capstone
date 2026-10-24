@@ -33,7 +33,9 @@ export const FIT_STEPS: { fit: ClothingFit; label: string; description: string }
   { fit: 'oversized', label: 'Oversized', description: 'Deliberately sized up for a roomy, slouchy look.' },
 ];
 
-// Common cuts offered in the Cut dropdown, by category. Users can also add their own.
+// Common cuts offered in the Cut dropdown, by category. Users can also add their own. The AI
+// tags items from a copy of these (CUTS_BY_CATEGORY in server/src/gemini/constants.ts): keep
+// the two in sync, word for word.
 const GENERAL_CUTS = ['Classic', 'Cropped', 'Longline', 'Asymmetric'];
 export const COMMON_CUTS: Record<ClothingCategory, string[]> = {
   tops: ['Crew neck', 'V-neck', 'Scoop neck', 'Turtleneck', 'Mock neck', 'Collared', 'Henley', 'Off-shoulder', 'Halter', 'Cropped', 'Longline'],

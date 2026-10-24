@@ -1,15 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { GoogleGenAI, Schema, type GenerateContentResponseUsageMetadata } from '@google/genai';
 import type { Weather } from '../weather/weather.service';
+import type { PromptNote } from '../style-notes/style-notes.service';
 import { EMBEDDABLE_IMAGE_TYPES, MAIN_MODEL } from './constants';
 
 // Formats a list for a prompt: ['a', 'b'] -> '"a", "b"'.
 export const quoteList = (xs: readonly string[]) => xs.map((x) => `"${x}"`).join(', ');
 
-// The user's style notes (StyleNotesService.findRelevant), for a prompt.
-export function styleNotesText(notes: string[]): string
+// Every one of the user's style notes (StyleNotesService.listForPrompt),
+// newest first, each with where it came from and when, plus how to settle
+// two that conflict: the user's own beats a learned one, then newer wins.
+export function styleNotesText(notes: PromptNote[]): string
 {
-  return `What the user has told us about their style:\n${notes.map((note) => `- ${note}`).join('\n')}`;
+  const lines = notes.map((note) => `- [${note.source}, ${note.createdAt.toISOString().slice(0, 10)}] ${note.text}`);
+  return `What the user has told us about their style, newest first. "user" notes are ones they wrote themselves; "learned" notes were worked out from their past outfits. If two notes conflict, a user note always wins over a learned one; between two notes from the same source, the newer one wins.
+${lines.join('\n')}`;
 }
 
 // One line for a prompt, in °F since users are in the US, e.g. "Weather on

@@ -37,7 +37,7 @@ Both routes:
 - `type` is the garment type (`'t-shirt'`, `'jeans'`); `category` is the app's name (`'tops'`).
 - `imageUrl` is a signed URL to the cutout (or original), valid for **5 minutes**.
 - With `lat`/`lon` on the first request, the day's forecast is fetched first, stored on the session, and given to every prompt.
-- The user's style notes closest to the request (up to 10) are added to the prompts.
+- All the user's style notes (up to 50) are added to the prompts, newest first. If two conflict, the user's own beats a learned one, and otherwise the newer one wins.
 - A session with no activity for 24 hours is marked abandoned; reprompting or accepting it is a 409, so start a new one.
 - Errors: 400 invalid body; 404 session not found; 409 session finished or another reprompt in progress; 422 not enough items / nothing new / 20-turn limit (show `serverMessage`); 503 AI unavailable (show `serverMessage`).
 

@@ -1,5 +1,6 @@
 import { Type, type Schema } from '@google/genai';
 import {
+  ALL_CUTS,
   CLOTHING_TYPES,
   FITS,
   FORMALITY_LEVELS,
@@ -26,7 +27,8 @@ export const IMAGE_ATTRIBUTES_RESPONSE_SCHEMA: Schema = {
       nullable: true,
       enum: [...FORMALITY_LEVELS],
     },
-    fit: { type: Type.STRING, nullable: true, enum: [...FITS] },
+    cut: { type: Type.STRING, enum: ALL_CUTS },
+    fit: { type: Type.STRING, enum: [...FITS] },
   },
   required: [
     'name',
@@ -36,6 +38,7 @@ export const IMAGE_ATTRIBUTES_RESPONSE_SCHEMA: Schema = {
     'material',
     'season',
     'formality',
+    'cut',
     'fit',
   ],
   propertyOrdering: [
@@ -46,6 +49,7 @@ export const IMAGE_ATTRIBUTES_RESPONSE_SCHEMA: Schema = {
     'material',
     'season',
     'formality',
+    'cut',
     'fit',
   ],
 };

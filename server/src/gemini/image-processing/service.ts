@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   CATEGORY_BY_TYPE,
+  CUTS_BY_CATEGORY,
   EMBEDDING_DIMENSIONS,
   EMBEDDING_MODEL,
   MAIN_MODEL,
@@ -26,7 +27,8 @@ type ImageAttributes = {
   material: string | null;
   season: Season | null;
   formality: FormalityLevel | null;
-  fit: FitValue | null;
+  cut: string | null; // one of CUTS_BY_CATEGORY[category]; null only if the AI picked another category's cut
+  fit: FitValue;
 };
 
 // Adding an item: tag the photo, then embed it.
@@ -37,7 +39,7 @@ export class ImageProcessingService {
 
   // Fills in a newly uploaded item's fields from a photo of the garment; the
   // user can edit them afterwards. category is derived from type, not chosen
-  // by the model.
+  // by the model, and a cut from another category's list is dropped.
   async extractImageAttributes(image: Buffer, mimeType: string): Promise<ImageAttributes>
   {
     this.helpers.assertSupportedImage(mimeType);
@@ -76,7 +78,11 @@ export class ImageProcessingService {
       throw new Error(`Image attributes returned an unknown type: ${JSON.stringify(attributes.type)}`);
     }
 
-    return { ...attributes, colorHex, category };
+    // The schema allows every category's cuts, since the category isn't known
+    // until the type is; keep the cut only if it's in this category's list.
+    const cut = attributes.cut && CUTS_BY_CATEGORY[category].includes(attributes.cut) ? attributes.cut : null;
+
+    return { ...attributes, colorHex, category, cut };
   }
 
   async embedImage(image: Buffer, mimeType: string): Promise<number[]>

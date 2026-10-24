@@ -329,7 +329,7 @@ export class ItemsService {
   }
 
   // AI (Gemini tagging): reads the photo and fills in name, type, category, colors,
-  // pattern, material, season, formality and fit via
+  // pattern, material, season, formality, cut and fit via
   // ImageProcessingService.extractImageAttributes. If anything fails, the item keeps
   // its defaults and the user (or a backfill) fills them in. keepName: leave the
   // item's current name (e.g. a store's product name from a link import).
@@ -352,6 +352,7 @@ export class ItemsService {
           material,
           season: attrs.season ?? null,
           formality: attrs.formality ?? null,
+          cut: attrs.cut ?? null,
           fit: fitFromAi(attrs.fit),
         },
       });
