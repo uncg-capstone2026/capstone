@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import { IosAuthorizationStatus } from 'expo-notifications';
 
 import { SessionExpiredError } from '@/services/api';
 import { getCalendarEntries, type CalendarEntry } from '@/services/calendar';
@@ -45,7 +46,7 @@ export async function ensureNotificationPermission(): Promise<boolean> {
 }
 
 function toPermission(settings: Notifications.NotificationPermissionsStatus): NotificationPermission {
-  if (settings.granted || settings.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) {
+  if (settings.granted || settings.ios?.status === IosAuthorizationStatus.PROVISIONAL) {
     return 'granted';
   }
   return settings.canAskAgain ? 'undetermined' : 'denied';
