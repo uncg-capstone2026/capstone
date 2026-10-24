@@ -27,8 +27,8 @@ export default function TabsLayout() {
           name="closet"
           options={{
             title: 'Closet',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="wardrobe-outline" size={size} color={color} />
+            tabBarIcon: ({ focused, size }) => (
+              <MaterialCommunityIcons name="wardrobe-outline" size={size} color={focused ? ACTIVE_COLOR : INACTIVE_COLOR} />
             ),
           }}
         />
@@ -36,8 +36,8 @@ export default function TabsLayout() {
           name="outfits"
           options={{
             title: 'Outfits',
-            tabBarIcon: ({ color, size }) => (
-              <MaterialCommunityIcons name="tshirt-crew-outline" size={size} color={color} />
+            tabBarIcon: ({ focused, size }) => (
+              <MaterialCommunityIcons name="tshirt-crew-outline" size={size} color={focused ? ACTIVE_COLOR : INACTIVE_COLOR} />
             ),
           }}
         />
@@ -52,14 +52,14 @@ export default function TabsLayout() {
           name="calendar"
           options={{
             title: 'Calendar',
-            tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+            tabBarIcon: ({ focused, size }) => <Ionicons name="calendar-outline" size={size} color={focused ? ACTIVE_COLOR : INACTIVE_COLOR} />,
           }}
         />
         <Tabs.Screen
           name="settings"
           options={{
             title: 'Settings',
-            tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
+            tabBarIcon: ({ focused, size }) => <Ionicons name="settings-outline" size={size} color={focused ? ACTIVE_COLOR : INACTIVE_COLOR} />,
           }}
         />
       </Tabs>
