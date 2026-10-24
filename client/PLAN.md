@@ -23,7 +23,6 @@ All done.
 
 Clothing photos live in AWS S3. The client uploads the original photo, and the server cuts the piece out and stores the cutout in S3 as well (`Item.imageKey` for the original, `Item.cutoutKey` for the cutout).
 
-- [ ] Test adding an item by link on a device: a new link opens the confirm screen, and pasting the same link again opens the existing item's details.
 - [ ] If the app is closed on the confirm screen, the item stays in the closet unchecked (and untagged until tagging is wired in). Later, an `isConfirmed` flag on `Item` (hidden from `GET /api/items` until Save) would stop that.
 
 ### Item details screen
@@ -81,22 +80,17 @@ The remaining Gemini work is in section 8.
 Everything that touches Gemini, the embeddings or the pgvector search: setup, item tagging, and the outfit suggestion route. The code is in `server/src/gemini/` and `server/src/stylist/`.
 
 ### Setup and security
-- [ ] Add `GEMINI_API_KEY` to `server/.env` and the Railway variables (`server/.env.example` has it). Without it, every Gemini call fails.
-- [ ] Database: the init migration creates an `embedding vector(768)` column but never runs `CREATE EXTENSION vector`. Check pgvector is enabled on Railway, and add a migration with `CREATE EXTENSION IF NOT EXISTS vector` so a fresh database works.
-- [ ] `server/src/main.ts` now loads `.env` with `dotenv/config` as well as `ConfigModule`. Keep one. `GeminiHelpers` reads `process.env.GEMINI_API_KEY` directly, so whichever stays must load before it.
+- [ ] Check the `enable_pgvector` migration has run on Railway (`build` and `start` don't run `prisma migrate deploy`).
 
 ### Item tagging and embeddings (section 4)
 - [ ] `FITS` in `server/src/gemini/constants.ts` still uses `Relaxed` and has no `Fitted`, so the AI never tags an item Fitted. Change it to `['Fitted', 'Slim', 'Regular', 'Loose', 'Oversized']` to match the `Fit` enum. (`item-mappings.ts` already maps `Relaxed` to `Loose`, so nothing breaks in the meantime.)
-- [ ] `PATCH /api/items/:id` accepts any `type` up to 50 characters, but the Stylist search matches `type` exactly against `CLOTHING_TYPES` in `server/src/gemini/constants.ts`. Validate `type` against that list, and make the list available to the app (send it, or add `GET /api/items/types`).
 - [ ] Backfill `type` and `embedding` for items added before tagging and embedding were wired in, since the Stylist search skips items without them.
-- [ ] Gemini only accepts PNG and JPEG (`EMBEDDABLE_IMAGE_TYPES`), but the upload routes also accept WebP. When there's no cutout, a WebP original is currently skipped (no tags or embedding). Convert it to JPEG with sharp instead.
 - [ ] Add `cut` to AI tagging. `extractImageAttributes` fills every other tag but not `cut`, so it's always empty until the user picks one. Add it to the image-attributes schema, prompt and result type (`server/src/gemini/image-processing/`), and save it in `ItemsService.createFromPhoto` with the other tags. Pick from the cuts the app offers for the item's category (`COMMON_CUTS` in `client/src/services/items.ts`; copy the list into `server/src/gemini/constants.ts`, since the server can't import from the client), or `null` if it can't tell or the category has no cuts. The confirm screen already shows `cut` and marks AI-filled fields, so the app needs no change.
 
 ### Outfit suggestions (`POST /api/stylist/outfit`, section 7)
 
 ### Prompts
-- [ ] `ai/Prompts.md` has older drafts that differ from the prompts in `server/src/gemini/*/prompt.ts`. Update or delete it so there's one source.
-- [ ] Later: the memory prompt noted at the end of `ai/Prompts.md` ("extract/attach memories relevant to the original user prompt").
+- [ ] Later: a memory prompt that extracts and attaches memories relevant to the original user prompt (noted in the old `ai/Prompts.md`, now deleted).
 
 ## 9. Outfits and collections
 
@@ -106,8 +100,6 @@ Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where
 
 ### Server
 - [ ] Optional cleanup: outfit reminders are local notifications scheduled by the app, so `notificationsEnabled` on `User`, `POST /api/auth/me/push-token`, the `PushToken` model and the `Notification` model are unused. Remove them, or keep them for server-sent push later (which would need an Apple Developer account and APNs key). `marketingOptIn` is no longer sent at sign-up either.
-- [ ] "Didn't wear it" fix: Undo on an older day adds a wear to the wrong 30-day period. If the day was counted in an item's earlier period, `markNotWorn` correctly leaves `timesWornThisMonth` alone, but after Undo the hourly job counts the day again and adds 1 to the current period. Have `countEntry` (`server/src/wear-tracking/wear-tracking.service.ts`) only add to `timesWornThisMonth` when the entry's `date` falls in the item's current period (`date >= wearPeriodStart`), and keep adding to `timesWorn` as now. This also fixes old days that get counted late.
-- [ ] "Didn't wear it" fix: `recomputeLastWorn` (`server/src/outfits/outfits.service.ts`) only looks at calendar entries that still exist. A counted entry that was deleted keeps its wear in `timesWorn` but no longer counts toward `lastWorn`, so marking another day can move `lastWorn` back too far, or set it to `null` while `timesWorn` is above 0. Options: when marking, only recompute if the marked day was the current `lastWorn`, and otherwise leave it; or keep deleted counted entries (soft delete) so their dates still count.
 - [ ] Optional "Didn't wear it" fix: `uncountWear` takes the wear off the outfit's current pieces. If the pieces were edited after the day was counted, the wrong items lose a wear. To fix it, record which items were counted for each entry when the job counts it (for example a `countedItemIds String[]` on `CalendarEntry`), and subtract from those.
 
 ### Client
@@ -120,7 +112,7 @@ The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfi
 3. Body photo routes: the smallest real end-to-end test (section 3) (done)
 4. Items list (section 4) (done)
 5. Add-item flow (section 4): upload first, saving the item with just the original photo (done)
-6. Cutout and tagging (section 4) (done; backfilling older items, WebP conversion and `FITS` are in section 8)
+6. Cutout and tagging (section 4) (done; backfilling older items and `FITS` are in section 8)
 7. Weather (section 6) (done, including `?date=` for the Stylist day picker)
 8. Stylist (section 7): sessions, reprompting, accept and try-on are done on the server, and the app uses them. The first request sends the location, so suggestions use the weather
 9. Outfits and collections (section 9): the client screens are built and use the live routes. The schema, `OutfitsService.create` and the outfit and collection routes are done on the server. So are `PATCH /api/auth/me { timeZone }` and the hourly wear tracking job. The app sends the device's time zone. The outfit details screen, wear stats and the Calendar tab are built and tested on a device
@@ -130,7 +122,8 @@ The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfi
 What the client needs, split by whether it can be done now.
 
 ### Can do now
-- [ ] Test adding by link on a device (section 4).
+
+Nothing right now.
 
 ### Needs a server decision first
 
