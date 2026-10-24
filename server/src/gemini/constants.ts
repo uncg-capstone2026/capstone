@@ -80,9 +80,6 @@ export const RECENT_TURNS_IN_FULL = 5;
 // Turns allowed in one session before the user has to start a new request.
 export const MAX_TURNS_PER_SESSION = 20;
 
-// Style notes closest to the request added to the stylist's prompts.
-export const STYLE_NOTES_IN_PROMPT = 10;
-
 // Most style facts the memory job saves from one finished session.
 export const MAX_MEMORY_FACTS = 3;
 

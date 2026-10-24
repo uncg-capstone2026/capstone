@@ -8,6 +8,7 @@ import {
 import type { Weather } from '../../weather/weather.service';
 import { AI_LOG_CONTEXT } from '../../logger.config';
 import { GeminiHelpers, describeWeather, seconds, styleNotesText, tokenCounts } from '../helpers';
+import type { PromptNote } from '../../style-notes/style-notes.service';
 import { QUERY_EXPANSION_PROMPT } from './prompt';
 import { QUERY_EXPANSION_RESPONSE_SCHEMA } from './schema';
 
@@ -24,8 +25,8 @@ export class QueryExpansionService {
 
   // weather is the forecast for the day the outfit is for, when known. It
   // comes before the search so the types picked suit the day. styleNotes are
-  // the user's notes closest to the request.
-  async expandQuery(userRequest: string, weather?: Weather | null, styleNotes: string[] = [])
+  // all the user's style notes, newest first.
+  async expandQuery(userRequest: string, weather?: Weather | null, styleNotes: PromptNote[] = [])
   {
     const promptWithTypes = QUERY_EXPANSION_PROMPT.replace(
       '{available_types}',
@@ -74,7 +75,7 @@ export class QueryExpansionService {
 
   // Expands the request, then attaches each item's semantic_query embedding
   // to that item.
-  async expandAndEmbedQuery(userRequest: string, weather?: Weather | null, styleNotes: string[] = [])
+  async expandAndEmbedQuery(userRequest: string, weather?: Weather | null, styleNotes: PromptNote[] = [])
   {
     const expanded = await this.expandQuery(userRequest, weather, styleNotes);
     const vectors = await this.embedTexts(

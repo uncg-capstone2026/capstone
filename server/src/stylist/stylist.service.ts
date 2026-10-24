@@ -7,7 +7,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import type { OutfitTurn } from '@prisma/client';
-import { CANDIDATES_SENT_PER_TYPE, MAX_TURNS_PER_SESSION, STYLE_NOTES_IN_PROMPT } from '../gemini/constants';
+import { CANDIDATES_SENT_PER_TYPE, MAX_TURNS_PER_SESSION } from '../gemini/constants';
 import { seconds } from '../gemini/helpers';
 import { HistorySummaryService } from '../gemini/history-summary/service';
 import {
@@ -27,7 +27,7 @@ import { TryOnService, type TryOnResult } from '../gemini/try-on/service';
 import { AI_LOG_CONTEXT } from '../logger.config';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../s3/s3.service';
-import { StyleNotesService } from '../style-notes/style-notes.service';
+import { StyleNotesService, type PromptNote } from '../style-notes/style-notes.service';
 import { WeatherService, type Weather } from '../weather/weather.service';
 import { toSuggestion, type OutfitSuggestion, type SuggestionPiece } from './outfit-suggestion';
 import {
@@ -56,7 +56,7 @@ type RepromptContext = {
   current: SuggestionPiece[]; // its pieces that are still in the closet
   request: string; // the original request, with the date line
   weather: Weather | null; // stored on turn 1
-  styleNotes: string[]; // the user's notes closest to the original request
+  styleNotes: PromptNote[]; // all the user's style notes, newest first
   message: string; // the user's feedback; '' for "Try another"
   banned: Set<string>;
   shownOutfits: string[][]; // every outfit shown, as item ids
@@ -115,7 +115,7 @@ export class StylistService {
       // the user's style.
       const [weather, styleNotes] = await Promise.all([
         this.dayWeather(input.location, input.date),
-        this.relevantNotes(userId, input.occasion),
+        this.allNotes(userId),
       ]);
 
       // AI (Gemini query expansion + embedding): turns the request, the day's
@@ -220,7 +220,7 @@ export class StylistService {
       const [decision, summary, styleNotes] = await Promise.all([
         this.decideRoute(ctx),
         this.updateSummary(session, turns, window, byId),
-        this.relevantNotes(userId, session.originalPrompt),
+        this.allNotes(userId),
       ]);
       ctx.styleNotes = styleNotes;
       ctx.history = formatHistory({
@@ -511,7 +511,7 @@ export class StylistService {
     userId: string;
     request: string;
     weather: Weather | null;
-    styleNotes?: string[];
+    styleNotes?: PromptNote[];
     lists: CandidateLists;
     fixed?: OutfitCandidate[];
     alreadySent?: Set<string>;
@@ -595,16 +595,12 @@ export class StylistService {
     });
   }
 
-  // The user's style notes closest in meaning to the request, for the
-  // prompts. No embedding call when they have no notes; if anything fails,
-  // the outfit is picked without them.
-  private async relevantNotes(userId: string, request: string): Promise<string[]> {
+  // All the user's style notes (up to 50), newest first, for the prompts.
+  // styleNotesText tells Gemini how to settle two that conflict. If reading
+  // them fails, the outfit is picked without them.
+  private async allNotes(userId: string): Promise<PromptNote[]> {
     try {
-      if ((await this.prisma.styleNote.count({ where: { userId } })) === 0) return [];
-      // AI (Gemini embedding): the request, to compare with the notes.
-      const [vector] = await this.queryExpansion.embedTexts([request]);
-      const notes = await this.styleNotes.findRelevant(userId, vector, { limit: STYLE_NOTES_IN_PROMPT });
-      return notes.map((note) => note.text);
+      return await this.styleNotes.listForPrompt(userId);
     } catch (err) {
       this.logger.warn(`Suggesting without style notes: ${(err as Error).message}`);
       return [];
