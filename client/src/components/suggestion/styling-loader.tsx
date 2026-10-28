@@ -15,6 +15,7 @@ import Animated, {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { listItems, type ClosetItem } from '@/services/items';
+import { remoteImage } from '@/utils/images';
 
 const MIN_DURATION_MS = 1000; // so an instant result doesn't flash the loader
 const STATUS_INTERVAL_MS = 3500;
@@ -150,7 +151,7 @@ function GarmentCircle() {
       {piece ? (
         <Animated.View key={piece.id} entering={FadeIn.duration(400)} exiting={FadeOut.duration(400)} className="absolute">
           <Image
-            source={{ uri: piece.imageUrl }}
+            source={remoteImage(piece.imageUrl)}
             contentFit="contain"
             accessibilityLabel={piece.name}
             accessibilityIgnoresInvertColors

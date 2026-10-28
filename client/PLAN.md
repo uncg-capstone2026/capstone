@@ -106,6 +106,20 @@ Tapping a card opens the collection screen (`src/app/collection/[id].tsx`, where
 ### Client
 The pieces and schedule routes, `scheduled` and `collections` on `GET /api/outfits/:id`, and `GET /api/photos/body` are now live on the server (PRs #44 and #45). So are `GET /api/calendar`, `PATCH /api/auth/me` with `name`, `displayName`, `phone` and `notificationsEnabled`, and `POST /api/auth/me/push-token { token }`.
 
+## 10. Image loading speed
+
+Images were slow on a real phone, mainly because each one downloaded again on every view: the server re-signs every S3 URL, and `expo-image` cached by the full URL. The client now caches by the S3 key (`src/utils/images.ts`), shrinks uploads to 2000px and loads the closet as a `FlatList`. What's left is making each download smaller and faster, on the server.
+
+### Server
+- [ ] Thumbnails: when saving a cutout, also save a small version (about 400px, WebP with transparency, e.g. `<uuid>-thumb.webp`). Return it as `thumbnailUrl` on `GET /api/items` and on the pieces in outfits and stylist replies (the original's thumbnail until the cutout is ready, like `imageUrl`). The closet grid and piece thumbnails would use it, and the details screen and outfit stage keep `imageUrl`. A 1024px cutout PNG is often 0.5–1.5 MB, and a grid tile is about 180pt wide. Existing items need a backfill.
+- [ ] Save cutouts as WebP (keeps transparency) instead of PNG: several times smaller and faster to decode on the phone. The client loads whatever URL it gets, so nothing changes there. Keep the PNG for Gemini, or convert, since Gemini only takes PNG and JPEG (see `loadAiImage`).
+- [ ] Set `CacheControl: 'public, max-age=31536000, immutable'` in `putObject` and on the upload URL. Keys are UUIDs and never overwritten, so the files never change.
+- [ ] Optional: put CloudFront in front of the bucket, with signed cookies or CloudFront signed URLs, so images come from a nearby edge instead of the bucket's region.
+- [ ] Optional: make signed URLs stable for a while (e.g. sign with a time rounded down to the hour, or cache the URL per key) so the same image gets the same URL within that window. The client no longer needs this, but it would help any other cache along the way.
+
+### Client
+- [ ] When `thumbnailUrl` exists, use it in `ItemCard`, `PieceThumbnails` and `PiecePickerSheet` (with `remoteImage`), falling back to `imageUrl`.
+
 ## Suggested order
 
 1. Basic server setup (section 1) (done)

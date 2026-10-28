@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlatLay } from '@/components/suggestion/flat-lay';
 import { StageColorPopover } from '@/components/suggestion/stage-color-popover';
 import type { SuggestedPiece } from '@/services/stylist';
+import { remoteImage } from '@/utils/images';
 
 export const STAGE_HEIGHT = 420;
 // How far the sheet below slides up over the stage.
@@ -53,7 +54,7 @@ export function OutfitStage({
       <View style={{ position: 'absolute', left: SIDE_PADDING, top: contentTop }}>
         {selectedPiece ? (
           <Image
-            source={{ uri: selectedPiece.imageUrl }}
+            source={remoteImage(selectedPiece.imageUrl)}
             contentFit="contain"
             accessibilityLabel={selectedPiece.name}
             accessibilityIgnoresInvertColors

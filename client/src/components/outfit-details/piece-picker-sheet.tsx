@@ -5,6 +5,7 @@ import { ActivityIndicator, Modal, Pressable, ScrollView, Text, View } from 'rea
 
 import { SheetHeader } from '@/components/sheet-header';
 import type { SuggestedPiece } from '@/services/stylist';
+import { remoteImage } from '@/utils/images';
 
 type PiecePickerSheetProps = {
   visible: boolean;
@@ -91,7 +92,8 @@ export function PiecePickerSheet({
                         isChecked ? 'border-sage-500' : 'border-transparent'
                       }`}>
                       <Image
-                        source={{ uri: piece.imageUrl }}
+                        source={remoteImage(piece.imageUrl)}
+                        cachePolicy="memory-disk"
                         contentFit="contain"
                         accessibilityIgnoresInvertColors
                         style={{ width: '100%', height: '100%' }}
