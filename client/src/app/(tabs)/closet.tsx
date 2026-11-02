@@ -1,6 +1,6 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CategoryFilter } from '@/components/closet/category-filter';
@@ -8,8 +8,13 @@ import { ClosetGrid } from '@/components/closet/closet-grid';
 import { ClosetTip } from '@/components/closet/closet-tip';
 import { useItemColors } from '@/hooks/use-item-colors';
 import { SessionExpiredError } from '@/services/api';
+import { loginWithPassword, signOut } from '@/services/auth';
 import { canBuildOutfit, filterItems, listItems, type ClosetFilter, type ClosetItem } from '@/services/items';
 
+// Dev builds only: long-pressing the heading signs in as this account (set in .env.local).
+const DEV_LOGIN_EMAIL = process.env.EXPO_PUBLIC_DEV_LOGIN_EMAIL;
+const DEV_LOGIN_PASSWORD = process.env.EXPO_PUBLIC_DEV_LOGIN_PASSWORD;
+const canDevLogin = __DEV__ && Boolean(DEV_LOGIN_EMAIL && DEV_LOGIN_PASSWORD);
 
 export default function ClosetScreen() {
   const [items, setItems] = useState<ClosetItem[]>([]);
@@ -19,26 +24,40 @@ export default function ClosetScreen() {
   const itemsWithColors = useItemColors(items);
   const showTip = !canBuildOutfit(items);
 
+  const loadItems = useCallback(() => {
+    setError(null);
+    listItems()
+      .then(setItems)
+      .catch((e) => {
+        if (e instanceof SessionExpiredError) return;
+        setError(e instanceof Error ? e.message : 'Something went wrong.');
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
+
   // Reload whenever the closet comes back into view, e.g. after adding an item.
-  useFocusEffect(
-    useCallback(() => {
-      setError(null);
-      listItems()
-        .then(setItems)
-        .catch((e) => {
-          if (e instanceof SessionExpiredError) return;
-          setError(e instanceof Error ? e.message : 'Something went wrong.');
-        })
-        .finally(() => setIsLoading(false));
-    }, []),
-  );
+  useFocusEffect(loadItems);
+
+  async function handleDevLogin() {
+    setIsLoading(true);
+    try {
+      await signOut();
+      await loginWithPassword({ mode: 'email', identifier: DEV_LOGIN_EMAIL!, password: DEV_LOGIN_PASSWORD! });
+      loadItems();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
+      setIsLoading(false);
+    }
+  }
 
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-cream-100">
       <View className="px-6 pb-4 pt-2">
-        <Text accessibilityRole="header" className="font-heading text-4xl text-sage-800">
-          Your Closet
-        </Text>
+        <Pressable onLongPress={canDevLogin ? handleDevLogin : undefined} className="self-start">
+          <Text accessibilityRole="header" className="font-heading text-4xl text-sage-800">
+            Your Closet
+          </Text>
+        </Pressable>
       </View>
 
       <View>
