@@ -126,7 +126,6 @@ function GarmentCircle() {
       .then((closet) => {
         if (cancelled) return;
         setItems(closet);
-        if (closet.length) Image.prefetch(closet.map((item) => item.imageUrl)).catch(() => {});
       })
       .catch(() => {
         // Falls back to the mascot.
