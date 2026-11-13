@@ -22,6 +22,8 @@ const LOADER_STATUSES = [
 
 // How often to check whether the server has made the user's other angles.
 const ANGLES_POLL_MS = 5000;
+// Gives up after about 2 minutes, leaving the front showing, in case the server never finishes.
+const MAX_ANGLES_CHECKS = 24;
 
 // A 360° spin of the user wearing the outfit, opened from "See it on your photo" on a suggestion
 // or "Try on" on a saved outfit. `itemIds` are the pieces on that screen, comma-separated.
@@ -91,22 +93,26 @@ export default function TryOnScreen() {
   );
 
   // Once the angles are ready, fetches the spin (generating the other frames) and swaps it in.
-  // Any failure leaves the front showing.
+  // Any failure, or the angles not being ready after MAX_ANGLES_CHECKS, leaves the front showing.
   useEffect(() => {
     if (!isMakingSpin) return;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
+    let checks = 0;
     async function check() {
+      checks += 1;
       try {
         const bodyPhoto = await getBodyPhoto();
         if (cancelled) return;
-        if (!bodyPhoto?.anglesReady) {
+        if (!bodyPhoto?.anglesReady && checks < MAX_ANGLES_CHECKS) {
           timer = setTimeout(check, ANGLES_POLL_MS);
           return;
         }
-        const next = await tryOn(itemIds);
-        await preloadFrames(next);
-        if (!cancelled) setResult(next);
+        if (bodyPhoto?.anglesReady) {
+          const next = await tryOn(itemIds);
+          await preloadFrames(next);
+          if (!cancelled) setResult(next);
+        }
       } catch {
         // Keeps the front.
       }

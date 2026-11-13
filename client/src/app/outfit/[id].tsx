@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,7 +36,9 @@ type Picker = { kind: 'swap'; piece: SuggestedPiece } | { kind: 'add' };
 // One saved outfit: the flat-lay on its own background colour, its pieces (which can be
 // swapped, removed or added to), wear stats, favorite, scheduled dates, collections and delete.
 export default function OutfitDetailsScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  // `from: 'suggestion'` = opened right after saving an AI suggestion; back then goes to the Outfits tab.
+  const { id, from } = useLocalSearchParams<{ id: string; from?: string }>();
+  const isFromSuggestion = from === 'suggestion';
   const insets = useSafeAreaInsets();
 
   const [outfit, setOutfit] = useState<OutfitDetails | null>(null);
@@ -79,7 +81,8 @@ export default function OutfitDetailsScreen() {
   }
 
   function goBack() {
-    if (router.canGoBack()) router.back();
+    if (isFromSuggestion) router.dismissTo('/outfits');
+    else if (router.canGoBack()) router.back();
     else router.replace('/outfits');
   }
 
@@ -91,6 +94,7 @@ export default function OutfitDetailsScreen() {
   if (!outfit) {
     return (
       <SafeAreaView className="flex-1 bg-cream-100">
+        {isFromSuggestion ? <Stack.Screen options={{ gestureEnabled: false }} /> : null}
         <Pressable
           onPress={goBack}
           accessibilityRole="button"
@@ -238,6 +242,8 @@ export default function OutfitDetailsScreen() {
 
   return (
     <View className="flex-1 bg-cream-200">
+      {/* Swipe-back would land on the stale suggestion screen, so it's off for that entry point. */}
+      {isFromSuggestion ? <Stack.Screen options={{ gestureEnabled: false }} /> : null}
       <ScrollView
         style={{ backgroundColor: color }}
         contentContainerStyle={{ flexGrow: 1 }}

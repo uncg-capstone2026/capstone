@@ -1,15 +1,42 @@
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, View, type GestureResponderEvent } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, View, type GestureResponderEvent } from 'react-native';
 
 import { useOutfitReminders } from '@/hooks/use-outfit-reminders';
+import { isSignedIn } from '@/services/auth';
 
 const ACTIVE_COLOR = '#4d5d3f'; // sage-700
 const INACTIVE_COLOR = '#93aa7d'; // sage-400
 
+// Guards every tab: a logged-out user who lands here (e.g. from a deep link) goes to login
+// instead of seeing a tab whose requests fail. apiRequest only redirects on a 401 when a token
+// was stored, so it can't catch this case.
 export default function TabsLayout() {
+  // null while the stored token is being read.
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    isSignedIn().then(setSignedIn);
+  }, []);
+
+  if (signedIn === null) {
+    return (
+      <View className="flex-1 items-center justify-center bg-cream-100">
+        <ActivityIndicator color="#7a9264" />
+      </View>
+    );
+  }
+
+  if (!signedIn) return <Redirect href="/login" />;
+
+  return <SignedInTabs />;
+}
+
+// Split out so the reminders hook (which calls the API) only runs once a token is known.
+function SignedInTabs() {
   useOutfitReminders();
 
   return (

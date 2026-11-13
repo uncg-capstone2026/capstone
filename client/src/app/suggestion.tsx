@@ -155,7 +155,7 @@ export default function SuggestionScreen() {
   }
 
   function openAccepted() {
-    if (accepted) router.push({ pathname: '/outfit/[id]', params: { id: accepted.outfitId } });
+    if (accepted) router.push({ pathname: '/outfit/[id]', params: { id: accepted.outfitId, from: 'suggestion' } });
   }
 
   return (
