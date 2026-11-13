@@ -6,6 +6,7 @@ import { ActivityIndicator, Platform, Pressable, Text, View, type GestureRespond
 import { SessionExpiredError } from '@/services/api';
 import { getItemColorGrid, type ItemColorGrid } from '@/services/items';
 import { colorName, isMainlyWhite, WHITE_ITEM_BACKGROUND } from '@/utils/colors';
+import { remoteImage } from '@/utils/images';
 
 const RING_SIZE = 32;
 // On a touch screen the ring sits above the finger so the finger doesn't hide it.
@@ -115,7 +116,7 @@ export function GarmentCard({ itemId, imageUrl, name, colorHex }: GarmentCardPro
           onPointerLeave={Platform.OS === 'web' ? () => setHover(null) : undefined}
           style={Platform.OS === 'web' && canAim ? { cursor: 'pointer' } : undefined}>
           <Image
-            source={{ uri: imageUrl }}
+            source={remoteImage(imageUrl)}
             contentFit="contain"
             pointerEvents="none"
             accessibilityLabel={name}

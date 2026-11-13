@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import type { ClothingCategory } from '@/services/items';
 import type { SuggestedPiece } from '@/services/stylist';
+import { remoteImage } from '@/utils/images';
 
 type Slot = 'accessory' | 'outerwear' | 'top' | 'bottoms' | 'shoes';
 
@@ -70,7 +71,7 @@ export function FlatLay({ items, width, height }: FlatLayProps) {
       {placed.map(({ item, frame }) => (
         <Image
           key={item.id}
-          source={{ uri: item.imageUrl }}
+          source={remoteImage(item.imageUrl)}
           contentFit="contain"
           accessibilityIgnoresInvertColors
           style={{

@@ -68,7 +68,7 @@ export default function LoginScreen() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await loginWithPassword({ mode, identifier: mode === 'email' ? email : (toE164(phone) ?? phone), password });
+      await loginWithPassword({ mode, identifier: mode === 'email' ? email.trim().toLowerCase() :(toE164(phone) ?? phone), password });
       router.replace('/closet');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');

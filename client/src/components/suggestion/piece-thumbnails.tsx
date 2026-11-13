@@ -4,6 +4,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 
 import { FlatLay } from '@/components/suggestion/flat-lay';
 import type { SuggestedPiece } from '@/services/stylist';
+import { remoteImage } from '@/utils/images';
 
 const TILE_SIZE = 66;
 const TILE_PADDING = 6;
@@ -50,7 +51,8 @@ export function PieceThumbnails({
           <View key={item.id}>
             <Tile isActive={isActive} label={item.name} onPress={() => onSelect(item.id)} color="#fffdf9">
               <Image
-                source={{ uri: item.imageUrl }}
+                source={remoteImage(item.imageUrl)}
+                cachePolicy="memory-disk"
                 contentFit="contain"
                 accessibilityIgnoresInvertColors
                 style={{ width: inner, height: inner }}
