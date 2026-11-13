@@ -38,8 +38,7 @@ type Field = 'name' | 'email' | 'phone';
 type Message = { kind: 'error' | 'success'; text: string };
 
 // Account details, opened from the Settings profile card: name, email and mobile, changing
-// the password, and deleting the account. Email, password and delete need server routes
-// that don't exist yet (PLAN.md section 9), so for now they explain that they aren't available.
+// the password, and deleting the account.
 export default function ProfileScreen() {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
