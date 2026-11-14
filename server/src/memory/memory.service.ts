@@ -16,9 +16,8 @@ const MAX_BATCHES = 10;
 // Notes without an embedding (older ones, or failed) embedded per run.
 const NOTES_EMBEDDED_PER_RUN = 50;
 
-// Learns the user's style from their finished Stylist sessions
-// (ai/repromptimplementation.md, "Memory job"), saving what it finds as
-// Learned style notes. Each run:
+// Learns the user's style from their finished Stylist sessions, saving what
+// it finds as Learned style notes. Each run:
 // 1. marks sessions with no activity for 24 hours as abandoned
 // 2. for each completed or abandoned session not yet processed, asks Gemini
 //    for lasting style facts and saves them (StyleNotesService.createLearned)
@@ -58,7 +57,7 @@ export class MemoryService implements OnApplicationBootstrap {
       if (abandoned > 0 || processed > 0 || embedded > 0) {
         this.logger.log(
           `Memory (${trigger}): abandoned ${abandoned} session(s), processed ${processed} session(s), `
-          + `learned ${learned} note(s), embedded ${embedded} older note(s)`,
+          + `learned ${learned} note(s), tried to embed ${embedded} older note(s)`,
         );
       }
     } catch (err) {
