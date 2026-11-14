@@ -156,7 +156,7 @@ export class ItemsService {
 
     // AI steps (Gemini embedding + tagging): independent, so they run in parallel
     // on the same image. Each catches its own errors, so the item is still
-    // created if either fails; missing embeddings/tags can be backfilled later.
+    // created if either fails.
     const aiImage = await this.loadAiImage(item.id, key, cutoutPng);
     if (aiImage) {
       await Promise.all([
@@ -225,46 +225,6 @@ export class ItemsService {
     }
   }
 
-  // For scripts/backfill-items.ts: fills in what an item added before tagging
-  // and embedding existed is missing, so the Stylist search can find it.
-  // Only fills gaps: the embedding if there's none, and type (plus category
-  // if that's empty too) if there's no type. Nothing the user may have edited
-  // (name, colors, fit...) is changed. Returns what it filled in.
-  async backfillAi(itemId: Item['id']): Promise<{ embedding: boolean; type: boolean }> {
-    const item = await this.prisma.item.findUniqueOrThrow({ where: { id: itemId } });
-    const [{ missing }] = await this.prisma.$queryRaw<{ missing: boolean }[]>`
-      SELECT embedding IS NULL AS missing FROM "Item" WHERE id = ${itemId}
-    `;
-    const done = { embedding: false, type: false };
-    if (!missing && item.type) return done;
-
-    let cutoutPng: Buffer | null = null;
-    if (item.cutoutKey) {
-      try {
-        cutoutPng = await this.s3.getObjectBuffer(item.cutoutKey);
-      } catch {
-        // Falls back to the original photo.
-      }
-    }
-    const aiImage = await this.loadAiImage(item.id, item.imageKey, cutoutPng);
-    if (!aiImage) return done;
-
-    if (missing) done.embedding = await this.addEmbedding(item.id, aiImage);
-    if (!item.type) {
-      try {
-        const attrs = await this.imageProcessing.extractImageAttributes(aiImage.image, aiImage.mimeType);
-        await this.prisma.item.update({
-          where: { id: item.id },
-          data: { type: attrs.type, ...(item.category ? {} : { category: attrs.category }) },
-        });
-        done.type = true;
-      } catch (err) {
-        this.logger.warn(`Backfill tagging failed for item ${item.id}: ${(err as Error).message}`);
-      }
-    }
-    return done;
-  }
-
   // The item, but only if it belongs to this user. 404 otherwise, so ids can't be probed.
   private async findOwned(userId: User['id'], id: string): Promise<Item> {
     const item = await this.prisma.item.findFirst({ where: { id, userId } });
@@ -331,7 +291,7 @@ export class ItemsService {
   // AI (Gemini tagging): reads the photo and fills in name, type, category, colors,
   // pattern, material, season, formality, cut and fit via
   // ImageProcessingService.extractImageAttributes. If anything fails, the item keeps
-  // its defaults and the user (or a backfill) fills them in. keepName: leave the
+  // its defaults and the user fills them in. keepName: leave the
   // item's current name (e.g. a store's product name from a link import).
   private async addAttributes(itemId: Item['id'], { image, mimeType }: AiImage, { keepName = false } = {}) {
     try {
