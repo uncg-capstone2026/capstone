@@ -8,7 +8,7 @@ What the server does today for these two features. Build the client against this
 - Items whose tagging or embedding failed never show up in outfits.
 
 ## Outfit planning
-Design: `ai/repromptimplementation.md`. Every outfit shown is saved as a turn in a session (`OutfitSession` / `OutfitTurn`).
+Every outfit shown is saved as a turn in a session (`OutfitSession` / `OutfitTurn`).
 
 `POST /api/stylist/outfit` starts a session.
 ```ts
@@ -50,7 +50,6 @@ Both routes:
 `POST /api/stylist/try-on` `{ itemIds: string[] /* 1–8 */ }` → `TryOnResult`
 ```ts
 type TryOnResult = {
-  imageUrl: string;  // frame 0 (the front), same as frames[0].imageUrl
   frames: {
     position: number;        // 0–7; 0 = front, 2 = their left side, 4 = back, 6 = their right side
     angle: number;           // position × 45, the person turned clockwise (facing the image's left first)
