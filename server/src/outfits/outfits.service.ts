@@ -306,7 +306,7 @@ export class OutfitsService {
 
   // Takes one counted wear back off the outfit and each of its items (never
   // below 0). An item's "this month" count only goes down if the day is in
-  // its current 30-day period: the same rule the hourly job uses when it
+  // its current 30 day period: the same rule the hourly job uses when it
   // counts (inCurrentWearPeriod), so only a wear that was added this period
   // is taken back off.
   // Uses the outfit's pieces as they are now, so if they were edited after the

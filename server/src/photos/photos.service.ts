@@ -20,7 +20,7 @@ export class PhotosService {
     private readonly tryOn: TryOnService,
   ) {}
 
-  // Step 1: a presigned S3 URL the app uploads a body photo to.
+  // a presigned S3 URL the app uploads a body photo to.
   async createBodyUploadUrl(userId: User['id'], contentType: string) {
     const ext = this.s3.extensionFor(contentType);
     if (!ext) {
@@ -31,7 +31,7 @@ export class PhotosService {
     return { uploadUrl, key };
   }
 
-  // Step 3: save the front and back as the user's try-on photos. They replace
+  // save the front and back as the user's try-on photos. They replace
   // the old ones: the previous photos (front, back and generated angles) and
   // their saved try-on images (TryOnRender) are deleted. Then the other angles
   // are made in the background.
@@ -70,10 +70,7 @@ export class PhotosService {
       });
 
       // The old files to delete from S3: every old photo and saved try-on image,
-      // except the new front and back. Before, if the app sent a key that an old
-      // photo already used (e.g. re-sending the current front as the new back),
-      // that file was on the delete list too, so the new photo would point to a
-      // file that no longer existed.
+      // except the new front and back. 
       const oldKeys = oldPhotos
         .flatMap((old) => [old.imageKey, ...old.renders.map((render) => render.imageKey)])
         .filter((key) => key !== frontKey && key !== backKey);

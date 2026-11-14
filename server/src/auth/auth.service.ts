@@ -169,7 +169,7 @@ export class AuthService {
     ];
 
     const { count } = await this.prisma.user.deleteMany({ where: { id: userId } });
-    if (count === 0) throw new UnauthorizedException(); // already gone
+    if (count === 0) throw new UnauthorizedException(); 
 
     const failed = await this.s3.deleteObjects(keys);
     if (failed.length > 0) {
@@ -195,7 +195,7 @@ export class AuthService {
     return { token, user: this.toPublicUser(user) };
   }
 
-  // Never send passwordHash back to the app.
+  // Never send passwordHash back to the app
   private toPublicUser(user: User) {
     return {
       id: user.id,

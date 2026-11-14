@@ -373,7 +373,7 @@ export class ItemsService {
     };
   }
 
-  // Matches the app's ClothingItemDetails type. To add a field, add one line here.
+  // Matches the app's ClothingItemDetails type. 
   private async toItemDetails(item: Item) {
     // The user's outfits that include this item, newest first, with the slot it
     // fills in each. Deleting the item also deletes the outfits where that slot
@@ -394,7 +394,7 @@ export class ItemsService {
     }
     const outfits = [...slotByOutfit.values()];
 
-    // If the 30-day period ran out and the hourly job hasn't reset it yet,
+    // If the 30 day period ran out and the hourly job hasn't reset it yet,
     // the stored count is from an old period, so send 0 instead.
     const periodIsCurrent = Date.now() - item.wearPeriodStart.getTime() < WEAR_PERIOD_MS;
 

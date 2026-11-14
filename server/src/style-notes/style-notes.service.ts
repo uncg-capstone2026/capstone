@@ -70,10 +70,9 @@ export class StyleNotesService {
     if (count === 0) throw new NotFoundException('Note not found');
   }
 
-  // ---- For Javier's prompt builders ----
-  // Import StyleNotesModule into the module that builds the prompt, then inject
-  // StyleNotesService. (StyleNotesModule doesn't import GeminiModule, so this
-  // can't create a circular import.)
+  
+  // StyleNotesModule doesn't import GeminiModule, so injecting StyleNotesService
+  // there can't create a circular import.
 
   // All the user's notes, newest first, with where each came from and when.
   async listForPrompt(userId: string): Promise<PromptNote[]> {
