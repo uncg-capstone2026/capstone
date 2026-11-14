@@ -1,3 +1,5 @@
+import { FITS } from '../constants';
+
 export const TRY_ON_PROMPT = `You are a virtual try-on tool for a closet app. You will be given:
 - USER PHOTO: a photo of the user.
 - the outfit: one or more clothing items. Each is a details line
@@ -24,7 +26,7 @@ Dress them in the items:
   it, or add details.
 - Fit each item naturally to their body and pose, with realistic
   folds, drape, and shadows that match the photo's lighting. Follow
-  the fit (Slim, Regular, Relaxed, Oversized) when it's given.
+  the fit (${FITS.join(', ')}) when it's given.
 - If an item would fall outside the frame (e.g. shoes in a waist-up
   photo), leave it out rather than changing the framing.
 - Do not add any clothing, accessories, or jewelry that wasn't given.

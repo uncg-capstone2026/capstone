@@ -1,5 +1,5 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Prisma, type TryOnRender } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import sharp from 'sharp';
 import { AI_LOG_CONTEXT } from '../../logger.config';
@@ -39,12 +39,11 @@ export type TryOnItem = {
 
 type TryOnFrame = {
   position: number; // 0–7; 0 is the front, 4 the back
-  angle: number; // position × 30, turned clockwise, facing the left of the image first
+  angle: number; // position × 45, turned clockwise, facing the left of the image first
   imageUrl: string | null; // signed, 24 hours; null when the angle isn't ready or failed
 };
 
-// imageUrl is frame 0, for the app until it shows the spin.
-export type TryOnResult = { imageUrl: string; frames: TryOnFrame[] };
+export type TryOnResult = { frames: TryOnFrame[] };
 
 // One of the user's try-on photos (TryOnPhoto): the front and back they
 // uploaded, then the other angles generated from them.
@@ -104,14 +103,14 @@ export class TryOnService {
     const hash = itemsHash(ids);
     const renders = await this.prisma.tryOnRender.findMany({
       where: { tryOnPhotoId: { in: angles.map((angle) => angle.id) }, itemsHash: hash },
+      select: { position: true, imageKey: true },
     });
-    const saved = new Map(renders.map((render) => [render.position, render]));
     // position -> the dressed frame's S3 key
-    const keys = new Map(renders.filter((render) => !render.invalidatedAt).map((render) => [render.position, render.imageKey]));
+    const keys = new Map(renders.map((render) => [render.position, render.imageKey]));
 
     const missing = angles.filter((angle) => !keys.has(angle.position));
     if (missing.length > 0) {
-      await this.dress(userId, itemIds, { ids, hash, front, missing, saved, keys });
+      await this.dress(userId, itemIds, { ids, hash, front, missing, keys });
     } else {
       this.aiLogger.log({ message: 'try-on reused', items: ids.length, frames: keys.size });
     }
@@ -120,7 +119,7 @@ export class TryOnService {
       const key = keys.get(position);
       return { position, angle: position * STEP, imageUrl: key ? await this.s3.getDownloadUrl(key) : null };
     }));
-    return { imageUrl: frames[0].imageUrl!, frames };
+    return { frames };
   }
 
   // After a new front + back upload: makes the other angles of the user in
@@ -147,12 +146,11 @@ export class TryOnService {
   private async dress(
     userId: string,
     itemIds: string[],
-    { ids, hash, front, missing, saved, keys }: {
+    { ids, hash, front, missing, keys }: {
       ids: string[];
       hash: string;
       front: AnglePhoto;
       missing: AnglePhoto[];
-      saved: Map<number, TryOnRender>;
       keys: Map<number, string>;
     },
   ): Promise<void>
@@ -167,7 +165,7 @@ export class TryOnService {
       const key = this.s3.buildKey(userId, 'tryon', 'jpg');
       await this.s3.putObject(key, frame.image, 'image/jpeg');
       const renderKey: RenderKey = { tryOnPhotoId: angle.id, itemsHash: hash, position: angle.position };
-      keys.set(angle.position, await this.save(userId, renderKey, ids, key, saved.get(angle.position) ?? null));
+      keys.set(angle.position, await this.save(userId, renderKey, ids, key));
     };
 
     // A saved dressed front (only some angles missing) still sets the colors
@@ -291,37 +289,18 @@ export class TryOnService {
   }
 
   // Saves the uploaded image (key) as the TryOnRender for renderKey and returns
-  // the key to serve. An invalidated row (`previous`) is replaced in place,
-  // since the unique key allows only one. If an identical request saved its
-  // image first, that one is kept and this file is deleted.
-  private async save(
-    userId: string,
-    renderKey: RenderKey,
-    ids: string[],
-    key: string,
-    previous: TryOnRender | null,
-  ): Promise<string>
+  // the key to serve. If an identical request saved its image first, that one
+  // is kept and this file is deleted.
+  private async save(userId: string, renderKey: RenderKey, ids: string[], key: string): Promise<string>
   {
-    if (previous) {
-      // Only while it still has the old image, in case another request replaced it first.
-      const { count } = await this.prisma.tryOnRender.updateMany({
-        where: { id: previous.id, imageKey: previous.imageKey },
-        data: { imageKey: key, invalidatedAt: null, createdAt: new Date() },
-      });
-      if (count > 0) {
-        await this.deleteFiles(userId, [previous.imageKey]);
-        return key;
-      }
-    } else {
-      try {
-        await this.prisma.tryOnRender.create({ data: { userId, ...renderKey, itemIds: ids, imageKey: key } });
-        return key;
-      } catch (err) {
-        // P2002: an identical request saved first. P2003: the try-on photo
-        // was replaced while this one was being made.
-        const lost = err instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2003'].includes(err.code);
-        if (!lost) throw err;
-      }
+    try {
+      await this.prisma.tryOnRender.create({ data: { userId, ...renderKey, itemIds: ids, imageKey: key } });
+      return key;
+    } catch (err) {
+      // P2002: an identical request saved first. P2003: the try-on photo
+      // was replaced while this one was being made.
+      const lost = err instanceof Prisma.PrismaClientKnownRequestError && ['P2002', 'P2003'].includes(err.code);
+      if (!lost) throw err;
     }
 
     const winner = await this.prisma.tryOnRender.findUnique({
@@ -385,7 +364,7 @@ export class TryOnService {
   }
 }
 
-// e.g. "name: Navy crew-neck sweater | category: Top | type: sweater | fit: Relaxed".
+// e.g. "name: Navy crew-neck sweater | category: Top | type: sweater | fit: Loose".
 // Empty fields are left out.
 export function describeItem(item: TryOnItem): string
 {
