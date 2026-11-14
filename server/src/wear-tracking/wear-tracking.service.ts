@@ -50,9 +50,9 @@ export class WearTrackingService implements OnApplicationBootstrap {
     }
   }
 
-  // ---- Step 1: the 30-day reset ----
+  // ---- the 30-day reset ----
 
-  // Items whose 30-day period has run out: count back to 0, and the period
+  // Items whose 30 day period has run out: count back to 0, and the period
   // moved forward by whole 30-day steps so it stays lined up with the item's
   // creation date, even if some hours or days were missed. Returns how many.
   private resetExpiredPeriods(): Promise<number> {
@@ -64,7 +64,7 @@ export class WearTrackingService implements OnApplicationBootstrap {
     `;
   }
 
-  // ---- Step 2: claim and count past calendar entries ----
+  // ---- claim and count past calendar entries ----
 
   // Counts every calendar entry whose day is before today in its user's time
   // zone and hasn't been counted yet, skipping days the user marked "Didn't
@@ -103,7 +103,7 @@ export class WearTrackingService implements OnApplicationBootstrap {
   // already claimed it.
   private countEntry(entryId: string): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
-      // 1. Claim it. 0 rows updated means someone else already counted it, or
+      // Claim it. 0 rows updated means someone else already counted it, or
       // the user marked it "Didn't wear it" or unscheduled it in the meantime.
       const claimed = await tx.calendarEntry.updateMany({
         where: { id: entryId, wornCountedAt: null, notWorn: false, removedAt: null },
@@ -116,7 +116,7 @@ export class WearTrackingService implements OnApplicationBootstrap {
         select: { date: true, outfitId: true, outfit: { select: { items: { select: { itemId: true } } } } },
       });
 
-      // 2. The outfit: one more wear, and lastWorn moves to this day if it's
+      // The outfit: one more wear, and lastWorn moves to this day if it's
       // later. (GREATEST skips NULL, so the first wear just sets it.)
       await tx.$executeRaw`
         UPDATE "Outfit"
@@ -125,9 +125,9 @@ export class WearTrackingService implements OnApplicationBootstrap {
         WHERE id = ${entry.outfitId}
       `;
 
-      // 3. Each of its items once, even if an item is in the outfit twice:
+      // Each of its items once, even if an item is in the outfit twice:
       // one more wear in total, and one more this month only if the day is in
-      // the item's current 30-day period. An older day counted late (e.g. after
+      // the item's current 30 day period. An older day counted late (e.g. after
       // undoing "Didn't wear it") belongs to a period that's already over.
       const itemIds = [...new Set(entry.outfit.items.map((piece) => piece.itemId))];
       if (itemIds.length > 0) {
@@ -154,7 +154,7 @@ export class WearTrackingService implements OnApplicationBootstrap {
 // "Now" in UTC without a time zone, matching how Prisma stores DateTime columns.
 const NOW_UTC = Prisma.sql`(now() AT TIME ZONE 'UTC')`;
 
-// Moves wearPeriodStart forward by as many whole 30-day periods as have passed
+// Moves wearPeriodStart forward by as many whole 30 day periods as have passed
 // (2592000 seconds = 30 days).
 const ROLL_FORWARD = Prisma.sql`"wearPeriodStart" = "wearPeriodStart"
   + floor(extract(epoch from (${NOW_UTC} - "wearPeriodStart")) / 2592000) * interval '30 days'`;

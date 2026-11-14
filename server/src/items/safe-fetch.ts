@@ -59,7 +59,7 @@ export function checkUrl(raw: string | URL): URL {
     throw new LinkFetchError("That link can't be used.");
   }
   // Node skips the DNS lookup (and so checkedLookup) for raw IP addresses, so
-  // check those here. IPv6 hostnames come wrapped in [brackets].
+  // check those here. IPv6 hostnames come wrapped in [brackets]
   const host = url.hostname.replace(/^\[|\]$/g, '');
   if (isIP(host) && !isPublicAddress(host)) {
     throw new LinkFetchError("That link can't be used.");

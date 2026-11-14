@@ -108,7 +108,7 @@ export class S3Service {
     }
   }
 
-  // Downloads a file from S3 into memory (used to process photos on the server).
+  // Downloads a file from S3 into memory 
   async getObjectBuffer(key: string): Promise<Buffer> {
     const res = await this.client.send(
       new GetObjectCommand({ Bucket: this.bucket, Key: key }),
