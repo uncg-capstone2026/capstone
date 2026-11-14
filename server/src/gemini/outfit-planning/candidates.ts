@@ -107,7 +107,7 @@ export function pickToSend(
 // - only known candidate ids, each once; fixed pieces are added to every outfit
 // - drops outfits that are incomplete, contain a banned item, were shown
 //   before (shownKeys, from comboKey), or repeat another outfit in the batch
-// - trims names and keeps 1-4 non-empty reasons
+// - trims names and keeps up to 4 non-empty reasons
 export function validateOutfits<T extends OutfitPiece>(
   raw: RawOutfit[],
   opts: { candidates: T[]; fixed?: T[]; shownKeys?: Set<string>; banned?: Set<string> },

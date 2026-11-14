@@ -22,11 +22,7 @@ export const IMAGE_ATTRIBUTES_RESPONSE_SCHEMA: Schema = {
     pattern: { type: Type.STRING, nullable: true, enum: [...PATTERNS] },
     material: { type: Type.STRING, nullable: true },
     season: { type: Type.STRING, nullable: true, enum: [...SEASONS] },
-    formality: {
-      type: Type.STRING,
-      nullable: true,
-      enum: [...FORMALITY_LEVELS],
-    },
+    formality: { type: Type.STRING, enum: [...FORMALITY_LEVELS] },
     cut: { type: Type.STRING, enum: ALL_CUTS },
     fit: { type: Type.STRING, enum: [...FITS] },
   },
