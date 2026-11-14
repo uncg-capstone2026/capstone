@@ -9,9 +9,10 @@ import { StylistController } from './stylist.controller';
 import { StylistSessionsService } from './stylist-sessions.service';
 import { StylistService } from './stylist.service';
 
-// The Stylist tab: /api/stylist/outfit and /outfit/reprompt, plus accept and feedback.
-// StylistSessionsService is exported for the accept route (acceptTurn).
-// - GeminiModule gives us QueryExpansionService and OutfitPlanningService.
+// The Stylist tab: /api/stylist/outfit and /outfit/reprompt, plus accept,
+// feedback and try-on.
+// - GeminiModule gives us the query expansion, outfit planning, reprompt
+//   router, history summary and try-on services.
 // - WeatherModule gives us the day's forecast for the prompts.
 // - OutfitsModule gives us OutfitsService.create for the accept route.
 // - StyleNotesModule gives us the user's style notes for the prompts.
@@ -19,6 +20,5 @@ import { StylistService } from './stylist.service';
   imports: [GeminiModule, S3Module, WeatherModule, OutfitsModule, StyleNotesModule],
   controllers: [StylistController],
   providers: [StylistService, OutfitFeedbackService, StylistSessionsService],
-  exports: [StylistSessionsService],
 })
 export class StylistModule {}

@@ -73,12 +73,6 @@ Their right shoulder is nearer the camera; their left shoulder is
 partly behind their chest.`,
 };
 
-// Where the person faces at `angle` and what that looks like, in words.
-function direction(angle: number): string
-{
-  return VIEWS[angle];
-}
-
 // ---- Base angles: the user in their own clothes, no outfit ----
 
 // Base back frame (BACK, 180°): made from the front photo (frame 0) and the
@@ -123,7 +117,7 @@ Generate one photorealistic photo of the same person, turned ${angle}°.
 ${ANGLES} It is one frame of a turntable spin.
 
 How ${angle}° looks:
-${direction(angle)}
+${VIEWS[angle]}
 
 Keep everything else the same as FRONT VIEW:
 - Same face, hair, skin tone, body shape and size. Do not slim,
@@ -153,7 +147,7 @@ export function dressPrompt(angle: number): string
 {
   return `You are a virtual try-on tool for a closet app, dressing one frame of a
 360° turnaround. You will be given:
-- BASE VIEW: the person turned ${angle}°. ${direction(angle)}
+- BASE VIEW: the person turned ${angle}°. ${VIEWS[angle]}
   ${ANGLES}
 - the outfit: one or more clothing items. Each is a details line
   (name, category, type, and fit if known) followed by a photo of

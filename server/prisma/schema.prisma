@@ -116,17 +116,16 @@ model TryOnPhoto {
 // Saved try-on images, so the same outfit on the same photo isn't generated
 // twice. Javier's code reads and writes these.
 model TryOnRender {
-  id            String     @id @default(uuid())
-  userId        String
-  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tryOnPhotoId  String
-  tryOnPhoto    TryOnPhoto @relation(fields: [tryOnPhotoId], references: [id], onDelete: Cascade)
-  itemIds       String[]
-  itemsHash     String
-  position      Int
-  imageKey      String // S3 key
-  invalidatedAt DateTime?
-  createdAt     DateTime   @default(now())
+  id           String     @id @default(uuid())
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tryOnPhotoId String
+  tryOnPhoto   TryOnPhoto @relation(fields: [tryOnPhotoId], references: [id], onDelete: Cascade)
+  itemIds      String[]
+  itemsHash    String
+  position     Int
+  imageKey     String // S3 key
+  createdAt    DateTime   @default(now())
 
   @@unique([tryOnPhotoId, itemsHash, position])
   @@index([userId, itemsHash])

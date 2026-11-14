@@ -70,10 +70,6 @@ export class StyleNotesService {
     if (count === 0) throw new NotFoundException('Note not found');
   }
 
-  
-  // StyleNotesModule doesn't import GeminiModule, so injecting StyleNotesService
-  // there can't create a circular import.
-
   // All the user's notes, newest first, with where each came from and when.
   async listForPrompt(userId: string): Promise<PromptNote[]> {
     const notes = await this.prisma.styleNote.findMany({
@@ -83,29 +79,6 @@ export class StyleNotesService {
       select: { text: true, source: true, createdAt: true },
     });
     return notes.map((note) => ({ ...note, source: SOURCE_TO_CLIENT[note.source] }));
-  }
-
-  // The user's notes closest in meaning to an embedding (e.g. the request's,
-  // from the same embedding model), closest first, with their cosine distance
-  // (0 is identical). maxDistance leaves out anything further away. Notes
-  // without an embedding are skipped.
-  async findRelevant(
-    userId: string,
-    embedding: number[],
-    { limit = 10, maxDistance }: { limit?: number; maxDistance?: number } = {},
-  ): Promise<(PromptNote & { distance: number })[]> {
-    const vector = `[${embedding.join(',')}]`;
-    const within = maxDistance === undefined
-      ? Prisma.empty
-      : Prisma.sql`AND (embedding <=> ${vector}::vector) <= ${maxDistance}`;
-    const rows = await this.prisma.$queryRaw<{ text: string; source: NoteSource; createdAt: Date; distance: number }[]>`
-      SELECT text, source, "createdAt", (embedding <=> ${vector}::vector)::float8 AS distance
-      FROM "StyleNote"
-      WHERE "userId" = ${userId} AND embedding IS NOT NULL ${within}
-      ORDER BY distance
-      LIMIT ${limit}
-    `;
-    return rows.map((row) => ({ ...row, source: SOURCE_TO_CLIENT[row.source] }));
   }
 
   // ---- For the memory job ----
@@ -122,8 +95,7 @@ export class StyleNotesService {
       if (!text) continue;
 
       const embedding = await this.embed(text);
-      const repeats = await this.findRelevant(userId, embedding, { limit: 1, maxDistance: DUPLICATE_NOTE_DISTANCE });
-      if (repeats.length > 0) continue;
+      if (await this.isRepeat(userId, embedding)) continue;
 
       const note = await this.prisma.$transaction(async (tx) => {
         if (!(await makeRoom(tx, userId))) return null;
@@ -148,6 +120,19 @@ export class StyleNotesService {
   }
 
   // ---- Helpers ----
+
+  // Whether the user already has a note within DUPLICATE_NOTE_DISTANCE (cosine
+  // distance) of this embedding. Notes without an embedding are skipped.
+  private async isRepeat(userId: string, embedding: number[]): Promise<boolean> {
+    const vector = `[${embedding.join(',')}]`;
+    const rows = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM "StyleNote"
+      WHERE "userId" = ${userId} AND embedding IS NOT NULL
+        AND (embedding <=> ${vector}::vector) <= ${DUPLICATE_NOTE_DISTANCE}
+      LIMIT 1
+    `;
+    return rows.length > 0;
+  }
 
   // Embeds and saves the note's text. Failures are logged, never thrown.
   private async addEmbedding(noteId: string, text: string): Promise<void> {

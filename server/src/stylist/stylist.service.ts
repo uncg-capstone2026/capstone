@@ -77,11 +77,11 @@ type RouteResult = {
 type Selection = { outfits: SelectedOutfit[]; missing: string | null; sentIds: string[] };
 
 // A queued outfit taken by takeFromQueue, and the queue left after it.
-type FromQueue = { outfit: RouteResult['outfit']; queue: QueuedOutfit[]; test: number };
+type FromQueue = { outfit: RouteResult['outfit']; queue: QueuedOutfit[] };
 
 // The Stylist tab: turns a request into an outfit from the user's closet, and
-// reacts to feedback on it (ai/repromptimplementation.md). The AI steps are
-// the services in gemini/; sessions and turns are saved by StylistSessionsService.
+// reacts to feedback on it. The AI steps are the services in gemini/;
+// sessions and turns are saved by StylistSessionsService.
 @Injectable()
 export class StylistService {
   private readonly logger = new Logger(StylistService.name);
@@ -102,7 +102,7 @@ export class StylistService {
   ) {}
 
   // POST /outfit: expand the request, find matching closet items, have Gemini
-  // pick up to 3 outfits, and start a session with the first one. The others
+  // pick up to OUTFITS_PER_SELECTION outfits, and start a session with the first one. The others
   // are queued for "Try another". 422 when there isn't a complete outfit.
   async startSession(
     userId: string,
@@ -214,8 +214,8 @@ export class StylistService {
       };
 
       // AI (Gemini router + history summary, fast model): decides what the
-      // feedback should change and, once turns fall out of the last 5,
-      // compresses them. Run together with fetching the style notes, since
+      // feedback should change and, once turns fall out of the last
+      // RECENT_TURNS_IN_FULL, compresses them. Run together with fetching the style notes, since
       // none of them needs the others.
       const [decision, summary, styleNotes] = await Promise.all([
         this.decideRoute(ctx),
@@ -479,7 +479,7 @@ export class StylistService {
   }
 
   // The session's summary, updated with any turns that just fell out of the
-  // last 5. A failed summary keeps the old one; it never blocks a reprompt.
+  // last RECENT_TURNS_IN_FULL. A failed summary keeps the old one; it never blocks a reprompt.
   private async updateSummary(
     session: SessionWithTurns,
     turns: OutfitTurn[],
@@ -550,8 +550,8 @@ export class StylistService {
     if (candidates.length === 0 && fixed.length === 0) return { outfits: [], missing: null, sentIds: [] };
 
     // AI (Gemini outfit selection): looks at the candidates' photos and details
-    // (plus any fixed pieces and the conversation so far) and returns up to 3
-    // complete outfits, each with a name and reasons.
+    // (plus any fixed pieces and the conversation so far) and returns up to
+    // OUTFITS_PER_SELECTION complete outfits, each with a name and reasons.
     const { outfits, missing } = await this.outfitPlanning.selectOutfits({
       request: input.request,
       weather: input.weather,
@@ -628,13 +628,12 @@ export class StylistService {
       .map((next) => ({ next, items: next.itemIds.map((id) => byId.get(id)).filter((piece) => piece !== undefined) }))
       .filter(({ next, items }) => items.length === next.itemIds.length);
 
-    for (const [test, passes] of tests.entries()) {
+    for (const passes of tests) {
       const found = usable.find(({ items }) => passes(items));
       if (!found) continue;
       return {
         outfit: { items: found.items, name: found.next.name, reasons: found.next.reasons },
         queue: usable.filter((option) => option !== found).map((option) => option.next),
-        test,
       };
     }
     return null;

@@ -112,7 +112,6 @@ export type TryOnFrame = {
 };
 
 export type TryOnResult = {
-  imageUrl: string; // frame 0
   frames: TryOnFrame[]; // always 8, sorted by position. Frame 0 is never null.
 };
 

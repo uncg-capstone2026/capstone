@@ -5,7 +5,8 @@ import { StylistSessionsService } from './stylist-sessions.service';
 import type { AcceptOutfitDto, OutfitFeedbackDto } from './outfit-feedback.dto';
 
 // "Looks right" and "Not for me" on the Stylist's suggestion screen. Both are
-// recorded in StyleFeedback, which the outfit prompt can learn from.
+// recorded in StyleFeedback; the memory job learns from the "Not for me"
+// answers (Accepted rows are only a record).
 @Injectable()
 export class OutfitFeedbackService {
   private readonly logger = new Logger(OutfitFeedbackService.name);

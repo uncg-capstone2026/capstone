@@ -1,8 +1,4 @@
-// Background removal uses Stability AI's API directly (STABILITY_API_KEY).
-// PLAN.md originally recommended Amazon Nova Canvas on Bedrock, but Nova Canvas
-// reached end-of-life on Sept 30, 2026. Stability's Remove Background on Bedrock
-// only works through a cross-region inference profile, which kept returning
-// ServiceUnavailableException (Oct 1, 2026), so we call Stability directly instead.
+// Background removal via Stability AI's Remove Background API (STABILITY_API_KEY).
 import { Injectable } from '@nestjs/common';
 import sharp from 'sharp';
 

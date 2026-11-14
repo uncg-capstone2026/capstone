@@ -6,8 +6,8 @@ import type { S3Service } from '../s3/s3.service';
 // What the stylist routes return. Matches OutfitSuggestion in
 // client/src/services/stylist.ts, plus the session and turn ids for reprompts.
 export type OutfitSuggestion = {
-  sessionId?: string; // send back with a reprompt
-  turnId?: string; // which outfit this is, e.g. for accepting it
+  sessionId: string; // send back with a reprompt
+  turnId: string; // which outfit this is, e.g. for accepting it
   suggestionId: string; // the outfit's items, encoded (see comboKey); sent back with accept and feedback
   name: string; // e.g. "Easy layers for class"
   reasons: string[]; // 2-4 short reasons, written to the user
@@ -38,7 +38,7 @@ const DISPLAY_ORDER: Category[] = ['Outerwear', 'Top', 'OnePiece', 'Bottoms', 'S
 export async function toSuggestion(
   s3: S3Service,
   outfit: { items: SuggestionPiece[]; name: string; reasons: string[] },
-  ids: { sessionId?: string; turnId?: string } = {},
+  ids: { sessionId: string; turnId: string },
 ): Promise<OutfitSuggestion>
 {
   const pieces = [...outfit.items].sort((a, b) => displayRank(a) - displayRank(b));

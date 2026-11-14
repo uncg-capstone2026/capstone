@@ -26,7 +26,7 @@ export function buildOutfitSelectionSchema(ids: string[]): Schema
             name: { type: Type.STRING },
             reasons: {
               type: Type.ARRAY,
-              minItems: '1',
+              minItems: '2',
               maxItems: '4',
               items: { type: Type.STRING },
             },

@@ -10,7 +10,7 @@ export type RefineEdits = {
   keepRest: boolean; // keep the current outfit's other pieces
 };
 
-// What the reprompt does next. See ai/repromptimplementation.md, Phase 4.
+// What the reprompt does next.
 export type RouteDecision =
   | { route: 'reroll' }
   | { route: 'swap'; swapTypes: string[] }
