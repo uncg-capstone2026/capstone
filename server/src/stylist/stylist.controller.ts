@@ -39,7 +39,7 @@ export class StylistController {
     });
   }
 
-  // POST /api/stylist/outfit/accept { suggestionId, itemIds, name, eventName, date } -> { outfitId }
+  // POST /api/stylist/outfit/accept { sessionId, turnId, suggestionId, itemIds, name, eventName, date } -> { outfitId }
   // "Looks right": saves the Outfit and a CalendarEntry for date, together.
   @Post('outfit/accept')
   accept(@CurrentUserId() userId: User['id'], @Body(validate) body: AcceptOutfitDto) {
@@ -68,10 +68,9 @@ export class StylistController {
   }
 
   // POST /api/stylist/try-on { itemIds }
-  //   -> { imageUrl, frames: [{ position, angle, imageUrl }] }
+  //   -> { frames: [{ position, angle, imageUrl }] }
   // The user wearing the outfit on screen, from 8 angles (TryOnResult in
-  // gemini/try-on/service.ts). imageUrl is frame 0 (the front). Frames are
-  // positions 0-7, angle = position x 45; a frame's imageUrl is null when that
+  // gemini/try-on/service.ts). Frames are positions 0-7 (0 is the front), angle = position x 45; a frame's imageUrl is null when that
   // angle isn't ready yet or failed. URLs are signed for 24 hours. Saved images
   // are reused when the same items are tried on again.
   // 404 when they haven't uploaded try-on photos, only have an old front photo
