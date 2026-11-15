@@ -41,6 +41,3 @@ example
 # generated native folders
 /ios
 /android
-
-# local record of completed PLAN.md items
-/DONE.md
